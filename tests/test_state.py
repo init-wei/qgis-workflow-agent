@@ -18,6 +18,9 @@ def test_create_initial_state():
     assert state["llm_config"] is None
     assert state["retry_count"] == 0
     assert state["status"] is False
+    assert state["task_plan_draft"] is None
+    assert state["task_plan"] is None
+    assert state["plan_validation"] is None
     assert state["messages"] == []
     assert state["history"] == []
     assert state["screenshot_path"] is None

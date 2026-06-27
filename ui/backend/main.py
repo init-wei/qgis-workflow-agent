@@ -357,6 +357,40 @@ def build_execution_summary(messages: list, max_items: int = 1) -> str:
     return "\n".join(summary_lines)
 
 
+def build_plan_review_update(
+    state_values: Dict[str, Any],
+    approved: bool,
+    advise: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Build state update values for plan review approval/rejection."""
+
+    if not approved:
+        return {
+            "status": False,
+            "advise": advise or "请重新规划",
+        }
+
+    draft = state_values.get("draft")
+    if not draft:
+        raise ValueError("没有可批准的计划")
+
+    update_values: Dict[str, Any] = {
+        "plan": draft,
+        "status": True,
+    }
+
+    task_plan_draft = state_values.get("task_plan_draft")
+    if task_plan_draft:
+        if hasattr(task_plan_draft, "model_copy"):
+            task_plan = task_plan_draft.model_copy(update={"review_status": "approved"})
+        else:
+            task_plan = task_plan_draft
+            task_plan.review_status = "approved"
+        update_values["task_plan"] = task_plan
+
+    return update_values
+
+
 async def stream_agent_execution(
     app,
     initial_state: Dict[str, Any],
@@ -486,6 +520,7 @@ async def stream_agent_execution(
         state_values = final_state.values
 
         draft = state_values.get("draft")
+        task_plan_draft = state_values.get("task_plan_draft")
         status = state_values.get("status", False)
         messages = state_values.get("messages", [])
         is_completed = state_values.get("is_completed", False)
@@ -507,6 +542,7 @@ async def stream_agent_execution(
                     ],
                     "metadata": draft.metadata
                 },
+                "task_plan": task_plan_draft.model_dump() if hasattr(task_plan_draft, "model_dump") else None,
                 "timestamp": datetime.now().isoformat()
             })
             return
@@ -962,22 +998,14 @@ async def review_plan(request: ReviewRequest):
         current_state = await app_instance.aget_state(config)
         state_values = current_state.values
 
-        if request.approved:
-            # 批准：将 draft 提升为 plan
-            draft = state_values.get("draft")
-            if draft:
-                update_values = {
-                    "plan": draft,
-                    "status": True
-                }
-            else:
-                raise HTTPException(status_code=400, detail="没有可批准的计划")
-        else:
-            # 拒绝：设置修改意见
-            update_values = {
-                "status": False,
-                "advise": request.advise or "请重新规划"
-            }
+        try:
+            update_values = build_plan_review_update(
+                state_values,
+                approved=request.approved,
+                advise=request.advise,
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
 
         # 更新状态
         await app_instance.aupdate_state(config, update_values)
@@ -990,6 +1018,8 @@ async def review_plan(request: ReviewRequest):
             "message": "审核完成，Agent 将继续执行"
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"审核失败: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"审核失败: {str(e)}")
@@ -1161,6 +1191,7 @@ async def resume_execution(thread_id: str):
             state_values = final_state.values
 
             draft = state_values.get("draft")
+            task_plan_draft = state_values.get("task_plan_draft")
             status = state_values.get("status", False)
             messages = state_values.get("messages", [])
             is_completed = state_values.get("is_completed", False)
@@ -1182,6 +1213,7 @@ async def resume_execution(thread_id: str):
                         ],
                         "metadata": draft.metadata
                     },
+                    "task_plan": task_plan_draft.model_dump() if hasattr(task_plan_draft, "model_dump") else None,
                     "timestamp": datetime.now().isoformat()
                 })
                 return
