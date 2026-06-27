@@ -10,6 +10,8 @@ from langgraph.graph.message import add_messages
 from pydantic import BaseModel, Field
 import uuid
 
+from agent.planning.plan_schema import PlanValidationReport, TaskPlan
+
 
 class Step(BaseModel):
     """执行步骤"""
@@ -61,8 +63,12 @@ class AgentState(TypedDict):
     example: Optional[Dict[str, Any]] # 从Cookbook检索到的相似案例
     draft: Optional[Plan]             # 模型当前生成的草稿方案
     plan: Optional[Plan]              # 最终确认执行的方案
+    task_plan_draft: Optional[TaskPlan]  # 严格TaskPlan草稿方案
+    task_plan: Optional[TaskPlan]        # 最终确认的严格TaskPlan
+    plan_validation: Optional[PlanValidationReport]  # TaskPlan验证报告
     status: bool                      # 方案审核状态（False=待审核，True=已批准）
     retry_count: int                  # 人工审查/修改的循环次数
+    tool_selection: Optional[List[str]]  # Executor允许使用的MCP工具名称列表
     
     # ========== API RAG Node 字段 ==========
     gdal_doc: List[Dict[str, Any]]   # 检索到的GDAL API文档
@@ -113,8 +119,12 @@ def create_initial_state(session_id: str, input_query: str, llm_config: Optional
         example=None,
         draft=None,
         plan=None,
+        task_plan_draft=None,
+        task_plan=None,
+        plan_validation=None,
         status=False,
         retry_count=0,
+        tool_selection=None,
         
         # API RAG字段
         gdal_doc=[],

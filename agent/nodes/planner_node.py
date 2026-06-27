@@ -8,13 +8,15 @@ from typing import Dict, Any
 import asyncio
 import logging
 from dotenv import load_dotenv
-from pydantic import BaseModel, Field
 from jinja2 import Template
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from agent.llm import create_llm
 
-from agent.state import AgentState, Plan, Step
+from agent.planning.legacy_adapter import allowed_tools_from_task_plan, task_plan_to_legacy_plan
+from agent.planning.plan_parser import parse_task_plan_json
+from agent.planning.plan_validator import PlanValidator
+from agent.state import AgentState
 from agent.tools.mcp_client import get_mcp_client
 from agent.tools.rag import _extract_mcp_response_data
 from agent.tools.database import save_execution_log
@@ -24,17 +26,6 @@ load_dotenv()
 # 配置日志
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
-
-# 定义结构化输出模型
-class PlannerOutput(BaseModel):
-    """Planner节点的结构化输出"""
-    
-    task: str = Field(description="任务简述（例如: Align raster and vector layers）")
-    steps: list[Step] = Field(description="执行步骤列表")
-    metadata: dict[str, Any] = Field(
-        default_factory=dict,
-        description="元数据，包含iteration和has_example_reference等信息"
-    )
 
 def _get_llm(state: AgentState):
     return create_llm(state.get("llm_config")).bind(response_format={"type": "json_object"})
@@ -62,13 +53,37 @@ SYSTEM_PROMPT_TEMPLATE = Template("""你是一个专业的QGIS地理数据处理
 请严格按照以下JSON格式输出：
 
 {
-  "task": "任务简述（例如: Align raster and vector layers）",
+  "task_id": "稳定的任务ID，例如 task_align_layers",
+  "task_summary": "任务简述（例如: Align raster and vector layers）",
+  "risk_level": "low | medium | high",
+  "review_status": "pending_review",
+  "required_inputs": [
+    {
+      "input_id": "input_1",
+      "description": "输入数据说明",
+      "path": "已知文件路径；未知则为null",
+      "source": "如果没有路径，请说明来源"
+    }
+  ],
+  "expected_outputs": [
+    {
+      "output_id": "output_1",
+      "description": "预期输出说明",
+      "path": "预期输出路径"
+    }
+  ],
   "steps": [
     {
       "step_id": 1,
       "description": "步骤描述（例如: Load raster layer from file）",
-      "gdal_api": ["可能用到的GDAL API名称，如果没有则留空"],
-      "pyqgis_api": ["可能用到的PyQGIS API名称，如果没有则留空"]
+      "step_type": "qgis_operation",
+      "candidate_gdal_apis": ["可能用到的GDAL API名称，如果没有则留空"],
+      "candidate_pyqgis_apis": ["可能用到的PyQGIS API名称，如果没有则留空"],
+      "allowed_tools": ["允许使用的工具，例如 qgis_processing、mcp_tool；高风险代码执行必须写 execute_code"],
+      "input_refs": ["input_1"],
+      "output_refs": ["output_1"],
+      "risk_level": "low | medium | high",
+      "requires_review": false
     }
   ],
   "metadata": {}
@@ -85,9 +100,10 @@ GDAL API往往用于数据处理，PyQGIS API往往用于QGIS内部的图层以�
 2. 如果有上一轮的执行总结，先了解之前内容是否成功执行，若成功则无需重复步骤，如果失败则在本轮中进行修正
 3. 步骤不要拆分太细，每个步骤应该是中低复杂度的目标，且涉及文件必须包含路径信息
 4. 文件的导入与导出不要使用GDAL或者PYQGIS的代码，只需在步骤中api留空
-5. gdal_api和pyqgis_api列出所有可能用到的API名称，尽量精确到方法级别（不需要参数细节），如果该步骤不需要使用某类API，可以留空
+5. candidate_gdal_apis和candidate_pyqgis_apis列出所有可能用到的API名称，尽量精确到方法级别（不需要参数细节），如果该步骤不需要使用某类API，可以留空
 6. 参考相似案例可以提高准确性
 7. 必须返回有效的JSON格式，不要添加任何额外的解释文字
+8. 任一步骤需要删除、覆盖、保存工程或 execute_code 时，risk_level 必须为 high 且 requires_review 必须为 true
 """)
 
 # 定义User Message模板
@@ -147,6 +163,8 @@ async def planner_node(state: AgentState) -> Dict[str, Any]:
     retry_count = state.get("retry_count", 0)
     plan = state.get("plan")
     draft = state.get("draft")
+    task_plan = state.get("task_plan")
+    task_plan_draft = state.get("task_plan_draft")
     status = state.get("status", False)
     
     # 情况1: 如果计划已批准且plan已存在，直接返回（不再重新规划）
@@ -154,15 +172,20 @@ async def planner_node(state: AgentState) -> Dict[str, Any]:
         logger.info("计划已批准且plan已存在，跳过规划步骤")
         return {
             "plan": plan,
+            "task_plan": task_plan,
             "status": True
         }
     
     # 情况2: 如果已批准但plan不存在（只有draft），将draft提升为plan
     if status and draft and not plan:
         logger.info("将已批准的draft提升为plan")
+        approved_task_plan = None
+        if task_plan_draft:
+            approved_task_plan = task_plan_draft.model_copy(update={"review_status": "approved"})
         return {
             "draft": draft,
             "plan": draft,  # 提升为plan
+            "task_plan": approved_task_plan,
             "status": True
         }
     
@@ -246,8 +269,6 @@ async def planner_node(state: AgentState) -> Dict[str, Any]:
     logger.info("调用LLM生成执行计划（JSON模式）...")
     
     try:
-        import json
-        
         messages = [
             SystemMessage(content=system_prompt),
             HumanMessage(content=user_message)
@@ -259,40 +280,39 @@ async def planner_node(state: AgentState) -> Dict[str, Any]:
         
         logger.info(f"LLM响应: {response_text[:200]}...")
         
-        # 提取JSON内容
-        if "```json" in response_text:
-            json_start = response_text.find("```json") + 7
-            json_end = response_text.find("```", json_start)
-            json_str = response_text[json_start:json_end].strip()
-        elif "```" in response_text:
-            json_start = response_text.find("```") + 3
-            json_end = response_text.find("```", json_start)
-            json_str = response_text[json_start:json_end].strip()
-        else:
-            json_str = response_text.strip()
-        
-        # 解析JSON
-        plan_dict = json.loads(json_str)
-        
-        # 转换为PlannerOutput对象（用于验证）
-        planner_output = PlannerOutput(
-            task=plan_dict["task"],
-            steps=[Step(**step) for step in plan_dict["steps"]],
-            metadata=plan_dict.get("metadata", {})
-        )
-        logger.info(f"JSON解析成功: {planner_output.task}")
+        task_plan = parse_task_plan_json(response_text)
+        logger.info(f"TaskPlan解析成功: {task_plan.task_summary}")
+
+        validation_report = PlanValidator().validate(task_plan)
         
         # 确保metadata包含必需字段
-        metadata = planner_output.metadata.copy()
+        metadata = task_plan.metadata.copy()
         metadata["iteration"] = retry_count + 1
         metadata["has_example_reference"] = has_example_reference
+        metadata["validation_summary"] = validation_report.summary
         
-        # 转换为Plan对象
-        plan = Plan(
-            task=planner_output.task,
-            steps=planner_output.steps,
-            metadata=metadata
-        )
+        task_plan = task_plan.model_copy(update={"metadata": metadata})
+
+        if not validation_report.is_valid:
+            logger.warning(f"TaskPlan验证失败: {validation_report.summary}")
+            await asyncio.to_thread(
+                save_execution_log,
+                session_id,
+                None,
+                f"TaskPlan验证失败: {validation_report.summary}",
+                "error",
+                error_detail=validation_report.model_dump_json()
+            )
+            return {
+                "draft": None,
+                "task_plan_draft": None,
+                "plan_validation": validation_report,
+                "status": False,
+                "retry_count": retry_count + 1,
+            }
+
+        plan = task_plan_to_legacy_plan(task_plan)
+        tool_selection = allowed_tools_from_task_plan(task_plan) or None
         
         logger.info(f"生成计划成功: {plan.task}, 共{len(plan.steps)}个步骤")
         
@@ -308,9 +328,15 @@ async def planner_node(state: AgentState) -> Dict[str, Any]:
         # 强制执行逻辑：如果已达到修改上限，直接将draft转为plan并标记为已批准
         if force_execute:
             logger.warning("强制执行模式：跳过人工审核，直接执行计划")
+            approved_task_plan = task_plan.model_copy(update={"review_status": "approved"})
+            approved_plan = task_plan_to_legacy_plan(approved_task_plan)
             return {
-                "draft": plan,
-                "plan": plan,  # 直接设置为最终计划
+                "draft": approved_plan,
+                "plan": approved_plan,  # 直接设置为最终计划
+                "task_plan_draft": approved_task_plan,
+                "task_plan": approved_task_plan,
+                "plan_validation": validation_report,
+                "tool_selection": tool_selection,
                 "example": example,
                 "retry_count": retry_count + 1,
                 "status": True,  # 标记为已批准
@@ -319,6 +345,9 @@ async def planner_node(state: AgentState) -> Dict[str, Any]:
         # 正常流程：返回draft等待人工审核
         return {
             "draft": plan,
+            "task_plan_draft": task_plan,
+            "plan_validation": validation_report,
+            "tool_selection": tool_selection,
             "example": example,
             "retry_count": retry_count + 1,
             "status": False,  # 等待人工审核
@@ -338,6 +367,8 @@ async def planner_node(state: AgentState) -> Dict[str, Any]:
         # 返回错误状态
         return {
             "draft": None,
+            "task_plan_draft": None,
+            "plan_validation": None,
             "status": False,
             "retry_count": retry_count + 1,
         }
