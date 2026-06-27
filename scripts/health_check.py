@@ -13,6 +13,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Sequence
+from urllib.parse import urlparse
 
 import psycopg
 from dotenv import load_dotenv
@@ -24,6 +25,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 DEFAULT_DATABASE_URL = "postgresql://postgres:postgres@127.0.0.1:5432/qgis_db"
 DEFAULT_MCP_URL = "http://localhost:8000/mcp"
+DEFAULT_MCP_PORT = 8000
 PLACEHOLDER_API_KEYS = {
     "your_api_key_here",
     "your_openai_api_key_here",
@@ -139,6 +141,17 @@ def check_http_mcp() -> CheckResult:
         return CheckResult("HTTP MCP", False, f"HTTP MCP check failed for {url}: {exc}")
 
 
+def get_http_mcp_port() -> int:
+    url = os.getenv("QGIS_MCP_SERVER_URL", DEFAULT_MCP_URL)
+    try:
+        parsed = urlparse(url)
+        if parsed.scheme and parsed.hostname and parsed.port:
+            return parsed.port
+    except ValueError:
+        pass
+    return DEFAULT_MCP_PORT
+
+
 def _port_open(host: str, port: int) -> bool:
     try:
         with socket.create_connection((host, port), timeout=1):
@@ -157,7 +170,8 @@ def _wait_for_port(host: str, port: int, timeout: float = 15.0) -> bool:
 
 
 def start_http_mcp_if_needed() -> subprocess.Popen[str] | None:
-    if _port_open("127.0.0.1", 8000):
+    port = get_http_mcp_port()
+    if _port_open("127.0.0.1", port):
         return None
 
     env = os.environ.copy()
@@ -170,7 +184,7 @@ def start_http_mcp_if_needed() -> subprocess.Popen[str] | None:
         stderr=subprocess.DEVNULL,
         text=True,
     )
-    if _wait_for_port("127.0.0.1", 8000):
+    if _wait_for_port("127.0.0.1", port):
         return process
 
     process.terminate()
@@ -217,9 +231,12 @@ def main() -> int:
             results.append(check_qgis_socket())
         if not args.skip_http_mcp:
             if args.start_http_mcp:
+                port = get_http_mcp_port()
                 process = start_http_mcp_if_needed()
-                if process is None and not _port_open("127.0.0.1", 8000):
-                    results.append(CheckResult("HTTP MCP startup", False, "Could not start HTTP MCP wrapper on port 8000."))
+                if process is None and not _port_open("127.0.0.1", port):
+                    results.append(
+                        CheckResult("HTTP MCP startup", False, f"Could not start HTTP MCP wrapper on port {port}.")
+                    )
             results.append(check_http_mcp())
 
         secrets = [os.getenv("OPENAI_API_KEY", "")]
