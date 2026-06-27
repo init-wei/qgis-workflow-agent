@@ -13,7 +13,12 @@ from dotenv import load_dotenv
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_core.tools import BaseTool
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+from agent.tools.mcp_response_parser import MCPResponseParser
+from agent.tools.tool_contracts import ToolObservation
+
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
 
 load_dotenv()
@@ -61,6 +66,11 @@ class QGISMCPClient:
         if hasattr(tool, "ainvoke"):
             return await tool.ainvoke(arguments)
         return tool.invoke(arguments)
+
+    def parse_tool_result(self, tool_name: str, result: Any) -> ToolObservation:
+        """Normalize a raw MCP result without changing call_tool behavior."""
+
+        return MCPResponseParser().parse(tool_name, result)
 
     async def capture_screenshot(
         self,
