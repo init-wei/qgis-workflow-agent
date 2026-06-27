@@ -1,0 +1,42 @@
+[project]
+name = "qgis-agentv2"
+version = "0.1.0"
+description = "QGISMCP connects QGIS to AI agents through the Model Context Protocol (MCP)."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    # MCP相关
+    "mcp>=1.0.0", # Model Context Protocol SDK
+    "uvicorn>=0.30.0", # ASGI server for mcp_server.py
+    "starlette>=0.37.0", # Web framework used in mcp_server.py
+    "sse-starlette>=2.1.0", # SSE support for HTTP transport
+    "anyio>=4.4.0", # Async I/O used in mcp_server.py
+    # 数据库相关
+    "psycopg[binary]>=3.1.0", # PostgreSQL驱动
+    "psycopg-pool>=3.1.0", # 连接池
+    # 文档处理
+    "requests>=2.32.0", # Used in extract_method_by_name.py
+    "beautifulsoup4>=4.12.0", # Used for parsing docs in extract_method_by_name.py
+    # 环境变量
+    "python-dotenv>=1.0.0", # 环境变量管理
+    "aiohttp>=3.13.3",
+    "nest-asyncio>=1.6.0",
+    "langgraph>=1.0.7",
+    "langgraph-checkpoint-postgres>=2.0.6",
+    "langchain>=1.2.7",
+    "langchain-openai>=1.1.7",
+    "langchain-core>=1.2.7",
+    "pydantic>=2.12.5",
+    "pytest>=8.0.0",
+    "langchain-mcp-adapters>=0.2.1",
+    "jinja2>=3.1.6",
+    # Web UI 相关
+    "fastapi>=0.115.0",
+    "python-multipart>=0.0.20",
+]
+
+# 配置 uv 使用清华及其他国内镜像源
+[[tool.uv.index]]
+name = "tsinghua"
+url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+default = true

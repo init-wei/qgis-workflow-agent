@@ -1,0 +1,32 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 自定义样式 */
+html, body, #app {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  @apply bg-dark-bg text-dark-text;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+}
+
+/* 滚动条样式 */
+::-webkit-scrollbar {
+  @apply w-2;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-dark-bgDark;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-dark-border rounded;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-dark-textSecondary;
+}
