@@ -37,6 +37,9 @@ jobs:
       - name: Compile Python sources
         run: uv run python -m compileall agent qgis_mcp_server ui/backend scripts
 
+      - name: Run Phase 0 smoke tests
+        run: uv run pytest
+
   frontend-build:
     name: Frontend build
     runs-on: ubuntu-latest
@@ -96,4 +99,4 @@ jobs:
         env:
           PYTHONIOENCODING: utf-8
           PYTHONPATH: ${{ github.workspace }}
-        run: uv run pytest -q
+        run: uv run pytest -q -o addopts= tests

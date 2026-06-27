@@ -3,6 +3,8 @@
 Database工具测试
 """
 
+import pytest
+
 from agent.tools.database import (
     save_execution_log,
     get_execution_logs,
@@ -10,6 +12,9 @@ from agent.tools.database import (
     update_cookbook_usage,
     get_cookbook_by_id
 )
+
+
+pytestmark = pytest.mark.database
 
 
 def test_save_and_get_execution_log():
