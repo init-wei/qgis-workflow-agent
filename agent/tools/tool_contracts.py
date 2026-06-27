@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 """Phase 2 tool call, observation, registry, and policy contracts."""
 
+from datetime import datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
 RiskLevel = Literal["low", "medium", "high"]
 ObservationStatus = Literal["success", "error", "malformed", "disconnected"]
+AttemptStatus = Literal["success", "failed", "blocked"]
+TraceStatus = Literal["running", "success", "failed"]
 ErrorType = Literal[
     "parameter_error",
     "missing_file",
@@ -80,3 +83,45 @@ class ToolSpec(BaseModel):
     metadata: dict[str, Any] = Field(
         default_factory=dict, description="Additional tool metadata"
     )
+
+
+class StepAttempt(BaseModel):
+    """One concrete attempt to execute a planned tool call."""
+
+    attempt_id: str = Field(description="Stable attempt ID")
+    step_id: int = Field(description="TaskPlan step ID")
+    tool_call: ToolCallPlan = Field(description="Planned tool call")
+    observation: ToolObservation = Field(description="Normalized tool observation")
+    status: AttemptStatus = Field(description="Attempt outcome")
+    started_at: datetime = Field(description="Attempt start timestamp")
+    finished_at: datetime = Field(description="Attempt finish timestamp")
+    duration_ms: int = Field(description="Attempt duration in milliseconds")
+    artifacts: list[dict[str, Any]] = Field(
+        default_factory=list, description="Artifacts recorded from observation"
+    )
+    metadata: dict[str, Any] = Field(
+        default_factory=dict, description="Additional attempt metadata"
+    )
+
+
+class ExecutionTrace(BaseModel):
+    """Replay-friendly trace of controlled step execution attempts."""
+
+    trace_id: str = Field(description="Stable trace ID")
+    task_id: str | None = Field(default=None, description="Optional TaskPlan ID")
+    attempts: list[StepAttempt] = Field(
+        default_factory=list, description="Recorded step attempts"
+    )
+    status: TraceStatus = Field(default="running", description="Trace status")
+    metadata: dict[str, Any] = Field(
+        default_factory=dict, description="Additional trace metadata"
+    )
+
+    def append_attempt(self, attempt: StepAttempt) -> None:
+        self.attempts.append(attempt)
+        self.status = "success" if attempt.status == "success" else "failed"
+
+    def latest_attempt(self) -> StepAttempt | None:
+        if not self.attempts:
+            return None
+        return self.attempts[-1]
