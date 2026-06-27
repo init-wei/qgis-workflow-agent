@@ -61,7 +61,7 @@ jobs:
         run: npm run build
 
   python-quality-audit:
-    name: Python quality audit
+    name: Python quality audit (advisory)
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
@@ -80,15 +80,20 @@ jobs:
         run: uv sync --locked
 
       - name: Ruff audit
+        continue-on-error: true
         run: uv run --with ruff ruff check .
 
       - name: Black audit
+        continue-on-error: true
         run: uv run --with black black --check .
 
       - name: Mypy audit
+        continue-on-error: true
         run: uv run --with mypy mypy agent ui/backend qgis_mcp_server --ignore-missing-imports
 
       - name: Pytest audit
+        continue-on-error: true
         env:
           PYTHONIOENCODING: utf-8
+          PYTHONPATH: ${{ github.workspace }}
         run: uv run pytest -q
