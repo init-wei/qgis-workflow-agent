@@ -34,6 +34,40 @@ def test_path_policy_rejects_parent_escape(tmp_path):
     assert decision.allowed is False
 
 
+def test_path_policy_rejects_nested_processing_output_outside_workspace(tmp_path):
+    workspace = tmp_path / "workspace"
+    call = ToolCallPlan(
+        step_id=1,
+        tool_name="execute_processing",
+        arguments={
+            "algorithm": "native:buffer",
+            "parameters": {"OUTPUT": str(tmp_path / "outside" / "out.gpkg")},
+        },
+        risk_level="medium",
+        requires_review=False,
+    )
+
+    decision = PathPolicy(workspace_root=workspace).evaluate_call(call)
+
+    assert decision.allowed is False
+    assert decision.reason == "path_outside_workspace"
+
+
+def test_path_policy_rejects_windows_absolute_path_strings(tmp_path):
+    decision = PathPolicy(workspace_root=tmp_path).evaluate_path("C:/bad/out.png")
+
+    assert decision.allowed is False
+    assert decision.reason == "path_outside_workspace"
+
+
+def test_path_policy_detects_windows_absolute_paths_on_any_host(tmp_path):
+    policy = PathPolicy(workspace_root=tmp_path)
+
+    assert policy.is_absolute_path_string("C:/bad/out.png") is True
+    assert policy.is_absolute_path_string("C:\\bad\\out.png") is True
+    assert policy.is_absolute_path_string("shared/output/out.png") is False
+
+
 def test_code_policy_rejects_execute_code_without_prior_approval():
     call = ToolCallPlan(
         step_id=1,
