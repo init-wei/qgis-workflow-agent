@@ -8,16 +8,24 @@ import os
 from contextlib import asynccontextmanager
 import socket
 import json
+import struct
 import uvicorn
 from urllib.parse import urlparse
 from typing import AsyncIterator, Dict, Any
 from threading import Lock
 from dotenv import load_dotenv
-from rag_mcp import (
-    search_pyqgis_api as rag_search_pyqgis_api,
-    search_gdal_api as rag_search_gdal_api,
-    search_qgis_cookbook as rag_search_qgis_cookbook,
-)
+try:
+    from .rag_mcp import (
+        search_pyqgis_api as rag_search_pyqgis_api,
+        search_gdal_api as rag_search_gdal_api,
+        search_qgis_cookbook as rag_search_qgis_cookbook,
+    )
+except ImportError:
+    from rag_mcp import (
+        search_pyqgis_api as rag_search_pyqgis_api,
+        search_gdal_api as rag_search_gdal_api,
+        search_qgis_cookbook as rag_search_qgis_cookbook,
+    )
 from mcp.server.fastmcp import FastMCP, Context
 
 
@@ -26,6 +34,8 @@ logging.basicConfig(level=logging.INFO,
 logger = logging.getLogger("QgisMCPServer")
 
 load_dotenv()
+
+_HEADER_STRUCT = struct.Struct(">I")
 
 
 def _get_mcp_http_port(default_port: int = 8000) -> int:
@@ -81,43 +91,77 @@ class QgisMCPServer:
         }
 
         with self._lock:
+            return self._send_with_framing_fallback(command)
+
+    def _send_with_framing_fallback(self, command):
+        """Try the current QGIS-MCP framing, then fall back to legacy raw JSON."""
+        for framed in (True, False):
             if not self._ensure_connected():
                 print("Not connected to server")
                 return None
 
             try:
-                # Send the command
-                self.socket.sendall(json.dumps(command).encode('utf-8'))
+                request = json.dumps(command).encode("utf-8")
+                if framed:
+                    self.socket.sendall(_HEADER_STRUCT.pack(len(request)) + request)
+                    return self._receive_framed_response()
 
-                # Receive the response
-                response_data = b''
-                while True:
-                    chunk = self.socket.recv(4096)
-                    if not chunk:
-                        break
-                    response_data += chunk
+                self.socket.sendall(request)
+                return self._receive_raw_json_response()
 
-                    if len(response_data) > self.max_response_bytes:
-                        raise ValueError("Response too large")
-
-                    # Try to decode as JSON to see if it's complete
-                    try:
-                        json.loads(response_data.decode('utf-8'))
-                        break  # Valid JSON, we have the full message
-                    except json.JSONDecodeError:
-                        continue  # Keep receiving
-
-                # Parse and return the response
-                return json.loads(response_data.decode('utf-8'))
-
-            except (socket.timeout, ValueError) as e:
-                print(f"Timeout or invalid response: {str(e)}")
+            except (socket.timeout, ValueError, json.JSONDecodeError) as e:
+                logger.debug(
+                    "QGIS socket %s protocol failed: %s",
+                    "framed" if framed else "raw",
+                    e,
+                )
                 self.disconnect()
-                return None
+                continue
             except Exception as e:
                 print(f"Error sending command: {str(e)}")
                 self.disconnect()
                 return None
+
+        return None
+
+    def _receive_framed_response(self):
+        header = self._recv_exact(_HEADER_STRUCT.size)
+        size = _HEADER_STRUCT.unpack(header)[0]
+        if size > self.max_response_bytes:
+            raise ValueError("Response too large")
+        response_data = self._recv_exact(size)
+        return json.loads(response_data.decode("utf-8"))
+
+    def _receive_raw_json_response(self):
+        response_data = b''
+        while True:
+            chunk = self.socket.recv(4096)
+            if not chunk:
+                break
+            response_data += chunk
+
+            if len(response_data) > self.max_response_bytes:
+                raise ValueError("Response too large")
+
+            # Try to decode as JSON to see if it's complete
+            try:
+                json.loads(response_data.decode('utf-8'))
+                break  # Valid JSON, we have the full message
+            except json.JSONDecodeError:
+                continue  # Keep receiving
+
+        return json.loads(response_data.decode('utf-8'))
+
+    def _recv_exact(self, size):
+        chunks = []
+        remaining = size
+        while remaining:
+            chunk = self.socket.recv(remaining)
+            if not chunk:
+                raise ValueError("Socket closed before full response was received")
+            chunks.append(chunk)
+            remaining -= len(chunk)
+        return b"".join(chunks)
 
 _qgis_connection = None
 

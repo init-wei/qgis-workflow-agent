@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 load_dotenv()
 
-QGIS_MCP_SERVER_URL = os.getenv("QGIS_MCP_SERVER_URL", "http://localhost:8002/mcp")
+QGIS_MCP_SERVER_URL = os.getenv("QGIS_MCP_SERVER_URL", "http://localhost:8000/mcp")
 
 
 class QGISMCPClient:
@@ -76,7 +76,12 @@ class QGISMCPClient:
         )
 
     async def close(self):
-        await self._client.close()
+        close = getattr(self._client, "close", None)
+        if close is None:
+            return
+        result = close()
+        if asyncio.iscoroutine(result):
+            await result
 
 
 _mcp_client: Optional[QGISMCPClient] = None

@@ -18,7 +18,12 @@ from agent.nodes.planner_node import planner_node
 from agent.nodes.api_rag_node import api_rag_node
 from agent.nodes.executor_node import executor_node
 from agent.nodes.reflector_node import reflector_node
-from agent.observability import configure_langsmith
+try:
+    from agent.observability import configure_langsmith
+except ModuleNotFoundError:
+    def configure_langsmith() -> None:
+        """Optional LangSmith hook; local development works without it."""
+        return None
 
 load_dotenv()
 
@@ -224,7 +229,7 @@ async def create_checkpointer() -> AsyncPostgresSaver:
     Returns:
         PostgresSaver实例
     """
-    db_url = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/qgis_db")
+    db_url = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@127.0.0.1:5432/qgis_db")
     
     pool = AsyncConnectionPool(
         conninfo=db_url,

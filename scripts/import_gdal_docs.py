@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 # 数据库连接配置
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/qgis_db")
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@127.0.0.1:5432/qgis_db")
 
 # GDAL文档目录
 GDAL_DOCS_DIR = os.getenv("GDAL_DOCS_DIR", "./data/gdal_docs")

@@ -1,0 +1,61 @@
+name: Engineering task
+description: Track refactoring, infrastructure, testing, or architecture work.
+title: "[Task]: "
+labels: ["engineering", "needs-triage"]
+body:
+  - type: dropdown
+    id: phase
+    attributes:
+      label: Engineering plan phase
+      options:
+        - Phase 0: project structure, CI, test baseline
+        - Phase 1: state contract and plan schema
+        - Phase 2: MCP adapter and tool policy
+        - Phase 3: ExecutionTrace and step-level executor
+        - Phase 4: execution loop, evaluation, repair
+        - Phase 5: API-RAG and error-driven retrieval
+        - Phase 6: HITL review system
+        - Phase 7: SkillDraft extraction
+        - Phase 8: Skill registry and reuse
+        - Phase 9: trace viewer or skill panel
+        - Phase 10: benchmark, demo, packaging
+        - Cross-cutting
+    validations:
+      required: true
+  - type: textarea
+    id: objective
+    attributes:
+      label: Objective
+      description: What engineering outcome should this task produce?
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: Include in-scope and out-of-scope work.
+      placeholder: |
+        In scope:
+        - ...
+
+        Out of scope:
+        - ...
+    validations:
+      required: true
+  - type: textarea
+    id: implementation
+    attributes:
+      label: Implementation notes
+      description: Mention modules, interfaces, migration concerns, and compatibility expectations.
+  - type: textarea
+    id: validation
+    attributes:
+      label: Validation plan
+      description: Which unit, integration, mock MCP, real QGIS, frontend, or CI checks should prove this task?
+    validations:
+      required: true
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies or blockers
+      description: List preceding tasks, external services, QGIS setup, database setup, or design decisions.

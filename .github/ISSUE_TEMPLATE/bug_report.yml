@@ -1,0 +1,86 @@
+name: Bug report
+description: Report a reproducible problem in the QGIS workflow agent.
+title: "[Bug]: "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Please include enough detail for someone to reproduce it without guessing your local setup.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Planner / plan validation
+        - API-RAG / document parsing
+        - MCP client / QGIS plugin integration
+        - Tool policy / safety
+        - Step executor / execution loop
+        - HITL review
+        - Skill extraction / registry
+        - Database / migrations
+        - Backend API / SSE
+        - Frontend UI
+        - Tests / CI
+        - Documentation
+    validations:
+      required: true
+  - type: textarea
+    id: current
+    attributes:
+      label: Current behavior
+      description: What happened?
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should have happened?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction steps
+      description: Include commands, input prompt, uploaded files, and review choices where relevant.
+      placeholder: |
+        1. Start backend with ...
+        2. Start QGIS MCP server with ...
+        3. Submit prompt ...
+        4. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include versions and whether QGIS, PostgreSQL, and MCP were running.
+      placeholder: |
+        OS:
+        Python:
+        QGIS:
+        PostgreSQL:
+        Node:
+        LLM provider/model:
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs, traces, or screenshots
+      description: Paste relevant backend logs, MCP responses, ExecutionTrace IDs, screenshots, or CI links.
+      render: text
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options:
+        - Blocks all local development
+        - Blocks one core workflow
+        - Wrong result or unsafe behavior
+        - Intermittent or recoverable
+        - Cosmetic or documentation issue
+    validations:
+      required: true

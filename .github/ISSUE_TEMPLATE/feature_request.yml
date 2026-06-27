@@ -1,0 +1,61 @@
+name: Feature request
+description: Propose a user-facing capability or workflow improvement.
+title: "[Feature]: "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or opportunity
+      description: What GIS workflow, agent behavior, or developer workflow should improve?
+    validations:
+      required: true
+  - type: textarea
+    id: users
+    attributes:
+      label: Target users and value
+      description: Who benefits, and how will this make QGIS automation easier, safer, or more reliable?
+    validations:
+      required: true
+  - type: dropdown
+    id: phase
+    attributes:
+      label: Engineering plan phase
+      options:
+        - Phase 0: project structure, CI, test baseline
+        - Phase 1: state contract and plan schema
+        - Phase 2: MCP adapter and tool policy
+        - Phase 3: ExecutionTrace and step-level executor
+        - Phase 4: execution loop, evaluation, repair
+        - Phase 5: API-RAG and error-driven retrieval
+        - Phase 6: HITL review system
+        - Phase 7: SkillDraft extraction
+        - Phase 8: Skill registry and reuse
+        - Phase 9: trace viewer or skill panel
+        - Phase 10: benchmark, demo, packaging
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the desired behavior, API, UI flow, or workflow.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: List concrete checks that prove the feature is done.
+      placeholder: |
+        - Given ..., when ..., then ...
+        - Mock MCP test covers ...
+        - UI shows ...
+    validations:
+      required: true
+  - type: textarea
+    id: risks
+    attributes:
+      label: Risks and constraints
+      description: Include compatibility, QGIS/MCP dependencies, safety concerns, or test limitations.

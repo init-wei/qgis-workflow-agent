@@ -91,7 +91,7 @@ cp .env.example .env
 编辑 `.env` 文件，填入必需的配置：
 ```bash
 # 数据库配置
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/qgis_db
+DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/qgis_db
 
 # LLM API 配置
 OPENAI_API_KEY=your_api_key_here
@@ -284,4 +284,3 @@ qgis-agentv2/
 - [QGIS](https://qgis.org/)
 - [GDAL](https://gdal.org/)
 - [QGIS-MCP](https://github.com/jjsantos01/qgis_mcp)
-

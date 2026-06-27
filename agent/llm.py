@@ -9,7 +9,17 @@ from __future__ import annotations
 from typing import Any, Dict, Optional
 import os
 
+from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
+
+load_dotenv()
+
+
+_PLACEHOLDER_API_KEYS = {
+    "your_api_key_here",
+    "your_openai_api_key_here",
+    "your_deepseek_api_key_here",
+}
 
 
 def _as_float(value: Optional[str], default: float) -> float:
@@ -48,8 +58,12 @@ def get_env_llm_config() -> Dict[str, Any]:
     """
     从环境变量读取默认 LLM 配置
     """
+    api_key = os.getenv("OPENAI_API_KEY", "")
+    if api_key in _PLACEHOLDER_API_KEYS:
+        api_key = ""
+
     return {
-        "api_key": os.getenv("OPENAI_API_KEY", ""),
+        "api_key": api_key,
         "api_base": os.getenv("OPENAI_BASE_URL", ""),
         "model": os.getenv("OPENAI_MODEL_NAME", "deepseek-chat"),
         "temperature": _as_float(os.getenv("OPENAI_TEMPERATURE"), 0.1),
@@ -72,6 +86,9 @@ def create_llm(override: Optional[Dict[str, Any]] = None) -> ChatOpenAI:
     创建 ChatOpenAI 实例（支持覆盖配置）
     """
     config = build_llm_config(override)
+
+    if not config.get("api_key"):
+        raise ValueError("OPENAI_API_KEY is not configured. Set a real DeepSeek or OpenAI-compatible API key.")
 
     kwargs: Dict[str, Any] = {
         "model": config.get("model"),

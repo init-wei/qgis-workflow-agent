@@ -68,7 +68,7 @@ cp .env.example .env
 关键配置项：
 ```bash
 # 数据库配置
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/qgis_db
+DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/qgis_db
 
 # OpenAI API 配置
 OPENAI_API_KEY=your_api_key_here
