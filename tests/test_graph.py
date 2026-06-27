@@ -6,13 +6,22 @@
 import sys
 import os
 import pytest
-from unittest.mock import patch, MagicMock
 
 # 添加项目根目录到路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from agent.graph import build_graph, should_continue_planning, should_continue_execution
+from agent.graph import build_graph, should_continue_planning
 from agent.state import AgentState, create_initial_state, Plan, Step
+
+
+def make_state(**overrides) -> AgentState:
+    """Create a minimal current AgentState for graph routing tests."""
+    state = create_initial_state(
+        session_id="test_session",
+        input_query="test",
+    )
+    state.update(overrides)
+    return state
 
 
 class TestGraphConstruction:
@@ -54,30 +63,7 @@ class TestConditionalEdges:
     
     def test_should_continue_planning_approved(self):
         """测试规划批准后的路由"""
-        state = AgentState(
-            input_query="test",
-            session_id="test_session",
-            status=True,  # 用户批准
-            retry_count=0,
-            log_summary=None,
-            advise=None,
-            example=None,
-            draft=None,
-            plan=None,
-            gdal_doc=[],
-            pyqgis_doc=[],
-            api_context_structured=[],
-            missing_deps=[],
-            messages=[],
-            current_step_id=0,
-            execution_logs=[],
-            code_history=[],
-            retry_attempts=0,
-            final_summary=None,
-            screenshot_path=None,
-            is_completed=False,
-            quality_score=0.0
-        )
+        state = make_state(status=True, plan=Plan(task="测试任务", steps=[], metadata={}))
         
         result = should_continue_planning(state)
         assert result == "api_rag_node"
@@ -85,30 +71,7 @@ class TestConditionalEdges:
     
     def test_should_continue_planning_force_exit(self):
         """测试强制退出机制"""
-        state = AgentState(
-            input_query="test",
-            session_id="test_session",
-            status=False,  # 用户未批准
-            retry_count=3,  # 达到强制退出阈值
-            log_summary=None,
-            advise=None,
-            example=None,
-            draft=None,
-            plan=None,
-            gdal_doc=[],
-            pyqgis_doc=[],
-            api_context_structured=[],
-            missing_deps=[],
-            messages=[],
-            current_step_id=0,
-            execution_logs=[],
-            code_history=[],
-            retry_attempts=0,
-            final_summary=None,
-            screenshot_path=None,
-            is_completed=False,
-            quality_score=0.0
-        )
+        state = make_state(status=False, retry_count=5)
         
         result = should_continue_planning(state)
         assert result == "api_rag_node"
@@ -116,173 +79,11 @@ class TestConditionalEdges:
     
     def test_should_continue_planning_need_revision(self):
         """测试需要修改规划的路由"""
-        state = AgentState(
-            input_query="test",
-            session_id="test_session",
-            status=False,  # 用户未批准
-            retry_count=1,  # 未达到强制退出阈值
-            log_summary=None,
-            advise=None,
-            example=None,
-            draft=None,
-            plan=None,
-            gdal_doc=[],
-            pyqgis_doc=[],
-            api_context_structured=[],
-            missing_deps=[],
-            messages=[],
-            current_step_id=0,
-            execution_logs=[],
-            code_history=[],
-            retry_attempts=0,
-            final_summary=None,
-            screenshot_path=None,
-            is_completed=False,
-            quality_score=0.0
-        )
+        state = make_state(status=False, retry_count=1)
         
         result = should_continue_planning(state)
         assert result == "planner_node"
         print("✅ 需要修改时正确路由回planner_node")
-    
-    def test_should_continue_execution_not_finished(self):
-        """测试执行未完成时的路由"""
-        plan = Plan(
-            task="测试任务",
-            steps=[
-                Step(step_id=1, description="步骤1", gdal_api=[], pyqgis_api=[]),
-                Step(step_id=2, description="步骤2", gdal_api=[], pyqgis_api=[])
-            ],
-            metadata={}
-        )
-        
-        state = AgentState(
-            input_query="test",
-            session_id="test_session",
-            status=True,
-            retry_count=0,
-            log_summary=None,
-            advise=None,
-            example=None,
-            draft=None,
-            plan=plan,
-            gdal_doc=[],
-            pyqgis_doc=[],
-            api_context_structured=[],
-            missing_deps=[],
-            messages=[],
-            current_step_id=0,  # 第一步，还未完成
-            execution_logs=[],
-            code_history=[],
-            retry_attempts=0,
-            final_summary=None,
-            screenshot_path=None,
-            is_completed=False,
-            quality_score=0.0
-        )
-        
-        result = should_continue_execution(state)
-        assert result == "executor_node"
-        print("✅ 执行未完成时正确路由到executor_node")
-    
-    def test_should_continue_execution_finished(self):
-        """测试所有步骤执行完成时的路由"""
-        plan = Plan(
-            task="测试任务",
-            steps=[
-                Step(step_id=1, description="步骤1", gdal_api=[], pyqgis_api=[])
-            ],
-            metadata={}
-        )
-        
-        state = AgentState(
-            input_query="test",
-            session_id="test_session",
-            status=True,
-            retry_count=0,
-            log_summary=None,
-            advise=None,
-            example=None,
-            draft=None,
-            plan=plan,
-            gdal_doc=[],
-            pyqgis_doc=[],
-            api_context_structured=[],
-            missing_deps=[],
-            messages=[],
-            current_step_id=1,  # 已完成所有步骤
-            execution_logs=[],
-            code_history=[],
-            retry_attempts=0,
-            final_summary=None,
-            screenshot_path=None,
-            is_completed=False,
-            quality_score=0.0
-        )
-        
-        result = should_continue_execution(state)
-        assert result == "reflector_node"
-        print("✅ 执行完成时正确路由到reflector_node")
-
-
-class TestGraphExecution:
-    """测试Graph执行流程（Mock版本）"""
-    
-    @patch('agent.nodes.planner_node.planner_node')
-    @patch('agent.nodes.api_rag_node.api_rag_node')
-    @patch('agent.nodes.executor_node.executor_node')
-    @patch('agent.nodes.reflector_node.reflector_node')
-    def test_full_graph_execution_mock(self, mock_reflector, mock_executor, mock_api_rag, mock_planner):
-        """测试完整的Graph执行流程（使用Mock）"""
-        
-        # Mock返回值
-        plan = Plan(
-            task="测试任务",
-            steps=[Step(step_id=1, description="测试步骤", gdal_api=[], pyqgis_api=[])],
-            metadata={"iteration": 1, "has_example_reference": False}
-        )
-        
-        # Planner返回批准的计划
-        mock_planner.return_value = {
-            "draft": plan,
-            "plan": plan,
-            "status": True,
-            "retry_count": 0
-        }
-        
-        # API RAG返回API文档
-        mock_api_rag.return_value = {
-            "gdal_doc": [],
-            "pyqgis_doc": [],
-            "api_context_structured": [],
-            "missing_deps": []
-        }
-        
-        # Executor返回执行结果
-        mock_executor.return_value = {
-            "current_step_id": 1,
-            "execution_logs": [{"step_id": 1, "status": "success"}],
-            "messages": []
-        }
-        
-        # Reflector返回最终总结
-        mock_reflector.return_value = {
-            "final_summary": "任务完成",
-            "is_completed": True,
-            "quality_score": 0.8
-        }
-        
-        # 构建Graph
-        app = build_graph(checkpointer=None)
-        
-        # 创建初始状态
-        initial_state = create_initial_state(
-            session_id="test_session",
-            input_query="测试查询"
-        )
-        
-        print("✅ Mock Graph执行流程测试准备完成")
-        print("   注意: 由于interrupt配置，实际执行会在interrupt点暂停")
 
 
 class TestGraphVisualization:

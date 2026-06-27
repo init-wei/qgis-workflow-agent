@@ -15,10 +15,26 @@ def test_create_initial_state():
     
     assert state["session_id"] == session_id
     assert state["input_query"] == input_query
+    assert state["llm_config"] is None
     assert state["retry_count"] == 0
-    assert state["current_step_id"] == 0
-    assert len(state["execution_logs"]) == 0
     assert state["status"] is False
+    assert state["messages"] == []
+    assert state["history"] == []
+    assert state["screenshot_path"] is None
+    assert state["final_summary"] is None
+    assert state["quality_score"] == 0.0
+
+
+def test_create_initial_state_preserves_llm_config():
+    """测试初始状态保留前端覆盖的LLM配置"""
+    llm_config = {
+        "model": "deepseek-chat",
+        "temperature": 0.1,
+    }
+
+    state = create_initial_state("test_session_456", "测试查询", llm_config=llm_config)
+
+    assert state["llm_config"] == llm_config
 
 
 def test_step_model():

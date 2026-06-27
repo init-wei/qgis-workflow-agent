@@ -145,6 +145,39 @@ uv run ui\backend\main.py
 uv run qgis_mcp_server\qgis_mcp_server.py
 ```
 
+### Phase 0 开发环境检查
+
+Phase 0 的目标是确认当前原型目录结构可继续开发，不要求迁移到 `src/` 布局。
+
+```bash
+# Python 导入与语法检查
+uv run python -m compileall agent qgis_mcp_server ui/backend scripts
+
+# 默认 smoke 测试：state、graph、health check 单元测试
+uv run pytest
+
+# 数据库 smoke 测试（需要先启动并初始化 PostgreSQL）
+docker compose up -d postgres
+uv run python scripts/setup_database.py
+uv run pytest tests/test_database.py -q
+
+# 本地服务健康检查，不会打印 API key
+uv run python scripts/health_check.py
+
+# 如果 HTTP MCP wrapper 尚未启动，可临时启动并检查
+uv run python scripts/health_check.py --start-http-mcp
+
+# 可选：对 DeepSeek/OpenAI-compatible 配置做一次真实模型调用
+uv run python scripts/health_check.py --llm-live
+```
+
+健康检查覆盖：
+
+- `.env` 中的 DeepSeek/OpenAI-compatible 配置；
+- PostgreSQL / PostGIS 开发数据库；
+- QGIS Desktop MCP 插件的 `localhost:9876` socket；
+- `QGIS_MCP_SERVER_URL` 指向的 HTTP MCP wrapper，默认 `http://localhost:8000/mcp`。
+
 ### 前端构建与使用
 
 #### 方式 A：开发模式（推荐）

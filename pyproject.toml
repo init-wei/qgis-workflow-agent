@@ -40,3 +40,12 @@ dependencies = [
 name = "tsinghua"
 url = "https://pypi.tuna.tsinghua.edu.cn/simple"
 default = true
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "-q tests/test_state.py tests/test_graph.py tests/test_health_check.py"
+markers = [
+    "database: requires a local PostgreSQL database initialized with scripts/setup_database.py",
+    "external: requires QGIS, MCP, LLM, or another external service",
+]
