@@ -1,13 +1,23 @@
 #!/usr/bin/env python3
 """Policy gates for planned MCP tool calls."""
 
-from pathlib import Path
-from typing import Iterable
+from pathlib import Path, PureWindowsPath
+from typing import Any, Iterable, Iterator
 
 from agent.tools.tool_contracts import PolicyDecision, ToolCallPlan
 from agent.tools.tool_registry import ToolRegistry
 
-PATH_ARGUMENT_KEYS = {"path", "output", "output_path", "output_file", "filename"}
+PATH_ARGUMENT_KEYS = {
+    "path",
+    "paths",
+    "output",
+    "outputs",
+    "output_path",
+    "output_paths",
+    "output_file",
+    "output_files",
+    "filename",
+}
 
 
 class PathPolicy:
@@ -17,15 +27,20 @@ class PathPolicy:
         self.workspace_root = Path(workspace_root).resolve()
 
     def evaluate_call(self, call: ToolCallPlan) -> PolicyDecision:
-        for key, value in call.arguments.items():
-            if key in PATH_ARGUMENT_KEYS and isinstance(value, str):
-                decision = self.evaluate_path(value)
-                if not decision.allowed:
-                    return decision
+        for path in self._iter_path_arguments(call.arguments):
+            decision = self.evaluate_path(path)
+            if not decision.allowed:
+                return decision
         return PolicyDecision(allowed=True)
 
     def evaluate_path(self, raw_path: str) -> PolicyDecision:
         candidate = Path(raw_path)
+        if self.is_absolute_path_string(raw_path) and not candidate.is_absolute():
+            return PolicyDecision(
+                allowed=False,
+                reason="path_outside_workspace",
+                message=f"Path is outside workspace: {raw_path}",
+            )
         if not candidate.is_absolute():
             candidate = self.workspace_root / candidate
         resolved = candidate.resolve()
@@ -40,6 +55,26 @@ class PathPolicy:
             )
 
         return PolicyDecision(allowed=True)
+
+    def is_absolute_path_string(self, raw_path: str) -> bool:
+        return Path(raw_path).is_absolute() or PureWindowsPath(raw_path).is_absolute()
+
+    def _iter_path_arguments(self, value: Any, key: str | None = None) -> Iterator[str]:
+        is_path_key = key is not None and key.lower() in PATH_ARGUMENT_KEYS
+        if isinstance(value, str):
+            if is_path_key:
+                yield value
+            return
+
+        if isinstance(value, dict):
+            for nested_key, nested_value in value.items():
+                nested_key_text = str(nested_key)
+                yield from self._iter_path_arguments(nested_value, nested_key_text)
+            return
+
+        if isinstance(value, list):
+            for item in value:
+                yield from self._iter_path_arguments(item, key)
 
 
 class CodePolicy:
