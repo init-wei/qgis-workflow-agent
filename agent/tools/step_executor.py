@@ -73,8 +73,16 @@ class StepExecutor:
             raw_response = await self.mcp_client.call_tool(
                 call.tool_name, call.arguments
             )
-        except BaseException as exc:
+        except Exception as exc:
             observation = self.parser.parse(call.tool_name, exc)
+            observation = observation.model_copy(
+                update={
+                    "raw_response": {
+                        "exception_type": type(exc).__name__,
+                        "message": str(exc),
+                    }
+                }
+            )
         else:
             observation = self.parser.parse(call.tool_name, raw_response)
 
