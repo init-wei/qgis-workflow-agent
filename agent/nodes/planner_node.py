@@ -13,7 +13,7 @@ from jinja2 import Template
 from langchain_core.messages import HumanMessage, SystemMessage
 from agent.llm import create_llm
 
-from agent.planning.legacy_adapter import task_plan_to_legacy_plan
+from agent.planning.legacy_adapter import allowed_tools_from_task_plan, task_plan_to_legacy_plan
 from agent.planning.plan_parser import parse_task_plan_json
 from agent.planning.plan_validator import PlanValidator
 from agent.state import AgentState
@@ -292,7 +292,27 @@ async def planner_node(state: AgentState) -> Dict[str, Any]:
         metadata["validation_summary"] = validation_report.summary
         
         task_plan = task_plan.model_copy(update={"metadata": metadata})
+
+        if not validation_report.is_valid:
+            logger.warning(f"TaskPlan验证失败: {validation_report.summary}")
+            await asyncio.to_thread(
+                save_execution_log,
+                session_id,
+                None,
+                f"TaskPlan验证失败: {validation_report.summary}",
+                "error",
+                error_detail=validation_report.model_dump_json()
+            )
+            return {
+                "draft": None,
+                "task_plan_draft": None,
+                "plan_validation": validation_report,
+                "status": False,
+                "retry_count": retry_count + 1,
+            }
+
         plan = task_plan_to_legacy_plan(task_plan)
+        tool_selection = allowed_tools_from_task_plan(task_plan) or None
         
         logger.info(f"生成计划成功: {plan.task}, 共{len(plan.steps)}个步骤")
         
@@ -316,6 +336,7 @@ async def planner_node(state: AgentState) -> Dict[str, Any]:
                 "task_plan_draft": approved_task_plan,
                 "task_plan": approved_task_plan,
                 "plan_validation": validation_report,
+                "tool_selection": tool_selection,
                 "example": example,
                 "retry_count": retry_count + 1,
                 "status": True,  # 标记为已批准
@@ -326,6 +347,7 @@ async def planner_node(state: AgentState) -> Dict[str, Any]:
             "draft": plan,
             "task_plan_draft": task_plan,
             "plan_validation": validation_report,
+            "tool_selection": tool_selection,
             "example": example,
             "retry_count": retry_count + 1,
             "status": False,  # 等待人工审核

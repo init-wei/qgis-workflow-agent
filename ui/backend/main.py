@@ -378,6 +378,9 @@ def build_plan_review_update(
         "plan": draft,
         "status": True,
     }
+    allowed_tools = getattr(draft, "metadata", {}).get("allowed_tools")
+    if allowed_tools:
+        update_values["tool_selection"] = allowed_tools
 
     task_plan_draft = state_values.get("task_plan_draft")
     if task_plan_draft:

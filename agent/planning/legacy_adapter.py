@@ -21,6 +21,17 @@ def _review_status_from_metadata(metadata: dict) -> str:
     return review_status
 
 
+def allowed_tools_from_task_plan(task_plan: TaskPlan) -> list[str]:
+    """Return a stable task-level tool allowlist from all TaskPlan steps."""
+
+    allowed_tools = {
+        tool_name
+        for step in task_plan.steps
+        for tool_name in step.allowed_tools
+    }
+    return sorted(allowed_tools)
+
+
 def legacy_plan_to_task_plan(plan: Plan, user_query: str | None = None) -> TaskPlan:
     """Convert the current Plan/Step shape into a TaskPlan for compatibility."""
 
@@ -61,12 +72,18 @@ def task_plan_to_legacy_plan(task_plan: TaskPlan) -> Plan:
     """Convert a TaskPlan into the legacy Plan shape used by UI/API-RAG/Executor."""
 
     metadata = task_plan.metadata.copy()
+    allowed_tools = allowed_tools_from_task_plan(task_plan)
     metadata.update(
         {
             "task_plan_id": task_plan.task_id,
             "risk_level": task_plan.risk_level,
             "review_status": task_plan.review_status,
             "validation_summary": metadata.get("validation_summary", ""),
+            "allowed_tools": allowed_tools,
+            "step_allowed_tools": {
+                step.step_id: list(step.allowed_tools)
+                for step in task_plan.steps
+            },
         }
     )
 

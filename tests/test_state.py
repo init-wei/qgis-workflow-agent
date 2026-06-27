@@ -21,6 +21,7 @@ def test_create_initial_state():
     assert state["task_plan_draft"] is None
     assert state["task_plan"] is None
     assert state["plan_validation"] is None
+    assert state["tool_selection"] is None
     assert state["messages"] == []
     assert state["history"] == []
     assert state["screenshot_path"] is None

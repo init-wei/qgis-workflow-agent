@@ -68,6 +68,7 @@ class AgentState(TypedDict):
     plan_validation: Optional[PlanValidationReport]  # TaskPlan验证报告
     status: bool                      # 方案审核状态（False=待审核，True=已批准）
     retry_count: int                  # 人工审查/修改的循环次数
+    tool_selection: Optional[List[str]]  # Executor允许使用的MCP工具名称列表
     
     # ========== API RAG Node 字段 ==========
     gdal_doc: List[Dict[str, Any]]   # 检索到的GDAL API文档
@@ -123,6 +124,7 @@ def create_initial_state(session_id: str, input_query: str, llm_config: Optional
         plan_validation=None,
         status=False,
         retry_count=0,
+        tool_selection=None,
         
         # API RAG字段
         gdal_doc=[],
