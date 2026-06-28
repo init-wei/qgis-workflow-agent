@@ -181,6 +181,15 @@ class ExecutionLoop:
                     feedback=human_feedback,
                     reason="risk_review_rejected",
                 )
+            if human_feedback.status == "pending":
+                return self._record_review_block(
+                    call=call,
+                    trace=trace,
+                    feedback=human_feedback,
+                    reason="risk_review_pending",
+                    status="needs_review",
+                    outcome="ask_human",
+                )
             if human_feedback.status in {"approved", "modified"}:
                 current_call = self.risk_review_manager.apply_feedback(
                     call, human_feedback

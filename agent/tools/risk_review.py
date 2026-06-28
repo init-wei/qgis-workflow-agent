@@ -56,6 +56,7 @@ class RiskReviewManager:
         return (
             feedback.tool_call.step_id == call.step_id
             and feedback.tool_call.tool_name == call.tool_name
+            and feedback.tool_call.arguments == call.arguments
         )
 
     def apply_feedback(

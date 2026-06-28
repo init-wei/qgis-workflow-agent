@@ -166,6 +166,79 @@ def test_rejected_feedback_aborts_without_calling_mcp(tmp_path):
     assert trace.latest_attempt().metadata["risk_review"]["status"] == "rejected"
 
 
+def test_pending_feedback_blocks_again_without_calling_mcp(tmp_path):
+    client = SequenceMCPClient([{"status": "success", "result": {"ok": True}}])
+    loop = ExecutionLoop(
+        mcp_client=client,
+        registry=_registry("save_project"),
+        workspace_root=tmp_path,
+    )
+    trace = ExecutionTrace(trace_id="trace-risk")
+    call = ToolCallPlan(
+        step_id=3,
+        tool_name="save_project",
+        arguments={"path": "shared/projects/original.qgz"},
+    )
+    feedback = HumanFeedback(
+        review_id="review-pending",
+        status="pending",
+        tool_call=call,
+        reason="risk_review_required",
+    )
+
+    result = asyncio.run(
+        loop.run(
+            call,
+            trace,
+            allowed_tools=["save_project"],
+            human_feedback=feedback,
+        )
+    )
+
+    assert result.status == "needs_review"
+    assert result.decision.reason == "risk_review_pending"
+    assert client.calls == []
+    assert trace.latest_attempt().metadata["risk_review"]["status"] == "pending"
+
+
+def test_feedback_must_match_reviewed_arguments(tmp_path):
+    client = SequenceMCPClient([{"status": "success", "result": {"ok": True}}])
+    loop = ExecutionLoop(
+        mcp_client=client,
+        registry=_registry("save_project"),
+        workspace_root=tmp_path,
+    )
+    trace = ExecutionTrace(trace_id="trace-risk")
+    reviewed_call = ToolCallPlan(
+        step_id=4,
+        tool_name="save_project",
+        arguments={"path": "shared/projects/reviewed.qgz"},
+    )
+    current_call = ToolCallPlan(
+        step_id=4,
+        tool_name="save_project",
+        arguments={"path": "shared/projects/changed.qgz"},
+    )
+    feedback = HumanFeedback(
+        review_id="review-stale",
+        status="approved",
+        tool_call=reviewed_call,
+    )
+
+    result = asyncio.run(
+        loop.run(
+            current_call,
+            trace,
+            allowed_tools=["save_project"],
+            human_feedback=feedback,
+        )
+    )
+
+    assert result.status == "failed"
+    assert result.decision.reason == "risk_review_call_mismatch"
+    assert client.calls == []
+
+
 def test_review_manager_flags_save_overwrite_and_delete_semantics():
     manager = RiskReviewManager()
 
