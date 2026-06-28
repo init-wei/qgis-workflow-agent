@@ -233,8 +233,7 @@ export function getNodeDisplayName(node: string): string {
   const names: Record<string, string> = {
     'planner_node': '📋 规划器',
     'human_review_node': '👤 人工审核',
-    'api_rag_node': '📚 API 检索',
-    'executor_node': '⚙️ 执行器',
+    'executor_node': '⚙️ 受控执行',
     'reflector_node': '🔍 反思器'
   }
   return names[node] || node

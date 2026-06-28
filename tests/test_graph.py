@@ -41,7 +41,7 @@ class TestGraphConstruction:
         # 获取所有节点
         nodes = [node.id for node in graph.nodes.values()]
         
-        required_nodes = ["planner_node", "api_rag_node", "executor_node", "reflector_node"]
+        required_nodes = ["planner_node", "human_review_node", "executor_node", "reflector_node"]
         for node in required_nodes:
             assert node in nodes, f"缺少节点: {node}"
         
@@ -66,16 +66,16 @@ class TestConditionalEdges:
         state = make_state(status=True, plan=Plan(task="测试任务", steps=[], metadata={}))
         
         result = should_continue_planning(state)
-        assert result == "api_rag_node"
-        print("✅ 规划批准后正确路由到api_rag_node")
+        assert result == "executor_node"
+        print("✅ 规划批准后正确路由到executor_node")
     
     def test_should_continue_planning_force_exit(self):
         """测试强制退出机制"""
         state = make_state(status=False, retry_count=5)
         
         result = should_continue_planning(state)
-        assert result == "api_rag_node"
-        print("✅ 强制退出机制正确路由到api_rag_node")
+        assert result == "executor_node"
+        print("✅ 强制退出机制正确路由到executor_node")
     
     def test_should_continue_planning_need_revision(self):
         """测试需要修改规划的路由"""
@@ -97,7 +97,8 @@ class TestGraphVisualization:
         mermaid_code = graph.draw_mermaid()
         assert mermaid_code is not None
         assert "planner_node" in mermaid_code
-        assert "api_rag_node" in mermaid_code
+        assert "api_rag_node" not in mermaid_code
+        assert "human_review_node" in mermaid_code
         assert "executor_node" in mermaid_code
         assert "reflector_node" in mermaid_code
         
