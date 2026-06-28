@@ -467,6 +467,24 @@ def normalize_human_feedback(feedback: HumanFeedback | dict[str, Any]) -> HumanF
     return HumanFeedback.model_validate(feedback)
 
 
+def resolve_risk_review_tool_call(
+    request: RiskReviewDecisionRequest,
+    pending_risk_review: HumanFeedback | dict[str, Any] | None,
+) -> ToolCallPlan | None:
+    """Resolve the reviewed tool call and reject stale pending-review decisions."""
+
+    if pending_risk_review is None:
+        return request.tool_call
+
+    pending_feedback = normalize_human_feedback(pending_risk_review)
+    if request.review_id != pending_feedback.review_id:
+        raise HTTPException(
+            status_code=409,
+            detail="stale risk review decision: review_id does not match pending review",
+        )
+    return pending_feedback.tool_call
+
+
 def serialize_risk_review_required(
     feedback: HumanFeedback | dict[str, Any]
 ) -> dict[str, Any]:
@@ -1144,13 +1162,7 @@ async def review_risky_tool_call(request: RiskReviewDecisionRequest):
     state_values = current_state.values if current_state else {}
     pending_risk_review = state_values.get("pending_risk_review")
 
-    tool_call = None
-    if pending_risk_review is not None:
-        pending_risk_review = normalize_human_feedback(pending_risk_review)
-        tool_call = pending_risk_review.tool_call
-    elif request.tool_call is not None:
-        tool_call = request.tool_call
-
+    tool_call = resolve_risk_review_tool_call(request, pending_risk_review)
     if tool_call is None:
         raise HTTPException(
             status_code=400,

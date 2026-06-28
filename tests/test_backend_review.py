@@ -2,8 +2,10 @@ from ui.backend.main import build_plan_review_update
 from ui.backend.main import (
     RiskReviewDecisionRequest,
     build_risk_review_feedback,
+    resolve_risk_review_tool_call,
     serialize_risk_review_required,
 )
+from fastapi import HTTPException
 from agent.planning.plan_schema import PlanStep, TaskPlan
 from agent.state import Plan, Step
 from agent.tools.tool_contracts import HumanFeedback, ToolCallPlan
@@ -95,3 +97,31 @@ def test_serialize_risk_review_required_accepts_checkpoint_dict():
     assert payload["status"] == "pending"
     assert payload["tool_call"]["tool_name"] == "save_project"
     assert payload["tool_call"]["arguments"]["path"] == "shared/projects/reviewed.qgz"
+
+
+def test_resolve_risk_review_tool_call_rejects_stale_review_id():
+    pending_call = ToolCallPlan(
+        step_id=1,
+        tool_name="execute_code",
+        arguments={"code": "print('current')"},
+        risk_level="high",
+        requires_review=True,
+    )
+    pending_feedback = HumanFeedback(
+        review_id="current-review",
+        status="pending",
+        tool_call=pending_call,
+    )
+    request = RiskReviewDecisionRequest(
+        thread_id="thread-1",
+        review_id="stale-review",
+        status="approved",
+    )
+
+    try:
+        resolve_risk_review_tool_call(request, pending_feedback)
+    except HTTPException as exc:
+        assert exc.status_code == 409
+        assert "stale risk review" in exc.detail
+    else:
+        raise AssertionError("stale risk review decision was accepted")
