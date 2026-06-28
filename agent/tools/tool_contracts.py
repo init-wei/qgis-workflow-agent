@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Phase 2 tool call, observation, registry, and policy contracts."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -13,6 +13,7 @@ TraceStatus = Literal["running", "success", "failed"]
 EvaluationOutcome = Literal["success", "retry", "abort", "ask_human"]
 RepairActionType = Literal["update_arguments", "abort", "ask_human"]
 LoopStatus = Literal["success", "failed", "needs_review"]
+RiskReviewStatus = Literal["pending", "approved", "rejected", "modified"]
 ErrorType = Literal[
     "parameter_error",
     "missing_file",
@@ -85,6 +86,29 @@ class ToolSpec(BaseModel):
     )
     metadata: dict[str, Any] = Field(
         default_factory=dict, description="Additional tool metadata"
+    )
+
+
+class HumanFeedback(BaseModel):
+    """Human risk-review feedback for a planned tool call."""
+
+    review_id: str = Field(description="Stable risk-review ID")
+    status: RiskReviewStatus = Field(description="Risk-review state")
+    tool_call: ToolCallPlan = Field(description="Tool call under review")
+    reason: str | None = Field(
+        default=None, description="Machine-readable review reason"
+    )
+    comment: str | None = Field(default=None, description="Reviewer comment")
+    modified_arguments: dict[str, Any] | None = Field(
+        default=None, description="Reviewer-supplied replacement arguments"
+    )
+    reviewer: str | None = Field(default=None, description="Reviewer identity")
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        description="Feedback creation timestamp",
+    )
+    metadata: dict[str, Any] = Field(
+        default_factory=dict, description="Additional review metadata"
     )
 
 
