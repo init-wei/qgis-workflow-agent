@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any, Protocol
 
 from pydantic import BaseModel, Field
@@ -132,9 +133,10 @@ class DefaultApiDocRetriever:
         if gdal_apis:
             from agent.tools.rag import search_gdal_docs
 
+            gdal_docs = await asyncio.to_thread(search_gdal_docs, gdal_apis)
             records.extend(
                 self._record_from_mapping(doc, default_library="GDAL")
-                for doc in search_gdal_docs(gdal_apis)
+                for doc in gdal_docs
             )
         if pyqgis_apis:
             from agent.tools.rag import search_pyqgis_docs_async
