@@ -93,7 +93,11 @@ async def executor_node(state: AgentState) -> dict[str, Any]:
         loop_results.append(result)
         if result.status != "success":
             if result.status == "needs_review":
-                return _risk_review_response(trace, loop_results, call_index)
+                risk_review_response = _risk_review_response(
+                    trace, loop_results, call_index
+                )
+                if risk_review_response is not None:
+                    return risk_review_response
             return _failure_response(trace, loop_results)
 
     trace.status = "success"
@@ -152,7 +156,7 @@ def _failure_response(
 
 def _risk_review_response(
     trace: ExecutionTrace, loop_results: list[LoopResult], call_index: int
-) -> dict[str, Any]:
+) -> dict[str, Any] | None:
     latest_attempt = trace.latest_attempt()
     risk_review = None
     if latest_attempt is not None:
@@ -161,6 +165,8 @@ def _risk_review_response(
             from agent.tools.tool_contracts import HumanFeedback
 
             risk_review = HumanFeedback.model_validate(risk_review_data)
+    if risk_review is None:
+        return None
     final_result = loop_results[-1]
     return {
         "execution_trace": trace,

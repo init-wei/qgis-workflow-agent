@@ -20,6 +20,11 @@ class FakeMCPClient:
 
     async def call_tool(self, tool_name, arguments):
         self.calls.append((tool_name, arguments))
+        if arguments.get("path") == "shared/uploads/missing.gpkg":
+            return {
+                "status": "error",
+                "message": "File not found: shared/uploads/missing.gpkg",
+            }
         if tool_name == "execute_code":
             return {"status": "success", "result": {"executed": True}}
         if tool_name == "save_project":
@@ -240,6 +245,33 @@ async def _run_rejected_risk_review_assertions(monkeypatch):
     assert "risk_review_rejected" in result["messages"][-1].content
 
 
+def test_executor_node_treats_non_risk_needs_review_as_failure(monkeypatch):
+    asyncio.run(_run_non_risk_needs_review_assertions(monkeypatch))
+
+
+async def _run_non_risk_needs_review_assertions(monkeypatch):
+    fake_client = FakeMCPClient()
+
+    async def fake_get_mcp_client():
+        return fake_client
+
+    monkeypatch.setattr("agent.nodes.executor_node.get_mcp_client", fake_get_mcp_client)
+
+    state = create_initial_state("session-missing-file", "Load missing layer")
+    state["task_plan"] = _missing_file_task_plan()
+    state["status"] = True
+    state["tool_selection"] = ["add_layer"]
+
+    result = await executor_node(state)
+
+    assert [call[0] for call in fake_client.calls] == ["add_layer"]
+    assert result["is_completed"] is False
+    assert result["pending_risk_review"] is None
+    assert result["execution_cursor"] is None
+    assert result["messages"][-1].content.startswith("受控执行停止")
+    assert "missing_file_requires_human" in result["messages"][-1].content
+
+
 def _high_risk_task_plan():
     return TaskPlan(
         task_id="task-risk",
@@ -284,6 +316,42 @@ def _high_risk_task_plan():
                     "step_id": 1,
                     "tool_name": "execute_code",
                     "arguments": {"code": "print('reviewed')"},
+                }
+            ]
+        },
+    )
+
+
+def _missing_file_task_plan():
+    return TaskPlan(
+        task_id="task-missing-file",
+        task_summary="Load a missing layer",
+        risk_level="low",
+        review_status="approved",
+        required_inputs=[],
+        expected_outputs=[],
+        steps=[
+            PlanStep(
+                step_id=1,
+                description="Load missing output layer",
+                candidate_gdal_apis=[],
+                candidate_pyqgis_apis=[],
+                allowed_tools=["add_layer"],
+                input_refs=[],
+                output_refs=[],
+                risk_level="low",
+                requires_review=False,
+            )
+        ],
+        metadata={
+            "tool_calls": [
+                {
+                    "step_id": 1,
+                    "tool_name": "add_layer",
+                    "arguments": {
+                        "path": "shared/uploads/missing.gpkg",
+                        "layer_type": "vector",
+                    },
                 }
             ]
         },

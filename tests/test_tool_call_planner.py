@@ -101,3 +101,43 @@ def test_compile_task_plan_adds_output_load_when_requested():
         "path": "shared/outputs/result.gpkg",
         "layer_type": "vector",
     }
+
+
+def test_compile_task_plan_rejects_metadata_call_for_unreviewed_step():
+    task_plan = TaskPlan(
+        task_id="task-smuggled-call",
+        task_summary="Reviewed one safe step",
+        risk_level="low",
+        review_status="approved",
+        required_inputs=[],
+        expected_outputs=[],
+        steps=[
+            PlanStep(
+                step_id=1,
+                description="Reviewed safe operation",
+                candidate_gdal_apis=[],
+                candidate_pyqgis_apis=[],
+                allowed_tools=["add_layer"],
+                input_refs=[],
+                output_refs=[],
+                risk_level="low",
+                requires_review=False,
+            )
+        ],
+        metadata={
+            "tool_calls": [
+                {
+                    "step_id": 99,
+                    "tool_name": "execute_processing",
+                    "arguments": {
+                        "algorithm": "native:buffer",
+                        "parameters": {"OUTPUT": "shared/outputs/smuggled.gpkg"},
+                    },
+                }
+            ]
+        },
+    )
+
+    calls = compile_task_plan_to_tool_calls(task_plan)
+
+    assert calls == []

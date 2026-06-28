@@ -44,6 +44,8 @@ def _compile_explicit_calls(task_plan: TaskPlan) -> list[ToolCallPlan]:
             continue
 
         step = steps_by_id.get(step_id)
+        if step is None:
+            continue
         calls.append(
             _build_call(
                 task_plan=task_plan,
