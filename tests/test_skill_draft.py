@@ -170,6 +170,38 @@ def test_extracts_repair_strategy_from_failed_attempt_before_success():
     )
 
 
+def test_excludes_failed_attempts_from_reusable_steps_after_repair():
+    trace = ExecutionTrace(trace_id="trace-1", task_id="task-1")
+    failed_observation = ToolObservation(
+        tool_name="execute_processing",
+        status="error",
+        error_type="parameter_error",
+        message="Missing DISTANCE parameter",
+    )
+    bad_arguments = {
+        "algorithm": "native:buffer",
+        "parameters": {
+            "INPUT": "D:/project_files/QGIS-Agent-Refactoring/shared/data/roads.gpkg",
+            "OUTPUT": "D:/project_files/QGIS-Agent-Refactoring/shared/output/bad.gpkg",
+            "layer_name": "roads",
+        },
+    }
+    trace.append_attempt(
+        _attempt(
+            attempt_id="attempt-1",
+            status="failed",
+            arguments=bad_arguments,
+            observation=failed_observation,
+        )
+    )
+    trace.append_attempt(_attempt(attempt_id="attempt-2"))
+
+    draft = SkillExtractor().extract(trace)
+
+    assert [step.metadata["attempt_id"] for step in draft.steps] == ["attempt-2"]
+    assert "bad.gpkg" not in str(draft.steps)
+
+
 @pytest.mark.parametrize(
     "trace",
     [
@@ -196,3 +228,17 @@ def test_rejects_trace_when_latest_attempt_is_not_successful():
 
     with pytest.raises(SkillExtractionError):
         SkillExtractor().extract(trace)
+
+
+def test_success_criteria_do_not_carry_concrete_artifact_paths():
+    trace = ExecutionTrace(trace_id="trace-1", task_id="task-1")
+    original_output = (
+        "D:/project_files/QGIS-Agent-Refactoring/shared/output/buffered_roads.gpkg"
+    )
+    trace.append_attempt(_attempt())
+
+    draft = SkillExtractor().extract(trace)
+
+    assert original_output not in draft.success_criteria
+    assert f"artifact_created:{original_output}" not in draft.success_criteria
+    assert "artifact_created:${artifact_path_1}" in draft.success_criteria

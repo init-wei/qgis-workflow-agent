@@ -179,7 +179,10 @@ class SkillExtractor:
     def extract(self, trace: ExecutionTrace) -> SkillDraft:
         self._validate_trace(trace)
         builder = _TemplateBuilder()
-        steps = [self._step_template(attempt, builder) for attempt in trace.attempts]
+        successful_attempts = self._successful_attempts(trace)
+        steps = [
+            self._step_template(attempt, builder) for attempt in successful_attempts
+        ]
         return SkillDraft(
             draft_id=f"draft-{trace.trace_id}",
             name=self._draft_name(trace),
@@ -188,7 +191,7 @@ class SkillExtractor:
             source_task_id=trace.task_id,
             steps=steps,
             variables=builder.variables,
-            success_criteria=self._success_criteria(trace),
+            success_criteria=self._success_criteria(successful_attempts, builder),
             repair_strategies=self._repair_strategies(trace),
             metadata={
                 "attempt_count": len(trace.attempts),
@@ -204,6 +207,9 @@ class SkillExtractor:
             raise SkillExtractionError(
                 "SkillDraft extraction requires a complete successful trace"
             )
+
+    def _successful_attempts(self, trace: ExecutionTrace) -> list[StepAttempt]:
+        return [attempt for attempt in trace.attempts if attempt.status == "success"]
 
     def _step_template(
         self, attempt: StepAttempt, builder: _TemplateBuilder
@@ -235,15 +241,15 @@ class SkillExtractor:
                 evidence[key] = _compact_context(attempt.metadata[key])
         return evidence
 
-    def _success_criteria(self, trace: ExecutionTrace) -> list[str]:
+    def _success_criteria(
+        self, attempts: list[StepAttempt], builder: _TemplateBuilder
+    ) -> list[str]:
         criteria: list[str] = []
-        for attempt in trace.attempts:
-            if attempt.status != "success":
-                continue
+        for attempt in attempts:
             message = attempt.observation.message
             if message:
                 criteria.append(message)
-            for artifact in attempt.artifacts:
+            for artifact in builder.generalize_artifacts(attempt.artifacts):
                 artifact_path = artifact.get("path")
                 if artifact_path:
                     criteria.append(f"artifact_created:{artifact_path}")
