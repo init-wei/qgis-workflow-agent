@@ -14,10 +14,10 @@
 - **人工审核 (HITL)**: 关键步骤前暂停，等待人工确认后继续
 - **上下文管理**: 压缩智能体执行节点信息，使用总结反思节点简短的总结内容作为之前任务的回顾
 
-### 📚 精准 API 文档检索
-- **面向参数精度的 RAG**: 针对 LLM "知道调什么 API 但常写错参数" 的痛点，设计了二次检索与校验机制
-- **GDAL & PyQGIS 并行检索**: 同时检索两个库的文档，确保参数准确性
-- **Runtime 补充检索**: 代码生成中可动态补充缺失的 API 文档
+### 📚 检索证据与受控执行
+- **TaskPlan → ToolCallPlan**: 计划审核后编译为明确的 MCP 工具调用序列
+- **ExecutionLoop**: 每次工具调用都会生成 `ExecutionTrace`，失败后按错误类型评估、修复或请求人工介入
+- **Error-driven Retrieval**: 参数错误、缺文件、执行错误可挂载检索证据，为修复提供上下文
 
 ### 🔄 自我进化能力
 - **知识闭环**: 从成功的历史任务中自动提炼逻辑并扩充案例库
@@ -41,13 +41,13 @@
 └───────────────────────────────────────────────────────────────────┘
         ↓
 ┌────────────────────────────────────────────────────────────────┐
-│ 阶段二: RAG 检索增强                                             │
-│  API RAG Node → 并行检索 GDAL & PyQGIS 文档 → 二次检索补充依赖   │
+│ 阶段二: 受控执行编译                                             │
+│  TaskPlan → ToolCallPlan → ToolPolicy / Risk Review              │
 └────────────────────────────────────────────────────────────────┘
         ↓
 ┌─────────────────────────────────────────────────────────────┐
 │ 阶段三: 自动化执行                                           │
-│  Executor Node → 生成并执行代码 → Runtime 补充检索 → 截图     │
+│  ExecutionLoop → Observe → Evaluate → Repair → Trace          │
 └─────────────────────────────────────────────────────────────┘
         ↓
 ┌─────────────────────────────────────────────────────────────────┐
@@ -61,8 +61,8 @@
 | 模块 | 功能 |
 |------|------|
 | **Planner Node** | 意图识别、计划生成、HITL 审核 |
-| **API RAG Node** | API 文档检索、参数校验 | 
-| **Executor Node** | 代码生成、执行、截图 |
+| **Tool Call Planner** | 将审核后的 TaskPlan 编译为 ToolCallPlan |
+| **ExecutionLoop** | 受控 MCP 调用、观察、评估、修复、trace |
 | **Reflector Node** | 任务总结、知识归档 | 
 | **Web UI** | 用户交互界面 | 
 
@@ -243,8 +243,8 @@ uv run python scripts/replay_demo_cases.py --json
 **Agent 执行流程**:
 1. **Planner Node**: 生成 3 步执行计划
 2. **HITL 审核**: 展示计划，等待用户确认
-3. **API RAG Node**: 检索 `QgsVectorLayer`, `QgsCoordinateTransformSystem` 等文档
-4. **Executor Node**: 生成并执行代码
+3. **Tool Call Planner**: 将计划编译为 `add_layer` / `execute_processing` 等明确调用
+4. **ExecutionLoop**: 执行 MCP 工具并记录 `ExecutionTrace`
 5. **Reflector Node**: 根据用户的判断生成任务总结，自动归档到 Cookbook
 
 ### 示例 2: 栅格数据处理
@@ -272,11 +272,11 @@ qgis-agentv2/
 │   ├── llm.py                  # LLM 配置
 │   ├── nodes/                  # 节点实现
 │   │   ├── planner_node.py     # 规划节点
-│   │   ├── api_rag_node.py     # RAG 检索节点
-│   │   ├── executor_node.py    # 执行节点
+│   │   ├── executor_node.py    # 受控执行节点
 │   │   └── reflector_node.py   # 总结归档节点
 │   └── tools/                  # 工具模块
-│       ├── rag.py              # RAG 检索
+│       ├── retrieval.py        # 检索证据上下文
+│       ├── tool_call_planner.py # TaskPlan 到 ToolCallPlan 编译
 │       ├── database.py         # 数据库操作
 │       └── mcp_client.py       # MCP 通信客户端
 ├── qgis_mcp_server/            # QGIS MCP Server

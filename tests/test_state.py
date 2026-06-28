@@ -25,6 +25,7 @@ def test_create_initial_state():
     assert state["messages"] == []
     assert state["history"] == []
     assert state["screenshot_path"] is None
+    assert state["execution_trace"] is None
     assert state["final_summary"] is None
     assert state["quality_score"] == 0.0
 

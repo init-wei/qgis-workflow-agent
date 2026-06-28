@@ -365,10 +365,8 @@ async def reflector_node(state: AgentState) -> Dict[str, Any]:
                 "warning"
             )
     
-    # 6. 状态清理（按照技术文档清理清单）
-    # 保留的字段: log_summary, screenshot_path, input_query, is_completed
-    # 清理的字段: draft, plan, api_context_structured, execution_logs, code_history,
-    #            advise, retry_count, status, example, missing_deps, messages, quality_score
+    # 6. 状态清理
+    # 保留最终摘要、截图和历史；清理下一轮不应复用的计划与执行状态。
     logger.info("执行状态清理...")
 
     combined_log_summary = (
@@ -393,19 +391,19 @@ async def reflector_node(state: AgentState) -> Dict[str, Any]:
         "input_query": None,
         "draft": None,
         "plan": None,
+        "task_plan_draft": None,
+        "task_plan": None,
+        "plan_validation": None,
+        "execution_trace": None,
         "api_context_structured": [],
         "gdal_doc": [],
         "pyqgis_doc": [],
-        "execution_logs": [],
-        "code_history": [],
         "advise": None,
         "retry_count": 0,
         "status": False,
         "example": None,
         "missing_deps": [],
         "messages": [RemoveMessage(id=REMOVE_ALL_MESSAGES)],
-        "current_step_id": 0,
-        "retry_attempts": 0,
         "quality_score": 0.0,  # 按文档要求清理
         "user_feedback": None,
     }
@@ -422,4 +420,3 @@ async def reflector_node(state: AgentState) -> Dict[str, Any]:
     logger.info("状态清理完成，节点执行结束")
     
     return cleaned_state
-

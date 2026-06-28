@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 import uuid
 
 from agent.planning.plan_schema import PlanValidationReport, TaskPlan
+from agent.tools.tool_contracts import ExecutionTrace, HumanFeedback
 
 
 class Step(BaseModel):
@@ -79,6 +80,10 @@ class AgentState(TypedDict):
     # ========== Executor Node 字段 ==========
     messages: Annotated[list, add_messages]  # 包含AI思考、代码输出及执行结果
     screenshot_path: Optional[str]    # 最新生成的截图文件路径
+    execution_trace: Optional[ExecutionTrace]  # 受控执行轨迹
+    pending_risk_review: Optional[HumanFeedback]  # 等待人工审核的高风险工具调用
+    risk_review_feedback: Optional[HumanFeedback]  # 人工审核反馈，用于恢复执行
+    execution_cursor: Optional[int]  # 下一个待执行 ToolCallPlan 的下标
 
     
     # ========== Reflector Node 字段 ==========
@@ -135,6 +140,10 @@ def create_initial_state(session_id: str, input_query: str, llm_config: Optional
         # Executor字段
         messages=[],
         screenshot_path=None,
+        execution_trace=None,
+        pending_risk_review=None,
+        risk_review_feedback=None,
+        execution_cursor=None,
 
         
         # Reflector字段

@@ -86,7 +86,27 @@ SYSTEM_PROMPT_TEMPLATE = Template("""你是一个专业的QGIS地理数据处理
       "requires_review": false
     }
   ],
-  "metadata": {}
+  "metadata": {
+    "tool_calls": [
+      {
+        "step_id": 1,
+        "tool_name": "execute_processing",
+        "arguments": {
+          "algorithm": "native:buffer",
+          "parameters": {
+            "INPUT": "输入路径或图层ID",
+            "DISTANCE": 100,
+            "SEGMENTS": 5,
+            "END_CAP_STYLE": 0,
+            "JOIN_STYLE": 0,
+            "MITER_LIMIT": 2,
+            "DISSOLVE": false,
+            "OUTPUT": "输出路径"
+          }
+        }
+      }
+    ]
+  }
 }
 
 ## API使用与命名规范（重要）
@@ -104,6 +124,8 @@ GDAL API往往用于数据处理，PyQGIS API往往用于QGIS内部的图层以�
 6. 参考相似案例可以提高准确性
 7. 必须返回有效的JSON格式，不要添加任何额外的解释文字
 8. 任一步骤需要删除、覆盖、保存工程或 execute_code 时，risk_level 必须为 high 且 requires_review 必须为 true
+9. metadata.tool_calls 是审核后实际执行的唯一工具调用序列，必须与 steps 对齐；只允许使用可用 MCP 工具名，例如 add_layer、execute_processing、capture_map_canvas、ping
+10. execute_processing 参数必须放在 arguments.parameters 中，输出路径使用 OUTPUT；加载输出图层时增加 add_layer 调用，截图时增加 capture_map_canvas 调用
 """)
 
 # 定义User Message模板
