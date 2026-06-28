@@ -40,6 +40,7 @@ from agent.graph import get_graph
 from agent.state import AgentState, create_initial_state
 from agent.tools.database import get_execution_logs, save_execution_log
 from agent.tools.mcp_client import get_mcp_client
+from agent.tools.tool_contracts import HumanFeedback, RiskReviewStatus, ToolCallPlan
 
 # 加载环境变量
 load_dotenv()
@@ -112,6 +113,27 @@ class ReviewRequest(BaseModel):
     thread_id: str
     approved: bool
     advise: Optional[str] = None
+
+
+class RiskReviewDecisionRequest(BaseModel):
+    """High-risk tool call review decision."""
+
+    thread_id: str
+    review_id: str
+    status: RiskReviewStatus
+    comment: Optional[str] = None
+    modified_arguments: Optional[dict[str, Any]] = None
+    reviewer: Optional[str] = None
+    tool_call: Optional[ToolCallPlan] = None
+
+
+class RiskReviewDecisionResponse(BaseModel):
+    """Normalized high-risk tool call review response."""
+
+    thread_id: str
+    review_id: str
+    status: RiskReviewStatus
+    feedback: HumanFeedback
 
 
 class SessionCreateRequest(BaseModel):
@@ -392,6 +414,23 @@ def build_plan_review_update(
         update_values["task_plan"] = task_plan
 
     return update_values
+
+
+def build_risk_review_feedback(
+    request: RiskReviewDecisionRequest,
+    tool_call: ToolCallPlan,
+) -> HumanFeedback:
+    """Build normalized human feedback for a high-risk tool call."""
+
+    return HumanFeedback(
+        review_id=request.review_id,
+        status=request.status,
+        tool_call=tool_call,
+        comment=request.comment,
+        modified_arguments=request.modified_arguments,
+        reviewer=request.reviewer,
+        metadata={"thread_id": request.thread_id},
+    )
 
 
 async def stream_agent_execution(
@@ -1026,6 +1065,30 @@ async def review_plan(request: ReviewRequest):
     except Exception as e:
         logger.error(f"审核失败: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"审核失败: {str(e)}")
+
+
+@app.post("/api/risk-review", response_model=RiskReviewDecisionResponse)
+async def review_risky_tool_call(request: RiskReviewDecisionRequest):
+    """Normalize a high-risk tool call review decision for resume flows."""
+
+    if request.status == "modified" and not request.modified_arguments:
+        raise HTTPException(
+            status_code=400,
+            detail="modified risk review requires modified_arguments",
+        )
+    if request.tool_call is None:
+        raise HTTPException(
+            status_code=400,
+            detail="tool_call is required to build risk review feedback",
+        )
+
+    feedback = build_risk_review_feedback(request, request.tool_call)
+    return RiskReviewDecisionResponse(
+        thread_id=request.thread_id,
+        review_id=request.review_id,
+        status=request.status,
+        feedback=feedback,
+    )
 
 
 class ResultConfirmRequest(BaseModel):

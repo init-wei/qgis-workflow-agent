@@ -1,16 +1,22 @@
 #!/usr/bin/env python3
 """Simplified evaluate and repair loop for one planned tool call."""
 
+from datetime import UTC, datetime
 from pathlib import Path
+from time import perf_counter
 from typing import Iterable
+from uuid import uuid4
 
+from agent.tools.risk_review import RiskReviewManager
 from agent.tools.step_executor import StepExecutor
 from agent.tools.tool_contracts import (
     ErrorType,
     EvaluationDecision,
     ExecutionTrace,
+    HumanFeedback,
     LoopResult,
     RepairAction,
+    StepAttempt,
     ToolCallPlan,
     ToolObservation,
 )
@@ -136,6 +142,7 @@ class ExecutionLoop:
         step_executor: StepExecutor | None = None,
         evaluator: StepEvaluator | None = None,
         repairer: Repairer | None = None,
+        risk_review_manager: RiskReviewManager | None = None,
     ):
         self.max_attempts = max_attempts
         self.step_executor = step_executor or StepExecutor(
@@ -145,6 +152,7 @@ class ExecutionLoop:
         )
         self.evaluator = evaluator or StepEvaluator()
         self.repairer = repairer or Repairer()
+        self.risk_review_manager = risk_review_manager or RiskReviewManager()
 
     async def run(
         self,
@@ -152,9 +160,59 @@ class ExecutionLoop:
         trace: ExecutionTrace,
         allowed_tools: Iterable[str] | None = None,
         approved: bool = False,
+        human_feedback: HumanFeedback | None = None,
     ) -> LoopResult:
         current_call = call
         final_decision: EvaluationDecision | None = None
+        risk_review_metadata: dict | None = None
+
+        if human_feedback is not None:
+            if not self.risk_review_manager.feedback_matches_call(human_feedback, call):
+                return self._record_review_block(
+                    call=call,
+                    trace=trace,
+                    feedback=human_feedback,
+                    reason="risk_review_call_mismatch",
+                )
+            if human_feedback.status == "rejected":
+                return self._record_review_block(
+                    call=call,
+                    trace=trace,
+                    feedback=human_feedback,
+                    reason="risk_review_rejected",
+                )
+            if human_feedback.status == "pending":
+                return self._record_review_block(
+                    call=call,
+                    trace=trace,
+                    feedback=human_feedback,
+                    reason="risk_review_pending",
+                    status="needs_review",
+                    outcome="ask_human",
+                )
+            if human_feedback.status in {"approved", "modified"}:
+                current_call = self.risk_review_manager.apply_feedback(
+                    call, human_feedback
+                )
+                approved = True
+                risk_review_metadata = self.risk_review_manager.review_metadata(
+                    human_feedback,
+                    original_call=call,
+                    effective_call=current_call,
+                )
+
+        if human_feedback is None and self._should_pause_for_risk_review(
+            call, allowed_tools
+        ):
+            feedback = self.risk_review_manager.build_pending_feedback(call)
+            return self._record_review_block(
+                call=call,
+                trace=trace,
+                feedback=feedback,
+                reason="risk_review_pending",
+                status="needs_review",
+                outcome="ask_human",
+            )
 
         for attempt_number in range(1, self.max_attempts + 1):
             attempt = await self.step_executor.execute(
@@ -163,6 +221,8 @@ class ExecutionLoop:
                 allowed_tools=allowed_tools,
                 approved=approved,
             )
+            if risk_review_metadata is not None:
+                attempt.metadata["risk_review"] = risk_review_metadata
             decision = self.evaluator.evaluate(
                 attempt.observation,
                 attempt_number=attempt_number,
@@ -206,6 +266,71 @@ class ExecutionLoop:
         )
         return LoopResult(
             status="needs_review" if decision.outcome == "ask_human" else "failed",
+            trace=trace,
+            attempts_used=len(trace.attempts),
+            decision=decision,
+        )
+
+    def _should_pause_for_risk_review(
+        self, call: ToolCallPlan, allowed_tools: Iterable[str] | None
+    ) -> bool:
+        if not self.risk_review_manager.requires_risk_review(call):
+            return False
+
+        policy_decision = self.step_executor.policy.evaluate(
+            call, allowed_tools=allowed_tools, approved=False
+        )
+        return policy_decision.allowed or policy_decision.requires_review
+
+    def _record_review_block(
+        self,
+        call: ToolCallPlan,
+        trace: ExecutionTrace,
+        feedback: HumanFeedback,
+        reason: str,
+        status: str = "failed",
+        outcome: str = "abort",
+    ) -> LoopResult:
+        started_at = datetime.now(UTC)
+        start_counter = perf_counter()
+        decision = EvaluationDecision(
+            outcome=outcome,
+            reason=reason,
+            message=feedback.comment,
+            metadata={
+                "review_id": feedback.review_id,
+                "review_status": feedback.status,
+            },
+        )
+        observation = ToolObservation(
+            tool_name=call.tool_name,
+            status="error",
+            error_type="unknown_error",
+            message=reason,
+            raw_response={"risk_review": feedback.model_dump(mode="json")},
+            retryable=False,
+        )
+        finished_at = datetime.now(UTC)
+        attempt = StepAttempt(
+            attempt_id=str(uuid4()),
+            step_id=call.step_id,
+            tool_call=call,
+            observation=observation,
+            status="blocked",
+            started_at=started_at,
+            finished_at=finished_at,
+            duration_ms=max(0, round((perf_counter() - start_counter) * 1000)),
+            artifacts=[],
+            metadata={
+                "evaluation": decision.model_dump(),
+                "risk_review": self.risk_review_manager.review_metadata(
+                    feedback, original_call=call
+                ),
+            },
+        )
+        trace.append_attempt(attempt)
+        return LoopResult(
+            status=status,
             trace=trace,
             attempts_used=len(trace.attempts),
             decision=decision,
