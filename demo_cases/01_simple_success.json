@@ -1,0 +1,78 @@
+{
+  "case_id": "simple_success",
+  "title": "Simple controlled execution success",
+  "summary": "A single low-risk QGIS tool call succeeds and records one output artifact.",
+  "tags": ["success", "mock", "trace"],
+  "trace": {
+    "trace_id": "demo-simple-success",
+    "task_id": "demo-task-simple",
+    "status": "success",
+    "metadata": {
+      "demo": true
+    },
+    "attempts": [
+      {
+        "attempt_id": "demo-simple-attempt-1",
+        "step_id": 1,
+        "tool_call": {
+          "step_id": 1,
+          "tool_name": "capture_map_canvas",
+          "arguments": {
+            "path": "shared/demo/simple_success.png"
+          },
+          "risk_level": "low",
+          "requires_review": false,
+          "metadata": {
+            "description": "Capture the current QGIS map canvas"
+          }
+        },
+        "observation": {
+          "tool_name": "capture_map_canvas",
+          "status": "success",
+          "error_type": null,
+          "message": "Map canvas captured",
+          "data": {
+            "path": "shared/demo/simple_success.png"
+          },
+          "artifacts": [
+            {
+              "kind": "path",
+              "path": "shared/demo/simple_success.png",
+              "description": "Demo map screenshot"
+            }
+          ],
+          "raw_response": {
+            "status": "success",
+            "result": {
+              "path": "shared/demo/simple_success.png"
+            }
+          },
+          "retryable": false
+        },
+        "status": "success",
+        "started_at": "2026-06-28T10:00:00Z",
+        "finished_at": "2026-06-28T10:00:01Z",
+        "duration_ms": 1000,
+        "artifacts": [
+          {
+            "kind": "path",
+            "path": "shared/demo/simple_success.png",
+            "description": "Demo map screenshot"
+          }
+        ],
+        "metadata": {
+          "evaluation": {
+            "outcome": "success",
+            "reason": "tool_succeeded",
+            "message": "Map canvas captured",
+            "error_type": null,
+            "metadata": {}
+          }
+        }
+      }
+    ]
+  },
+  "metadata": {
+    "baseline_comparison": "Controlled execution records replayable tool observations and artifacts."
+  }
+}

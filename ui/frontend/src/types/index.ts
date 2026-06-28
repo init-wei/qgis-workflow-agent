@@ -98,3 +98,41 @@ export interface NodeExecution {
   node: string
   timestamp: string
 }
+
+export interface DemoCaseSummary {
+  case_id: string
+  title: string
+  summary: string
+  tags: string[]
+  trace_id: string
+  trace_status: string
+  attempts_used: number
+  artifact_count: number
+  has_repair: boolean
+  has_skill_draft: boolean
+}
+
+export interface DemoReplayResult {
+  case_id: string
+  status: string
+  attempts_used: number
+  artifact_count: number
+  repair_summaries: Record<string, any>[]
+  skill_draft?: Record<string, any> | null
+  reuse_preview?: Record<string, any> | null
+  trace_summary: Record<string, any>
+}
+
+export interface DemoCaseDetail {
+  case: DemoCaseSummary
+  replay: DemoReplayResult
+}
+
+export interface DemoCaseListResponse {
+  cases: DemoCaseSummary[]
+}
+
+export interface DemoCaseTraceResponse {
+  case_id: string
+  trace: Record<string, any>
+}

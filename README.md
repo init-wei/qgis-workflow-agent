@@ -200,6 +200,33 @@ npm run build
 将 `ui/frontend/dist/` 里的文件复制到 `ui/backend/frontend/`（需包含 `index.html` 与 `assets/`）。
 然后直接访问 http://localhost:9000。
 
+### Phase 9/10 Demo Replay 与 Trace Viewer
+
+Phase 9/10 提供可在本地和 CI 中复放的静态 demo case，用于检查受控执行系统的 trace、repair 与 SkillDraft 证据。它不依赖真实 QGIS、MCP、PostgreSQL 或 LLM，也不代表真实 QGIS 性能 benchmark。
+
+```bash
+# 复放全部 demo case
+uv run python scripts/replay_demo_cases.py
+
+# 复放单个 demo case
+uv run python scripts/replay_demo_cases.py --case-id failure_repair
+
+# 输出 JSON 结果
+uv run python scripts/replay_demo_cases.py --json
+```
+
+当前包含 3 个 demo case：
+
+- `simple_success`：单步受控工具调用成功，记录 artifact。
+- `failure_repair`：第一次参数错误，随后使用确定性 repair arguments 重试成功。
+- `skill_draft_preview`：从成功 trace 生成未注册 `SkillDraft`，并展示变量替换后的复用预览。
+
+启动后端和前端后，可访问 `/trace-demo` 查看只读 trace inspection 页面。后端也提供只读 API：
+
+- `GET /api/demo-cases`
+- `GET /api/demo-cases/{case_id}`
+- `GET /api/demo-cases/{case_id}/trace`
+
 
 
 ## 💡 使用示例

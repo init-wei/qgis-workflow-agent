@@ -39,6 +39,12 @@ from dotenv import load_dotenv
 from agent.graph import get_graph
 from agent.state import AgentState, create_initial_state
 from agent.tools.database import get_execution_logs, save_execution_log
+from agent.tools.demo_cases import (
+    load_demo_case,
+    load_demo_cases,
+    replay_demo_case,
+    summarize_demo_case,
+)
 from agent.tools.mcp_client import get_mcp_client
 from agent.tools.tool_contracts import HumanFeedback, RiskReviewStatus, ToolCallPlan
 
@@ -139,6 +145,26 @@ class RiskReviewDecisionResponse(BaseModel):
 class SessionCreateRequest(BaseModel):
     """创建新会话请求"""
     session_name: Optional[str] = None
+
+
+class DemoCaseListResponse(BaseModel):
+    """Replayable demo case summaries."""
+
+    cases: list[dict[str, Any]]
+
+
+class DemoCaseDetailResponse(BaseModel):
+    """Replayable demo case with deterministic replay summary."""
+
+    case: dict[str, Any]
+    replay: dict[str, Any]
+
+
+class DemoCaseTraceResponse(BaseModel):
+    """Raw demo trace payload."""
+
+    case_id: str
+    trace: dict[str, Any]
 
 
 # ========== 全局状态管理 ==========
@@ -1088,6 +1114,45 @@ async def review_risky_tool_call(request: RiskReviewDecisionRequest):
         review_id=request.review_id,
         status=request.status,
         feedback=feedback,
+    )
+
+
+@app.get("/api/demo-cases", response_model=DemoCaseListResponse)
+async def list_demo_cases():
+    """List static replayable demo cases for trace inspection."""
+
+    return DemoCaseListResponse(
+        cases=[summarize_demo_case(case) for case in load_demo_cases()]
+    )
+
+
+@app.get("/api/demo-cases/{case_id}", response_model=DemoCaseDetailResponse)
+async def get_demo_case(case_id: str):
+    """Return one demo case plus a deterministic replay summary."""
+
+    try:
+        case = load_demo_case(case_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    return DemoCaseDetailResponse(
+        case=summarize_demo_case(case),
+        replay=replay_demo_case(case).model_dump(mode="json"),
+    )
+
+
+@app.get("/api/demo-cases/{case_id}/trace", response_model=DemoCaseTraceResponse)
+async def get_demo_case_trace(case_id: str):
+    """Return the raw static ExecutionTrace fixture for one demo case."""
+
+    try:
+        case = load_demo_case(case_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    return DemoCaseTraceResponse(
+        case_id=case.case_id,
+        trace=case.trace.model_dump(mode="json"),
     )
 
 
