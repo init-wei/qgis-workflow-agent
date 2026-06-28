@@ -1,5 +1,10 @@
+import sys
+from types import SimpleNamespace
+
+import agent.tools.retrieval as retrieval_module
 from agent.tools.retrieval import (
     ApiDocRecord,
+    DefaultApiDocRetriever,
     RetrievalContext,
     RetrievalQueryBuilder,
 )
@@ -85,3 +90,44 @@ def test_query_builder_includes_error_context_for_failed_observation():
     assert "Layer is not valid" in context.query
     assert "path" in context.query
     assert context.metadata["error_type"] == "missing_file"
+
+
+def test_default_retriever_offloads_gdal_lookup_to_thread(monkeypatch):
+    calls = []
+
+    def fake_search_gdal_docs(api_names):
+        return [
+            {
+                "api_name": api_names[0],
+                "description": "Warp raster",
+                "params": "src, dst",
+                "example_code": "",
+                "library": "gdal",
+            }
+        ]
+
+    async def fake_to_thread(func, *args, **kwargs):
+        calls.append((func, args, kwargs))
+        return func(*args, **kwargs)
+
+    monkeypatch.setitem(
+        sys.modules,
+        "agent.tools.rag",
+        SimpleNamespace(
+            search_gdal_docs=fake_search_gdal_docs,
+            search_pyqgis_docs_async=None,
+        ),
+    )
+    monkeypatch.setattr(retrieval_module.asyncio, "to_thread", fake_to_thread)
+    context = RetrievalContext(
+        step_id=4,
+        tool_name="execute_processing",
+        query="osgeo.gdal.Warp",
+        query_source="initial",
+        candidate_apis=["osgeo.gdal.Warp"],
+    )
+
+    result = retrieval_module.asyncio.run(DefaultApiDocRetriever().retrieve(context))
+
+    assert calls == [(fake_search_gdal_docs, (["osgeo.gdal.Warp"],), {})]
+    assert result.records[0].api_name == "osgeo.gdal.Warp"
