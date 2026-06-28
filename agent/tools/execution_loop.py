@@ -8,6 +8,7 @@ from typing import Iterable
 from uuid import uuid4
 
 from agent.tools.risk_review import RiskReviewManager
+from agent.tools.retrieval import ApiDocRetriever, RetrievalQueryBuilder
 from agent.tools.step_executor import StepExecutor
 from agent.tools.tool_contracts import (
     ErrorType,
@@ -143,6 +144,8 @@ class ExecutionLoop:
         evaluator: StepEvaluator | None = None,
         repairer: Repairer | None = None,
         risk_review_manager: RiskReviewManager | None = None,
+        retriever: ApiDocRetriever | None = None,
+        retrieval_query_builder: RetrievalQueryBuilder | None = None,
     ):
         self.max_attempts = max_attempts
         self.step_executor = step_executor or StepExecutor(
@@ -153,6 +156,10 @@ class ExecutionLoop:
         self.evaluator = evaluator or StepEvaluator()
         self.repairer = repairer or Repairer()
         self.risk_review_manager = risk_review_manager or RiskReviewManager()
+        self.retriever = retriever
+        self.retrieval_query_builder = (
+            retrieval_query_builder or RetrievalQueryBuilder()
+        )
 
     async def run(
         self,
@@ -215,12 +222,29 @@ class ExecutionLoop:
             )
 
         for attempt_number in range(1, self.max_attempts + 1):
+            retrieval_context = await self._retrieve_initial_context(current_call)
+            if retrieval_context is not None:
+                current_call = current_call.model_copy(
+                    update={
+                        "metadata": {
+                            **current_call.metadata,
+                            "retrieval_context": retrieval_context.model_dump(
+                                mode="json"
+                            ),
+                        }
+                    }
+                )
+
             attempt = await self.step_executor.execute(
                 current_call,
                 trace,
                 allowed_tools=allowed_tools,
                 approved=approved,
             )
+            if retrieval_context is not None:
+                attempt.metadata["retrieval_context"] = retrieval_context.model_dump(
+                    mode="json"
+                )
             if risk_review_metadata is not None:
                 attempt.metadata["risk_review"] = risk_review_metadata
             decision = self.evaluator.evaluate(
@@ -240,6 +264,13 @@ class ExecutionLoop:
                 )
 
             repair_action = self.repairer.repair(current_call, decision)
+            repair_retrieval_context = await self._retrieve_error_context(
+                current_call, attempt.observation
+            )
+            if repair_retrieval_context is not None:
+                attempt.metadata["repair_retrieval_context"] = (
+                    repair_retrieval_context.model_dump(mode="json")
+                )
             attempt.metadata["repair_action"] = repair_action.model_dump()
 
             if repair_action.action_type == "ask_human":
@@ -258,7 +289,21 @@ class ExecutionLoop:
                 )
 
             current_call = current_call.model_copy(
-                update={"arguments": repair_action.updated_arguments}
+                update={
+                    "arguments": repair_action.updated_arguments,
+                    "metadata": {
+                        **current_call.metadata,
+                        **(
+                            {
+                                "repair_retrieval_context": (
+                                    repair_retrieval_context.model_dump(mode="json")
+                                )
+                            }
+                            if repair_retrieval_context is not None
+                            else {}
+                        ),
+                    },
+                }
             )
 
         decision = final_decision or EvaluationDecision(
@@ -270,6 +315,26 @@ class ExecutionLoop:
             attempts_used=len(trace.attempts),
             decision=decision,
         )
+
+    async def _retrieve_initial_context(self, call: ToolCallPlan):
+        if self.retriever is None:
+            return None
+        context = self.retrieval_query_builder.build_initial_context(call)
+        return await self.retriever.retrieve(context)
+
+    async def _retrieve_error_context(
+        self, call: ToolCallPlan, observation: ToolObservation
+    ):
+        if self.retriever is None:
+            return None
+        if observation.error_type not in {
+            "parameter_error",
+            "missing_file",
+            "execution_error",
+        }:
+            return None
+        context = self.retrieval_query_builder.build_error_context(call, observation)
+        return await self.retriever.retrieve(context)
 
     def _should_pause_for_risk_review(
         self, call: ToolCallPlan, allowed_tools: Iterable[str] | None
