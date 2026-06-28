@@ -150,6 +150,24 @@ export const confirmResult = (
   })
 }
 
+export const submitRiskReview = (
+  thread_id: string,
+  review_id: string,
+  status: 'approved' | 'rejected' | 'modified',
+  comment?: string,
+  modified_arguments?: Record<string, any>,
+  reviewer = 'web-ui'
+): Promise<any> => {
+  return api.post('/risk-review', {
+    thread_id,
+    review_id,
+    status,
+    comment,
+    modified_arguments,
+    reviewer
+  })
+}
+
 /**
  * 上传文件
  */

@@ -459,6 +459,31 @@ def build_risk_review_feedback(
     )
 
 
+def normalize_human_feedback(feedback: HumanFeedback | dict[str, Any]) -> HumanFeedback:
+    """Accept model or checkpoint-restored dict feedback."""
+
+    if isinstance(feedback, HumanFeedback):
+        return feedback
+    return HumanFeedback.model_validate(feedback)
+
+
+def serialize_risk_review_required(
+    feedback: HumanFeedback | dict[str, Any]
+) -> dict[str, Any]:
+    """Build the SSE payload for a pending high-risk tool call review."""
+
+    feedback = normalize_human_feedback(feedback)
+    return {
+        "review_id": feedback.review_id,
+        "status": feedback.status,
+        "reason": feedback.reason,
+        "comment": feedback.comment,
+        "tool_call": feedback.tool_call.model_dump(mode="json"),
+        "metadata": feedback.metadata,
+        "timestamp": datetime.now().isoformat(),
+    }
+
+
 async def stream_agent_execution(
     app,
     initial_state: Dict[str, Any],
@@ -592,6 +617,7 @@ async def stream_agent_execution(
         status = state_values.get("status", False)
         messages = state_values.get("messages", [])
         is_completed = state_values.get("is_completed", False)
+        pending_risk_review = state_values.get("pending_risk_review")
 
         # 情况 1：Planner → 人工审核
         if draft and not status:
@@ -615,7 +641,16 @@ async def stream_agent_execution(
             })
             return
 
-        # 情况 2：Executor → 结果确认
+        # 情况 2：Executor → 风险审核
+        if pending_risk_review:
+            logger.info("[SSE] CLI判定：需要风险审核")
+            yield format_sse_event(
+                "risk_review_required",
+                serialize_risk_review_required(pending_risk_review),
+            )
+            return
+
+        # 情况 3：Executor → 结果确认
         if messages and not is_completed:
             logger.info("[SSE] CLI判定：需要确认执行结果")
 
@@ -628,7 +663,7 @@ async def stream_agent_execution(
             })
             return
 
-        # 情况 3：最终完成
+        # 情况 4：最终完成
         if state_values.get("final_summary"):
             yield format_sse_event("complete", {
                 "summary": state_values.get("final_summary"),
@@ -1102,13 +1137,40 @@ async def review_risky_tool_call(request: RiskReviewDecisionRequest):
             status_code=400,
             detail="modified risk review requires modified_arguments",
         )
-    if request.tool_call is None:
+
+    app_instance = await get_app_with_checkpointer()
+    config = {"configurable": {"thread_id": request.thread_id}}
+    current_state = await app_instance.aget_state(config)
+    state_values = current_state.values if current_state else {}
+    pending_risk_review = state_values.get("pending_risk_review")
+
+    tool_call = None
+    if pending_risk_review is not None:
+        pending_risk_review = normalize_human_feedback(pending_risk_review)
+        tool_call = pending_risk_review.tool_call
+    elif request.tool_call is not None:
+        tool_call = request.tool_call
+
+    if tool_call is None:
         raise HTTPException(
             status_code=400,
             detail="tool_call is required to build risk review feedback",
         )
 
-    feedback = build_risk_review_feedback(request, request.tool_call)
+    feedback = build_risk_review_feedback(request, tool_call)
+    update_values = {
+        "risk_review_feedback": feedback,
+        "pending_risk_review": None,
+    }
+    try:
+        await app_instance.aupdate_state(
+            config,
+            update_values,
+            as_node="risk_review_node",
+        )
+    except TypeError:
+        await app_instance.aupdate_state(config, update_values)
+
     return RiskReviewDecisionResponse(
         thread_id=request.thread_id,
         review_id=request.review_id,
@@ -1326,6 +1388,7 @@ async def resume_execution(thread_id: str):
             status = state_values.get("status", False)
             messages = state_values.get("messages", [])
             is_completed = state_values.get("is_completed", False)
+            pending_risk_review = state_values.get("pending_risk_review")
 
             # 情况 1：Planner → 人工审核
             if draft and not status:
@@ -1349,7 +1412,16 @@ async def resume_execution(thread_id: str):
                 })
                 return
 
-            # 情况 2：Executor → 结果确认
+            # 情况 2：Executor → 风险审核
+            if pending_risk_review:
+                logger.info("[Resume] CLI判定：需要风险审核")
+                yield format_sse_event(
+                    "risk_review_required",
+                    serialize_risk_review_required(pending_risk_review),
+                )
+                return
+
+            # 情况 3：Executor → 结果确认
             if messages and not is_completed:
                 logger.info("[Resume] CLI判定：需要确认执行结果")
 
@@ -1362,7 +1434,7 @@ async def resume_execution(thread_id: str):
                 })
                 return
 
-            # 情况 3：最终完成
+            # 情况 4：最终完成
             if state_values.get("final_summary"):
                 yield format_sse_event("complete", {
                     "summary": state_values.get("final_summary"),

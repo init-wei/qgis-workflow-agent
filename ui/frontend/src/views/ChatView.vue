@@ -329,6 +329,45 @@
         <el-button type="success" @click="handleResultConfirm(true)">✅ 任务成功</el-button>
       </template>
     </el-dialog>
+
+    <!-- 高风险工具审核弹窗 -->
+    <el-dialog
+      v-model="riskReviewModalVisible"
+      title="🛡️ 高风险工具审核"
+      width="680px"
+      :close-on-click-modal="false"
+    >
+      <div v-if="currentRiskReview">
+        <div class="bg-dark-bgLight p-4 rounded-lg mb-4">
+          <div class="font-semibold text-primary-600 mb-2">
+            {{ currentRiskReview.tool_call?.tool_name }}
+          </div>
+          <pre class="text-xs whitespace-pre-wrap overflow-auto max-h-64">{{ formatJson(currentRiskReview.tool_call?.arguments) }}</pre>
+        </div>
+        <label class="block text-sm mb-2">审核备注：</label>
+        <el-input
+          v-model="riskReviewComment"
+          type="textarea"
+          :rows="2"
+          placeholder="可选：说明批准、拒绝或修改原因"
+        />
+        <label class="block text-sm mt-4 mb-2">修改后的参数 JSON：</label>
+        <el-input
+          v-model="riskReviewModifiedArguments"
+          type="textarea"
+          :rows="5"
+          placeholder='例如：{"path":"shared/projects/reviewed.qgz"}'
+        />
+        <p class="text-xs text-dark-textSecondary mt-2">
+          只有点击“修改后执行”时才会使用上方 JSON 参数。
+        </p>
+      </div>
+      <template #footer>
+        <el-button type="danger" @click="handleRiskReview('rejected')">拒绝</el-button>
+        <el-button @click="handleRiskReview('modified')">修改后执行</el-button>
+        <el-button type="success" @click="handleRiskReview('approved')">批准执行</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -347,6 +386,7 @@ import {
   uploadFile as apiUploadFile,
   reviewPlan,
   confirmResult,
+  submitRiskReview,
   getQGISStatus,
   getCurrentState
 } from '../api'
@@ -359,8 +399,12 @@ const chatStore = useChatStore()
 const inputMessage = ref('')
 const reviewModalVisible = ref(false)
 const resultModalVisible = ref(false)
+const riskReviewModalVisible = ref(false)
 const reviewAdvise = ref('')
 const resultFeedback = ref('')
+const riskReviewComment = ref('')
+const riskReviewModifiedArguments = ref('')
+const currentRiskReview = ref<any>(null)
 const isDragOver = ref(false)
 const fileInputRef = ref<HTMLInputElement | null>(null)
 const screenshotTime = ref('暂无')
@@ -740,6 +784,15 @@ function handleSSEEvent(event: string, data: any) {
       reviewModalVisible.value = true
       chatStore.setExecuting(false)
       break
+    case 'risk_review_required':
+      isStreamingMessage = false
+      isStreamingThinking = false
+      currentRiskReview.value = data
+      riskReviewComment.value = ''
+      riskReviewModifiedArguments.value = JSON.stringify(data.tool_call?.arguments || {}, null, 2)
+      riskReviewModalVisible.value = true
+      chatStore.setExecuting(false)
+      break
     case 'result_review_required':
       isStreamingMessage = false // 结束流式消息
       isStreamingThinking = false
@@ -784,6 +837,10 @@ function handleSSEEvent(event: string, data: any) {
       chatStore.addSystemMessage(`⏸️ ${data.message}`)
       break
   }
+}
+
+function formatJson(value: any): string {
+  return JSON.stringify(value || {}, null, 2)
 }
 
 function handleSSEComplete() {
@@ -865,6 +922,45 @@ async function handleResultConfirm(isCompleted: boolean) {
   } catch (error) {
     console.error('结果确认失败:', error)
     ElMessage.error('结果确认失败')
+    chatStore.setExecuting(false)
+  }
+}
+
+async function handleRiskReview(status: 'approved' | 'rejected' | 'modified') {
+  if (!currentThreadId.value || !currentRiskReview.value) return
+
+  try {
+    let modifiedArguments: Record<string, any> | undefined
+    if (status === 'modified') {
+      try {
+        modifiedArguments = JSON.parse(riskReviewModifiedArguments.value || '{}')
+      } catch {
+        ElMessage.error('修改参数必须是有效 JSON')
+        return
+      }
+    }
+
+    await submitRiskReview(
+      currentThreadId.value,
+      currentRiskReview.value.review_id,
+      status,
+      riskReviewComment.value.trim() || undefined,
+      modifiedArguments
+    )
+    riskReviewModalVisible.value = false
+    chatStore.addSystemMessage(
+      status === 'approved'
+        ? '✅ 风险操作已批准，继续执行'
+        : status === 'modified'
+          ? '📝 风险操作参数已修改，继续执行'
+          : '❌ 风险操作已拒绝'
+    )
+    chatStore.setExecuting(true)
+    resetStreamingState()
+    await resumeStreaming(currentThreadId.value)
+  } catch (error) {
+    console.error('风险审核失败:', error)
+    ElMessage.error('风险审核失败')
     chatStore.setExecuting(false)
   }
 }

@@ -10,8 +10,13 @@ import pytest
 # 添加项目根目录到路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from agent.graph import build_graph, should_continue_planning
+from agent.graph import (
+    build_graph,
+    should_continue_after_executor,
+    should_continue_planning,
+)
 from agent.state import AgentState, create_initial_state, Plan, Step
+from agent.tools.tool_contracts import HumanFeedback, ToolCallPlan
 
 
 def make_state(**overrides) -> AgentState:
@@ -41,7 +46,13 @@ class TestGraphConstruction:
         # 获取所有节点
         nodes = [node.id for node in graph.nodes.values()]
         
-        required_nodes = ["planner_node", "human_review_node", "executor_node", "reflector_node"]
+        required_nodes = [
+            "planner_node",
+            "human_review_node",
+            "executor_node",
+            "risk_review_node",
+            "reflector_node",
+        ]
         for node in required_nodes:
             assert node in nodes, f"缺少节点: {node}"
         
@@ -85,6 +96,32 @@ class TestConditionalEdges:
         assert result == "planner_node"
         print("✅ 需要修改时正确路由回planner_node")
 
+    def test_should_continue_after_executor_routes_pending_risk_review(self):
+        """测试执行器遇到风险审核时进入风险审核节点"""
+        state = make_state(
+            pending_risk_review=HumanFeedback(
+                review_id="review-1",
+                status="pending",
+                tool_call=ToolCallPlan(
+                    step_id=1,
+                    tool_name="execute_code",
+                    arguments={"code": "print('x')"},
+                ),
+            )
+        )
+
+        result = should_continue_after_executor(state)
+
+        assert result == "risk_review_node"
+
+    def test_should_continue_after_executor_routes_to_reflector_without_risk_review(self):
+        """测试无风险审核时进入反思节点"""
+        state = make_state(pending_risk_review=None)
+
+        result = should_continue_after_executor(state)
+
+        assert result == "reflector_node"
+
 
 class TestGraphVisualization:
     """测试Graph可视化"""
@@ -99,6 +136,7 @@ class TestGraphVisualization:
         assert "planner_node" in mermaid_code
         assert "api_rag_node" not in mermaid_code
         assert "human_review_node" in mermaid_code
+        assert "risk_review_node" in mermaid_code
         assert "executor_node" in mermaid_code
         assert "reflector_node" in mermaid_code
         

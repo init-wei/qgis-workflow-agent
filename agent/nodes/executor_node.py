@@ -65,7 +65,7 @@ async def executor_node(state: AgentState) -> dict[str, Any]:
         registry=registry,
         workspace_root=Path.cwd(),
     )
-    trace = ExecutionTrace(
+    trace = state.get("execution_trace") or ExecutionTrace(
         trace_id=f"trace-{uuid4()}",
         task_id=task_plan.task_id,
         metadata={
@@ -76,17 +76,24 @@ async def executor_node(state: AgentState) -> dict[str, Any]:
     )
 
     allowed_tools = state.get("tool_selection")
+    start_index = state.get("execution_cursor") or 0
+    risk_review_feedback = state.get("risk_review_feedback")
     loop_results: list[LoopResult] = []
-    for call in tool_calls:
+    for call_index, call in enumerate(tool_calls[start_index:], start=start_index):
         logger.info("Controlled executor calling %s for step %s", call.tool_name, call.step_id)
+        human_feedback = risk_review_feedback if call_index == start_index else None
         result = await loop.run(
             call,
             trace,
             allowed_tools=allowed_tools,
             approved=call.requires_review is False,
+            human_feedback=human_feedback,
         )
+        risk_review_feedback = None
         loop_results.append(result)
         if result.status != "success":
+            if result.status == "needs_review":
+                return _risk_review_response(trace, loop_results, call_index)
             return _failure_response(trace, loop_results)
 
     trace.status = "success"
@@ -94,7 +101,10 @@ async def executor_node(state: AgentState) -> dict[str, Any]:
         "execution_trace": trace,
         "messages": [_success_message(trace, loop_results)],
         "screenshot_path": _latest_artifact_path(trace, ".png"),
-        "is_completed": True,
+        "pending_risk_review": None,
+        "risk_review_feedback": None,
+        "execution_cursor": None,
+        "is_completed": None,
     }
 
 
@@ -133,7 +143,40 @@ def _failure_response(
                 )
             )
         ],
+        "pending_risk_review": None,
+        "risk_review_feedback": None,
+        "execution_cursor": None,
         "is_completed": False,
+    }
+
+
+def _risk_review_response(
+    trace: ExecutionTrace, loop_results: list[LoopResult], call_index: int
+) -> dict[str, Any]:
+    latest_attempt = trace.latest_attempt()
+    risk_review = None
+    if latest_attempt is not None:
+        risk_review_data = latest_attempt.metadata.get("risk_review")
+        if isinstance(risk_review_data, dict):
+            from agent.tools.tool_contracts import HumanFeedback
+
+            risk_review = HumanFeedback.model_validate(risk_review_data)
+    final_result = loop_results[-1]
+    return {
+        "execution_trace": trace,
+        "messages": [
+            AIMessage(
+                content=(
+                    "风险审核待处理: "
+                    f"{final_result.decision.reason}; "
+                    f"{final_result.decision.message or ''}"
+                )
+            )
+        ],
+        "pending_risk_review": risk_review,
+        "risk_review_feedback": None,
+        "execution_cursor": call_index,
+        "is_completed": None,
     }
 
 

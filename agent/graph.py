@@ -45,6 +45,12 @@ async def human_review_node(state: AgentState) -> dict:
     return {}
 
 
+async def risk_review_node(state: AgentState) -> dict:
+    """Interrupt placeholder for high-risk tool call review."""
+
+    return {}
+
+
 def should_continue_planning(state: AgentState) -> Literal["human_review_node", "planner_node", "executor_node"]:
     """
     判断规划是否完成，是否需要人工审核或继续规划
@@ -104,6 +110,14 @@ def should_continue_after_review(state: AgentState) -> Literal["executor_node", 
     return "planner_node"
 
 
+def should_continue_after_executor(state: AgentState) -> Literal["risk_review_node", "reflector_node"]:
+    """Route high-risk pauses to risk review; otherwise continue to reflection."""
+
+    if state.get("pending_risk_review") is not None:
+        return "risk_review_node"
+    return "reflector_node"
+
+
 def build_graph(
     checkpointer: Optional[AsyncPostgresSaver] = None,
     interrupt_before: Optional[list] = None,
@@ -115,7 +129,8 @@ def build_graph(
     工作流程:
     1. Planner Node -> (条件判断) -> 人工审核 / 受控执行 / 继续修改
     2. Executor Node -> TaskPlan 编译为 ToolCallPlan 并通过 ExecutionLoop 执行
-    3. Reflector Node -> END
+    3. Risk Review Node -> Executor Node when high-risk approval is needed
+    4. Reflector Node -> END
     
     HITL机制（需要checkpointer）:
     - interrupt_before: 在指定节点之前中断（例如["human_review_node"]用于计划审核）
@@ -136,6 +151,7 @@ def build_graph(
     workflow.add_node("planner_node", planner_node)
     workflow.add_node("human_review_node", human_review_node)  # 新增：人工审核节点
     workflow.add_node("executor_node", executor_node)
+    workflow.add_node("risk_review_node", risk_review_node)
     workflow.add_node("reflector_node", reflector_node)
     
     # 设置入口点
@@ -163,8 +179,18 @@ def build_graph(
         }
     )
     
-    # Executor -> Reflector（执行结束直接进入Reflector）
-    workflow.add_edge("executor_node", "reflector_node")
+    # Executor -> Risk Review 或 Reflector
+    workflow.add_conditional_edges(
+        "executor_node",
+        should_continue_after_executor,
+        {
+            "risk_review_node": "risk_review_node",
+            "reflector_node": "reflector_node",
+        },
+    )
+
+    # Risk Review -> Executor（审批后恢复）
+    workflow.add_edge("risk_review_node", "executor_node")
     
     # Reflector -> END（任务完成）
     workflow.add_edge("reflector_node", END)
@@ -175,7 +201,7 @@ def build_graph(
         compile_kwargs = {"checkpointer": checkpointer}
         # 默认在human_review_node之前中断（如果未指定）
         if interrupt_before is None:
-            interrupt_before = ["human_review_node"]
+            interrupt_before = ["human_review_node", "risk_review_node"]
         if interrupt_before:
             compile_kwargs["interrupt_before"] = interrupt_before
         # 默认在executor_node之后中断（如果未指定）
