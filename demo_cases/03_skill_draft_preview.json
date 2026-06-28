@@ -1,0 +1,101 @@
+{
+  "case_id": "skill_draft_preview",
+  "title": "SkillDraft preview from a successful trace",
+  "summary": "A successful processing trace is generalized into an unregistered SkillDraft and rendered with replacement variables.",
+  "tags": ["skill-draft", "reuse-preview", "mock", "trace"],
+  "reuse_variables": {
+    "input_path_1": "shared/demo/reuse_input.gpkg",
+    "output_path_1": "shared/demo/reuse_output.gpkg",
+    "layer_name_1": "reuse_roads",
+    "artifact_path_1": "shared/demo/reuse_output.gpkg"
+  },
+  "trace": {
+    "trace_id": "demo-skill-draft-preview",
+    "task_id": "demo-task-skill",
+    "status": "success",
+    "metadata": {
+      "demo": true
+    },
+    "attempts": [
+      {
+        "attempt_id": "demo-skill-attempt-1",
+        "step_id": 1,
+        "tool_call": {
+          "step_id": 1,
+          "tool_name": "execute_processing",
+          "arguments": {
+            "algorithm": "native:centroids",
+            "parameters": {
+              "INPUT": "shared/demo/parcels.gpkg",
+              "OUTPUT": "shared/demo/parcel_centroids.gpkg",
+              "layer_name": "parcels"
+            }
+          },
+          "risk_level": "low",
+          "requires_review": false,
+          "metadata": {
+            "description": "Create parcel centroids",
+            "candidate_pyqgis_apis": ["processing.run"]
+          }
+        },
+        "observation": {
+          "tool_name": "execute_processing",
+          "status": "success",
+          "error_type": null,
+          "message": "Parcel centroid layer created",
+          "data": {
+            "output": "shared/demo/parcel_centroids.gpkg"
+          },
+          "artifacts": [
+            {
+              "kind": "path",
+              "path": "shared/demo/parcel_centroids.gpkg",
+              "description": "Parcel centroid layer"
+            }
+          ],
+          "raw_response": {
+            "status": "success",
+            "result": {
+              "OUTPUT": "shared/demo/parcel_centroids.gpkg"
+            }
+          },
+          "retryable": false
+        },
+        "status": "success",
+        "started_at": "2026-06-28T10:20:00Z",
+        "finished_at": "2026-06-28T10:20:01Z",
+        "duration_ms": 1000,
+        "artifacts": [
+          {
+            "kind": "path",
+            "path": "shared/demo/parcel_centroids.gpkg",
+            "description": "Parcel centroid layer"
+          }
+        ],
+        "metadata": {
+          "evaluation": {
+            "outcome": "success",
+            "reason": "tool_succeeded",
+            "message": "Parcel centroid layer created",
+            "error_type": null,
+            "metadata": {}
+          },
+          "retrieval_context": {
+            "query": "processing.run native:centroids INPUT OUTPUT",
+            "records": [
+              {
+                "api_name": "processing.run",
+                "source": "pyqgis",
+                "summary": "Runs a processing algorithm using an algorithm ID and parameters."
+              }
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "metadata": {
+    "include_skill_draft": true,
+    "baseline_comparison": "The successful trace can be generalized without automatically registering or executing a skill."
+  }
+}

@@ -1,0 +1,166 @@
+{
+  "case_id": "failure_repair",
+  "title": "Parameter error repaired by controlled retry",
+  "summary": "The first processing call fails with a parameter error; deterministic repair arguments produce a successful retry.",
+  "tags": ["failure-repair", "parameter_error", "mock", "trace"],
+  "trace": {
+    "trace_id": "demo-failure-repair",
+    "task_id": "demo-task-repair",
+    "status": "success",
+    "metadata": {
+      "demo": true
+    },
+    "attempts": [
+      {
+        "attempt_id": "demo-repair-attempt-1",
+        "step_id": 1,
+        "tool_call": {
+          "step_id": 1,
+          "tool_name": "execute_processing",
+          "arguments": {
+            "algorithm": "native:buffer",
+            "parameters": {
+              "INPUT": "shared/demo/roads.gpkg",
+              "OUTPUT": "shared/demo/buffer_failed.gpkg",
+              "layer_name": "roads"
+            }
+          },
+          "risk_level": "medium",
+          "requires_review": false,
+          "metadata": {
+            "description": "Buffer roads with a missing distance parameter",
+            "candidate_pyqgis_apis": ["processing.run"],
+            "repair_arguments": {
+              "parameters": {
+                "INPUT": "shared/demo/roads.gpkg",
+                "OUTPUT": "shared/demo/buffered_roads.gpkg",
+                "DISTANCE": 10,
+                "layer_name": "roads"
+              }
+            }
+          }
+        },
+        "observation": {
+          "tool_name": "execute_processing",
+          "status": "error",
+          "error_type": "parameter_error",
+          "message": "Missing required parameter: DISTANCE",
+          "data": null,
+          "artifacts": [],
+          "raw_response": {
+            "status": "error",
+            "message": "Missing required parameter: DISTANCE"
+          },
+          "retryable": false
+        },
+        "status": "failed",
+        "started_at": "2026-06-28T10:10:00Z",
+        "finished_at": "2026-06-28T10:10:01Z",
+        "duration_ms": 1000,
+        "artifacts": [],
+        "metadata": {
+          "evaluation": {
+            "outcome": "retry",
+            "reason": "parameter_error_retry",
+            "error_type": "parameter_error",
+            "message": "Missing required parameter: DISTANCE",
+            "metadata": {}
+          },
+          "repair_action": {
+            "action_type": "update_arguments",
+            "reason": "parameter_repair_arguments_available",
+            "updated_arguments": {
+              "algorithm": "native:buffer",
+              "parameters": {
+                "INPUT": "shared/demo/roads.gpkg",
+                "OUTPUT": "shared/demo/buffered_roads.gpkg",
+                "DISTANCE": 10,
+                "layer_name": "roads"
+              }
+            },
+            "metadata": {}
+          },
+          "repair_retrieval_context": {
+            "query": "execute_processing parameter_error DISTANCE",
+            "records": [
+              {
+                "api_name": "processing.run",
+                "source": "pyqgis",
+                "summary": "Runs a QGIS processing algorithm with named parameters."
+              }
+            ]
+          }
+        }
+      },
+      {
+        "attempt_id": "demo-repair-attempt-2",
+        "step_id": 1,
+        "tool_call": {
+          "step_id": 1,
+          "tool_name": "execute_processing",
+          "arguments": {
+            "algorithm": "native:buffer",
+            "parameters": {
+              "INPUT": "shared/demo/roads.gpkg",
+              "OUTPUT": "shared/demo/buffered_roads.gpkg",
+              "DISTANCE": 10,
+              "layer_name": "roads"
+            }
+          },
+          "risk_level": "medium",
+          "requires_review": false,
+          "metadata": {
+            "description": "Buffer roads after adding the distance parameter",
+            "candidate_pyqgis_apis": ["processing.run"]
+          }
+        },
+        "observation": {
+          "tool_name": "execute_processing",
+          "status": "success",
+          "error_type": null,
+          "message": "Buffered roads layer created",
+          "data": {
+            "output": "shared/demo/buffered_roads.gpkg"
+          },
+          "artifacts": [
+            {
+              "kind": "path",
+              "path": "shared/demo/buffered_roads.gpkg",
+              "description": "Buffered roads layer"
+            }
+          ],
+          "raw_response": {
+            "status": "success",
+            "result": {
+              "OUTPUT": "shared/demo/buffered_roads.gpkg"
+            }
+          },
+          "retryable": false
+        },
+        "status": "success",
+        "started_at": "2026-06-28T10:10:02Z",
+        "finished_at": "2026-06-28T10:10:03Z",
+        "duration_ms": 1000,
+        "artifacts": [
+          {
+            "kind": "path",
+            "path": "shared/demo/buffered_roads.gpkg",
+            "description": "Buffered roads layer"
+          }
+        ],
+        "metadata": {
+          "evaluation": {
+            "outcome": "success",
+            "reason": "tool_succeeded",
+            "message": "Buffered roads layer created",
+            "error_type": null,
+            "metadata": {}
+          }
+        }
+      }
+    ]
+  },
+  "metadata": {
+    "baseline_comparison": "The controlled loop exposes the failed call, repair action, and final successful retry."
+  }
+}

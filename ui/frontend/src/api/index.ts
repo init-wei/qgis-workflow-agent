@@ -1,5 +1,15 @@
 import axios from 'axios'
-import type { Session, Message, Plan, UploadedFile, SessionHistory, QGISStatus } from '../types'
+import type {
+  Session,
+  Message,
+  Plan,
+  UploadedFile,
+  SessionHistory,
+  QGISStatus,
+  DemoCaseDetail,
+  DemoCaseListResponse,
+  DemoCaseTraceResponse
+} from '../types'
 
 // 配置基础URL - 开发环境使用代理，生产环境使用真实地址
 const DEFAULT_API_BASE = import.meta.env.VITE_API_BASE_URL || '/api'
@@ -166,6 +176,20 @@ export const getFiles = (): Promise<{ files: UploadedFile[] }> => {
  */
 export const getCurrentState = async (thread_id: string): Promise<any> => {
   return api.get(`/state/${thread_id}`)
+}
+
+export const getDemoCases = (): Promise<DemoCaseListResponse> => {
+  return api.get('/demo-cases')
+}
+
+export const getDemoCase = (case_id: string): Promise<DemoCaseDetail> => {
+  return api.get(`/demo-cases/${case_id}`)
+}
+
+export const getDemoCaseTrace = (
+  case_id: string
+): Promise<DemoCaseTraceResponse> => {
+  return api.get(`/demo-cases/${case_id}/trace`)
 }
 
 export default api

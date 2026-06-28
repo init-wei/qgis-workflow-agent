@@ -28,7 +28,7 @@ from fastapi import (
     BackgroundTasks,
     Depends
 )
-from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -39,6 +39,12 @@ from dotenv import load_dotenv
 from agent.graph import get_graph
 from agent.state import AgentState, create_initial_state
 from agent.tools.database import get_execution_logs, save_execution_log
+from agent.tools.demo_cases import (
+    load_demo_case,
+    load_demo_cases,
+    replay_demo_case,
+    summarize_demo_case,
+)
 from agent.tools.mcp_client import get_mcp_client
 from agent.tools.tool_contracts import HumanFeedback, RiskReviewStatus, ToolCallPlan
 
@@ -82,8 +88,8 @@ if SHARED_DIR.exists():
     app.mount("/shared", StaticFiles(directory=str(SHARED_DIR)), name="shared")
 
 # 静态资源：前端构建产物（/assets/*）
-_frontend_dir = Path(__file__).parent / "frontend"
-_frontend_assets_dir = _frontend_dir / "assets"
+FRONTEND_DIR = Path(__file__).parent / "frontend"
+_frontend_assets_dir = FRONTEND_DIR / "assets"
 if _frontend_assets_dir.exists():
     app.mount("/assets", StaticFiles(directory=str(_frontend_assets_dir)), name="frontend-assets")
 
@@ -139,6 +145,26 @@ class RiskReviewDecisionResponse(BaseModel):
 class SessionCreateRequest(BaseModel):
     """创建新会话请求"""
     session_name: Optional[str] = None
+
+
+class DemoCaseListResponse(BaseModel):
+    """Replayable demo case summaries."""
+
+    cases: list[dict[str, Any]]
+
+
+class DemoCaseDetailResponse(BaseModel):
+    """Replayable demo case with deterministic replay summary."""
+
+    case: dict[str, Any]
+    replay: dict[str, Any]
+
+
+class DemoCaseTraceResponse(BaseModel):
+    """Raw demo trace payload."""
+
+    case_id: str
+    trace: dict[str, Any]
 
 
 # ========== 全局状态管理 ==========
@@ -1091,6 +1117,45 @@ async def review_risky_tool_call(request: RiskReviewDecisionRequest):
     )
 
 
+@app.get("/api/demo-cases", response_model=DemoCaseListResponse)
+async def list_demo_cases():
+    """List static replayable demo cases for trace inspection."""
+
+    return DemoCaseListResponse(
+        cases=[summarize_demo_case(case) for case in load_demo_cases()]
+    )
+
+
+@app.get("/api/demo-cases/{case_id}", response_model=DemoCaseDetailResponse)
+async def get_demo_case(case_id: str):
+    """Return one demo case plus a deterministic replay summary."""
+
+    try:
+        case = load_demo_case(case_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    return DemoCaseDetailResponse(
+        case=summarize_demo_case(case),
+        replay=replay_demo_case(case).model_dump(mode="json"),
+    )
+
+
+@app.get("/api/demo-cases/{case_id}/trace", response_model=DemoCaseTraceResponse)
+async def get_demo_case_trace(case_id: str):
+    """Return the raw static ExecutionTrace fixture for one demo case."""
+
+    try:
+        case = load_demo_case(case_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    return DemoCaseTraceResponse(
+        case_id=case.case_id,
+        trace=case.trace.model_dump(mode="json"),
+    )
+
+
 class ResultConfirmRequest(BaseModel):
     """执行结果确认请求"""
     thread_id: str
@@ -1377,13 +1442,25 @@ async def get_current_state(thread_id: str):
 @app.get("/")
 async def serve_html():
     """返回前端 HTML 页面"""
-    ui_dir = Path(__file__).parent / "frontend"
-    html_file = ui_dir / "index.html"
+    return serve_spa_index()
 
-    from fastapi.responses import FileResponse
+
+def serve_spa_index():
+    """Serve built frontend index.html for Vue history-mode routes."""
+
+    html_file = FRONTEND_DIR / "index.html"
     if html_file.exists():
         return FileResponse(html_file)
     return {"message": "UI not found"}
+
+
+@app.get("/{full_path:path}")
+async def serve_spa_fallback(full_path: str):
+    """Return index.html for frontend routes when the built SPA is served by FastAPI."""
+
+    if full_path.startswith(("api/", "assets/", "shared/")):
+        raise HTTPException(status_code=404, detail="Not found")
+    return serve_spa_index()
 
 
 if __name__ == "__main__":
