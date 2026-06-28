@@ -10,6 +10,9 @@ RiskLevel = Literal["low", "medium", "high"]
 ObservationStatus = Literal["success", "error", "malformed", "disconnected"]
 AttemptStatus = Literal["success", "failed", "blocked"]
 TraceStatus = Literal["running", "success", "failed"]
+EvaluationOutcome = Literal["success", "retry", "abort", "ask_human"]
+RepairActionType = Literal["update_arguments", "abort", "ask_human"]
+LoopStatus = Literal["success", "failed", "needs_review"]
 ErrorType = Literal[
     "parameter_error",
     "missing_file",
@@ -125,3 +128,39 @@ class ExecutionTrace(BaseModel):
         if not self.attempts:
             return None
         return self.attempts[-1]
+
+
+class EvaluationDecision(BaseModel):
+    """Decision made after evaluating a step attempt observation."""
+
+    outcome: EvaluationOutcome = Field(description="Evaluation outcome")
+    reason: str = Field(description="Machine-readable evaluation reason")
+    error_type: ErrorType | None = Field(
+        default=None, description="Normalized error type"
+    )
+    message: str | None = Field(default=None, description="Human-readable message")
+    metadata: dict[str, Any] = Field(
+        default_factory=dict, description="Additional evaluation metadata"
+    )
+
+
+class RepairAction(BaseModel):
+    """Deterministic repair action for a failed step attempt."""
+
+    action_type: RepairActionType = Field(description="Repair action type")
+    reason: str = Field(description="Machine-readable repair reason")
+    updated_arguments: dict[str, Any] = Field(
+        default_factory=dict, description="Arguments to use for the next attempt"
+    )
+    metadata: dict[str, Any] = Field(
+        default_factory=dict, description="Additional repair metadata"
+    )
+
+
+class LoopResult(BaseModel):
+    """Result from a simplified execution/evaluate/repair loop."""
+
+    status: LoopStatus = Field(description="Final loop status")
+    trace: ExecutionTrace = Field(description="Execution trace produced by the loop")
+    attempts_used: int = Field(description="Number of attempts recorded")
+    decision: EvaluationDecision = Field(description="Final evaluation decision")
