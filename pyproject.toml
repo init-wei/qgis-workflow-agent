@@ -44,7 +44,7 @@ default = true
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
-addopts = "-q tests/test_state.py tests/test_graph.py tests/test_health_check.py tests/test_plan_schema.py tests/test_plan_parser.py tests/test_plan_validator.py tests/test_legacy_plan_adapter.py tests/test_backend_review.py tests/test_planner_node_task_plan.py tests/test_mcp_response_parser.py tests/test_tool_policy.py tests/test_tool_registry.py tests/test_execution_trace.py tests/test_step_executor.py"
+addopts = "-q tests/test_state.py tests/test_graph.py tests/test_health_check.py tests/test_plan_schema.py tests/test_plan_parser.py tests/test_plan_validator.py tests/test_legacy_plan_adapter.py tests/test_backend_review.py tests/test_planner_node_task_plan.py tests/test_mcp_response_parser.py tests/test_tool_policy.py tests/test_tool_registry.py tests/test_execution_trace.py tests/test_step_executor.py tests/test_execution_loop.py"
 markers = [
     "database: requires a local PostgreSQL database initialized with scripts/setup_database.py",
     "external: requires QGIS, MCP, LLM, or another external service",
