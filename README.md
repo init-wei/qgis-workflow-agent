@@ -79,6 +79,34 @@
 - `SkillDraft` 只生成草稿，不注册、不检索、不自动复用。
 - Phase 9/10 demo 是静态复放证据，不代表真实 QGIS 性能 benchmark。
 
+### 执行模式
+
+项目保留两种执行模式用于 baseline 对比：
+
+| 模式 | 说明 |
+|------|------|
+| `react_agent` | legacy baseline，用于保留原黑箱 Agent 路径的对照能力 |
+| `tool_call_plan` | 当前主线，审核后的 `TaskPlan` 编译为显式 `ToolCallPlan`，再进入 `ExecutionLoop` |
+
+默认配置在 `pyproject.toml`：
+
+```toml
+[tool.qgis_agent.execution]
+mode = "tool_call_plan"
+```
+
+本地可用环境变量临时切换：
+
+```powershell
+$env:QGIS_AGENT_EXECUTION_MODE="tool_call_plan"
+```
+
+如需对比 legacy baseline，可显式设置：
+
+```powershell
+$env:QGIS_AGENT_EXECUTION_MODE="react_agent"
+```
+
 ## 🚀 快速开始
 
 ### 环境要求

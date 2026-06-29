@@ -115,6 +115,7 @@ async def _run_executor_node_assertions(monkeypatch):
     async def fake_get_mcp_client():
         return fake_client
 
+    monkeypatch.setenv("QGIS_AGENT_EXECUTION_MODE", "tool_call_plan")
     monkeypatch.setattr("agent.nodes.executor_node.get_mcp_client", fake_get_mcp_client)
 
     state = create_initial_state("session-controlled", "Buffer roads")
@@ -144,6 +145,7 @@ async def _run_risk_pause_assertions(monkeypatch):
     async def fake_get_mcp_client():
         return fake_client
 
+    monkeypatch.setenv("QGIS_AGENT_EXECUTION_MODE", "tool_call_plan")
     monkeypatch.setattr("agent.nodes.executor_node.get_mcp_client", fake_get_mcp_client)
 
     state = create_initial_state("session-risk", "Run reviewed code")
@@ -172,6 +174,7 @@ async def _run_risk_resume_assertions(monkeypatch):
     async def fake_get_mcp_client():
         return fake_client
 
+    monkeypatch.setenv("QGIS_AGENT_EXECUTION_MODE", "tool_call_plan")
     monkeypatch.setattr("agent.nodes.executor_node.get_mcp_client", fake_get_mcp_client)
 
     task_plan = _high_risk_task_plan()
@@ -219,6 +222,7 @@ async def _run_rejected_risk_review_assertions(monkeypatch):
     async def fake_get_mcp_client():
         return fake_client
 
+    monkeypatch.setenv("QGIS_AGENT_EXECUTION_MODE", "tool_call_plan")
     monkeypatch.setattr("agent.nodes.executor_node.get_mcp_client", fake_get_mcp_client)
 
     task_plan = _high_risk_task_plan()
@@ -255,6 +259,7 @@ async def _run_non_risk_needs_review_assertions(monkeypatch):
     async def fake_get_mcp_client():
         return fake_client
 
+    monkeypatch.setenv("QGIS_AGENT_EXECUTION_MODE", "tool_call_plan")
     monkeypatch.setattr("agent.nodes.executor_node.get_mcp_client", fake_get_mcp_client)
 
     state = create_initial_state("session-missing-file", "Load missing layer")
