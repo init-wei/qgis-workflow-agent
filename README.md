@@ -1,6 +1,6 @@
 # QGIS Agent v2
 
-> 基于自然语言交互的 QGIS 自动化 Agent，通过 AI Agent 基于改进的 QGIS-MCP 完成 API 检索与地理数据处理任务
+> 一个面向 QGIS 的自然语言自动化原型。当前主线是：DeepSeek/OpenAI-compatible LLM 生成结构化 `TaskPlan`，人工审核后编译为受控 `ToolCallPlan`，通过 QGIS MCP 执行并记录 `ExecutionTrace`。
 
 [![Python](https://img.shields.io/badge/Python-3.12+-blue.svg)](https://www.python.org/)
 [![LangGraph](https://img.shields.io/badge/LangGraph-1.0+-green.svg)](https://github.com/langchain-ai/langgraph)
@@ -8,21 +8,26 @@
 
 ## ✨ 核心特性
 
-### 🧠 智能规划与执行
-- **自然语言交互**: 用中文描述任务，Agent 自动理解并生成执行计划
-- **多阶段工作流**: 意图识别 → RAG 检索 → 自动执行 → 总结与知识沉淀
-- **人工审核 (HITL)**: 关键步骤前暂停，等待人工确认后继续
-- **上下文管理**: 压缩智能体执行节点信息，使用总结反思节点简短的总结内容作为之前任务的回顾
+### 🧠 当前可用能力
+- **自然语言规划**: 用中文描述 GIS 任务，Planner 生成严格 `TaskPlan` JSON。
+- **计划人工审核**: UI 保留 legacy plan 审核流程，批准后同步提升 `TaskPlan`。
+- **受控工具调用**: 审核后的计划会编译为 `ToolCallPlan`，再由 `ExecutionLoop` 调用 MCP 工具。
+- **结果确认**: 执行后等待用户确认任务是否完成，再进入总结节点。
 
 ### 📚 检索证据与受控执行
 - **TaskPlan → ToolCallPlan**: 计划审核后编译为明确的 MCP 工具调用序列
 - **ExecutionLoop**: 每次工具调用都会生成 `ExecutionTrace`，失败后按错误类型评估、修复或请求人工介入
 - **Error-driven Retrieval**: 参数错误、缺文件、执行错误可挂载检索证据，为修复提供上下文
 
-### 🔄 自我进化能力
-- **知识闭环**: 从成功的历史任务中自动提炼逻辑并扩充案例库
-- **动态 Cookbook**: 随着使用次数增加，对复杂指令的理解能力螺旋式上升
-- **质量评分**: 基于人工判断任务完成程度与任务复杂度综合评分
+### 🛡️ 审核与安全边界
+- **ToolPolicy**: 对路径、工具范围和 `execute_code` 等高风险能力做边界检查。
+- **Risk Review**: `execute_code`、保存工程、删除/覆盖等高风险调用会暂停，等待批准、拒绝或修改参数。
+- **未审核步骤保护**: `metadata.tool_calls` 中未出现在审核步骤里的 `step_id` 不会被执行。
+
+### 🧪 Demo 与可复放证据
+- **静态 demo case**: 提供成功、失败修复、SkillDraft preview 三个可复放案例。
+- **Trace Demo 页面**: `/trace-demo` 可查看 demo trace、artifact、repair metadata 和 SkillDraft 变量。
+- **SkillDraft**: 可以从成功 trace 提取待审核草稿，但当前不会自动注册或自动复用。
 
 ### 🌐 现代化 Web 界面
 - **实时流式输出**: SSE 推送 Agent 执行状态
@@ -37,7 +42,7 @@
         ↓
 ┌───────────────────────────────────────────────────────────────────┐
 │ 阶段一: 意图识别与规划                                              │
-│  Planner Node → 基于动态 Cookbook 生成执行计划 → HITL 审核与重规划    │
+│  Planner Node → 生成结构化 TaskPlan → HITL 审核与重规划               │
 └───────────────────────────────────────────────────────────────────┘
         ↓
 ┌────────────────────────────────────────────────────────────────┐
@@ -51,8 +56,8 @@
 └─────────────────────────────────────────────────────────────┘
         ↓
 ┌─────────────────────────────────────────────────────────────────┐
-│ 阶段四: 自我进化                                                  │
-│  Reflector Node → 基于用户反馈的任务总结 → 质量评分 → 高质量案例归档 │
+│ 阶段四: 结果确认与总结                                             │
+│  用户确认结果 → Reflector Node → 总结与可选归档                     │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -63,8 +68,16 @@
 | **Planner Node** | 意图识别、计划生成、HITL 审核 |
 | **Tool Call Planner** | 将审核后的 TaskPlan 编译为 ToolCallPlan |
 | **ExecutionLoop** | 受控 MCP 调用、观察、评估、修复、trace |
-| **Reflector Node** | 任务总结、知识归档 | 
+| **Risk Review** | 高风险工具调用暂停、批准、拒绝或修改参数 |
+| **Reflector Node** | 任务总结和质量评分 |
 | **Web UI** | 用户交互界面 | 
+
+### 当前边界
+
+- 真实 QGIS 最小闭环可运行，但复杂 processing 参数自动修复仍需继续打磨。
+- RAG 目前作为 `RetrievalContext` 接入执行循环，尚未完成完整参数 schema 校验和前端 evidence panel。
+- `SkillDraft` 只生成草稿，不注册、不检索、不自动复用。
+- Phase 9/10 demo 是静态复放证据，不代表真实 QGIS 性能 benchmark。
 
 ## 🚀 快速开始
 
@@ -227,27 +240,36 @@ uv run python scripts/replay_demo_cases.py --json
 - `GET /api/demo-cases/{case_id}`
 - `GET /api/demo-cases/{case_id}/trace`
 
+### 真实最小 E2E
+
+仓库提供一份真实运行说明，用于检查 DeepSeek、QGIS MCP、Web UI 和受控执行链路是否贯通：
+
+[doc/minimal_real_e2e_task.md](doc/minimal_real_e2e_task.md)
+
+推荐先用该说明中的简单图层加载任务验证主链路，再尝试 buffer、投影转换等复杂 processing 任务。
+
 
 
 ## 💡 使用示例
 
-### 示例 1: 图层加载与投影转换
+### 示例 1: 最小真实图层加载
 
 **用户输入**:
 ```
-帮我加载 /path/to/data.shp 这个矢量图层，
-并将其投影转换为 EPSG:4326，
-然后根据 POPULATION 字段进行分级渲染。
+请在 QGIS 中加载 shared/uploads/phase11_points.geojson 这个矢量点图层，
+图层名称使用 phase11_points。
+只需要加载图层，不要删除、覆盖或保存工程。
 ```
 
 **Agent 执行流程**:
-1. **Planner Node**: 生成 3 步执行计划
+1. **Planner Node**: 生成结构化 `TaskPlan`
 2. **HITL 审核**: 展示计划，等待用户确认
-3. **Tool Call Planner**: 将计划编译为 `add_layer` / `execute_processing` 等明确调用
-4. **ExecutionLoop**: 执行 MCP 工具并记录 `ExecutionTrace`
-5. **Reflector Node**: 根据用户的判断生成任务总结，自动归档到 Cookbook
+3. **Tool Call Planner**: 将计划编译为 `add_layer` 调用
+4. **ExecutionLoop**: 通过 QGIS MCP 加载图层并记录 `ExecutionTrace`
+5. **结果确认**: 用户确认结果是否完成
+6. **Reflector Node**: 生成任务总结
 
-### 示例 2: 栅格数据处理
+### 示例 2: 复杂处理任务（后续验证）
 
 **用户输入**:
 ```
@@ -256,11 +278,7 @@ uv run python scripts/replay_demo_cases.py --json
 并使用热力图配色方案渲染。
 ```
 
-**Agent 执行流程**:
-1. 检索 GDAL Warp API 文档
-2. 生成坡度计算代码
-3. 执行并生成截图
-4. 归档成功案例
+这类任务会涉及 processing 参数、输出路径、渲染样式和截图。当前系统已经有 `ExecutionLoop`、error-driven retrieval 和 repair metadata 的基础，但真实成功率取决于 QGIS MCP 工具、API 参数和 LLM 输出质量，建议在最小图层加载 E2E 通过后再验证。
 
 ## 📁 项目结构
 
@@ -294,8 +312,9 @@ qgis-agentv2/
 ├── tests/                      # 测试套件
 ├── doc/                        # 文档
 │   ├── PRD.md                  # 产品需求文档
-│   ├── IMPLEMENTATION_GUIDE.md # 实现指南
-│   └── OPTIMIZATION_REPORT.md  # 优化报告
+│   ├── qgis_workflow_agent_engineering_plan.md
+│   ├── benchmark_notes.md
+│   └── minimal_real_e2e_task.md
 ├── scripts/                    # 脚本工具
 ├── pyproject.toml              # 项目配置
 ├── docker-compose.yml          # Docker 配置

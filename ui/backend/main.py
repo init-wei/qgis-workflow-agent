@@ -190,6 +190,7 @@ async def get_app_with_checkpointer():
 
     使用 interrupt_before 和 interrupt_after 实现 HITL：
     - interrupt_before: 在 human_review_node 前中断（计划审核）
+    - interrupt_before: 在 risk_review_node 前中断（高风险工具审核）
     - interrupt_after: 在 executor_node 后中断（结果确认）
     """
     global _app_with_checkpointer
@@ -198,7 +199,7 @@ async def get_app_with_checkpointer():
             if _app_with_checkpointer is None:
                 _app_with_checkpointer = await get_graph(
                     with_checkpointer=True,
-                    interrupt_before=["human_review_node"],
+                    interrupt_before=["human_review_node", "risk_review_node"],
                     interrupt_after=["executor_node"]
                 )
     return _app_with_checkpointer

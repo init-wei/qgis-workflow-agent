@@ -1,3 +1,6 @@
+import asyncio
+
+import ui.backend.main as backend_main
 from ui.backend.main import build_plan_review_update
 from ui.backend.main import (
     RiskReviewDecisionRequest,
@@ -125,3 +128,26 @@ def test_resolve_risk_review_tool_call_rejects_stale_review_id():
         assert "stale risk review" in exc.detail
     else:
         raise AssertionError("stale risk review decision was accepted")
+
+
+def test_get_app_with_checkpointer_interrupts_before_risk_review(monkeypatch):
+    asyncio.run(_assert_get_app_with_checkpointer_interrupts_before_risk_review(monkeypatch))
+
+
+async def _assert_get_app_with_checkpointer_interrupts_before_risk_review(monkeypatch):
+    captured = {}
+    app = object()
+
+    async def fake_get_graph(**kwargs):
+        captured.update(kwargs)
+        return app
+
+    monkeypatch.setattr(backend_main, "_app_with_checkpointer", None)
+    monkeypatch.setattr(backend_main, "get_graph", fake_get_graph)
+
+    result = await backend_main.get_app_with_checkpointer()
+
+    assert result is app
+    assert captured["with_checkpointer"] is True
+    assert captured["interrupt_before"] == ["human_review_node", "risk_review_node"]
+    assert captured["interrupt_after"] == ["executor_node"]
