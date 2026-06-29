@@ -378,7 +378,6 @@ async def reflector_node(state: AgentState) -> Dict[str, Any]:
         "executor_last_message": _get_last_executor_message(messages),
         "final_summary": final_summary,
     }
-    # TODO：清空状态之前，增加一个仅记录历史信息但不作为上下文的history字段（想让一个列表类型的字段每次都追加新内容，可以使用 Python 内置的 operator.add， steps_completed: Annotated[List[str], operator.add]
     cleaned_state = {
         # 保留字段
         "final_summary": final_summary,  # 保留当前任务的总结，供前端显示

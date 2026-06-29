@@ -127,8 +127,7 @@ def search_cookbook(
     try:
         with pool.connection() as conn:
             with conn.cursor(row_factory=dict_row) as cur:
-                # 使用pg_trgm的相似度搜索
-                # TODO: 未来可扩展为BM25 + Vector混合检索
+                # 使用 pg_trgm 的相似度搜索
                 cur.execute(
                     """
                     SELECT id, user_intent, verified_code, tags, 

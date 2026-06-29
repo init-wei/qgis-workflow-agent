@@ -51,7 +51,7 @@ async def test_planner_node_does_not_return_approvable_draft_when_validation_fai
     monkeypatch.setattr(
         planner_module,
         "_get_llm",
-        lambda _state: FakeLLM(_task_plan_json("[]")),
+        lambda _state: FakeLLM(_task_plan_json("[]", allowed_tools=["execute_processing"])),
     )
     monkeypatch.setattr(planner_module, "save_execution_log", lambda *args, **kwargs: None)
 
