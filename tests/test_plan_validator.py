@@ -56,6 +56,30 @@ def test_validator_flags_missing_expected_output():
     assert any(issue.code == "missing_output" for issue in report.issues)
 
 
+def test_validator_accepts_display_only_load_plan_without_file_output():
+    report = PlanValidator().validate(
+        _plan(
+            expected_outputs=[],
+            steps=[
+                PlanStep(
+                    step_id=1,
+                    description="Load phase11_points layer into QGIS",
+                    candidate_gdal_apis=[],
+                    candidate_pyqgis_apis=[],
+                    allowed_tools=["add_layer"],
+                    input_refs=["input"],
+                    output_refs=[],
+                    risk_level="low",
+                    requires_review=False,
+                )
+            ],
+        )
+    )
+
+    assert report.is_valid is True
+    assert report.issues == []
+
+
 def test_validator_flags_coarse_api_reference():
     plan = _plan(
         steps=[
@@ -75,8 +99,11 @@ def test_validator_flags_coarse_api_reference():
 
     report = PlanValidator().validate(plan)
 
-    assert report.is_valid is False
-    assert any(issue.code == "coarse_api_reference" for issue in report.issues)
+    assert report.is_valid is True
+    coarse_issue = next(
+        issue for issue in report.issues if issue.code == "coarse_api_reference"
+    )
+    assert coarse_issue.severity == "warning"
 
 
 def test_validator_requires_review_for_high_risk_step_and_auto_marks_it():

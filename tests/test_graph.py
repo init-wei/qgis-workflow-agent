@@ -3,6 +3,7 @@
 测试LangGraph Graph构建和执行流程
 """
 
+import asyncio
 import sys
 import os
 import pytest
@@ -12,6 +13,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from agent.graph import (
     build_graph,
+    create_checkpointer,
     should_continue_after_executor,
     should_continue_planning,
 )
@@ -145,6 +147,40 @@ class TestGraphVisualization:
         print("Graph结构:")
         print("="*60)
         print(mermaid_code)
+
+
+def test_create_checkpointer_uses_autocommit_pool(monkeypatch):
+    asyncio.run(_assert_create_checkpointer_uses_autocommit_pool(monkeypatch))
+
+
+async def _assert_create_checkpointer_uses_autocommit_pool(monkeypatch):
+    captured = {}
+
+    class FakePool:
+        def __init__(self, **kwargs):
+            captured["pool_kwargs"] = kwargs
+
+        async def open(self):
+            captured["opened"] = True
+
+    class FakeSaver:
+        def __init__(self, pool):
+            captured["pool"] = pool
+
+        async def setup(self):
+            captured["setup"] = True
+
+    monkeypatch.setenv("DATABASE_URL", "postgresql://example/test")
+    monkeypatch.setattr("agent.graph.AsyncConnectionPool", FakePool)
+    monkeypatch.setattr("agent.graph.AsyncPostgresSaver", FakeSaver)
+
+    checkpointer = await create_checkpointer()
+
+    assert isinstance(checkpointer, FakeSaver)
+    assert captured["opened"] is True
+    assert captured["setup"] is True
+    assert captured["pool_kwargs"]["conninfo"] == "postgresql://example/test"
+    assert captured["pool_kwargs"]["kwargs"]["autocommit"] is True
 
 
 if __name__ == "__main__":

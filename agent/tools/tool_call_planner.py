@@ -92,7 +92,7 @@ def _compile_explicit_calls(task_plan: TaskPlan) -> list[ToolCallPlan]:
                 step=step,
                 step_id=step_id,
                 tool_name=str(tool_name),
-                arguments=arguments,
+                arguments=_normalize_tool_arguments(str(tool_name), arguments),
                 metadata=raw_call.get("metadata") if isinstance(raw_call.get("metadata"), dict) else {},
             )
         )
@@ -323,3 +323,19 @@ def _layer_type_from_path(path: str) -> str:
     if suffix in {".tif", ".tiff", ".vrt", ".img", ".asc"}:
         return "raster"
     return "vector"
+
+
+def _normalize_tool_arguments(
+    tool_name: str, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    if tool_name != "add_layer":
+        return arguments
+
+    normalized = dict(arguments)
+    if "path" not in normalized and isinstance(normalized.get("uri"), str):
+        normalized["path"] = normalized.pop("uri")
+    if "name" not in normalized and isinstance(normalized.get("layer_name"), str):
+        normalized["name"] = normalized.pop("layer_name")
+    if "layer_type" not in normalized and isinstance(normalized.get("path"), str):
+        normalized["layer_type"] = _layer_type_from_path(normalized["path"])
+    return normalized

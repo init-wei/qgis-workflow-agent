@@ -66,6 +66,8 @@ class PlanValidator:
 
     def _validate_outputs(self, task_plan: TaskPlan, issues: list[PlanValidationIssue]) -> None:
         if not task_plan.expected_outputs:
+            if self._is_display_only_plan(task_plan):
+                return
             issues.append(
                 PlanValidationIssue(
                     code="missing_output",
@@ -93,6 +95,7 @@ class PlanValidator:
                         PlanValidationIssue(
                             code="coarse_api_reference",
                             message=f"Step {step.step_id} uses coarse API reference '{api_name}'.",
+                            severity="warning",
                             step_id=step.step_id,
                             field="candidate_apis",
                         )
@@ -122,6 +125,23 @@ class PlanValidator:
             or "execute_code" in step.allowed_tools
             or any(keyword in description for keyword in HIGH_RISK_KEYWORDS)
         )
+
+    def _is_display_only_plan(self, task_plan: TaskPlan) -> bool:
+        if not task_plan.steps:
+            return False
+        display_tools = {"add_layer", "load_vector_layer", "capture_map_canvas"}
+        processing_tools = {"execute_processing", "execute_code"}
+        for step in task_plan.steps:
+            allowed_tools = set(step.allowed_tools)
+            description = step.description.lower()
+            if allowed_tools & processing_tools:
+                return False
+            if allowed_tools & display_tools:
+                continue
+            if any(token in description for token in ("load", "加载", "add layer", "截图", "screenshot")):
+                continue
+            return False
+        return True
 
     def _summary(
         self,

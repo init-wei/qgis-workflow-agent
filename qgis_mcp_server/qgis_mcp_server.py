@@ -6,6 +6,7 @@ QGIS MCP Client - Simple client to connect to the QGIS MCP server
 import logging
 import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 import socket
 import json
 import struct
@@ -36,6 +37,7 @@ logger = logging.getLogger("QgisMCPServer")
 load_dotenv()
 
 _HEADER_STRUCT = struct.Struct(">I")
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
 def _get_mcp_http_port(default_port: int = 8000) -> int:
@@ -47,6 +49,17 @@ def _get_mcp_http_port(default_port: int = 8000) -> int:
         return parsed.port or default_port
     except Exception:
         return default_port
+
+
+def _resolve_local_path(path: str | None) -> str | None:
+    """Resolve project-relative local paths before forwarding to QGIS."""
+    if not path or "://" in path:
+        return path
+
+    local_path = Path(path)
+    if local_path.is_absolute():
+        return str(local_path)
+    return str((_PROJECT_ROOT / local_path).resolve())
 
 class QgisMCPServer:
     def __init__(self, host='localhost', port=9876, timeout: float = 10.0, max_response_bytes: int = 5 * 1024 * 1024):
@@ -265,6 +278,7 @@ def load_project(ctx: Context, path: str) -> str:
         JSON string indicating success/failure and any message from QGIS.
     """
     qgis = get_qgis_connection()
+    path = _resolve_local_path(path)
     result = qgis.send_command("load_project", {"path": path})
     return json.dumps(result, indent=2)
 
@@ -279,6 +293,7 @@ def create_new_project(ctx: Context, path: str) -> str:
         JSON string with operation result.
     """
     qgis = get_qgis_connection()
+    path = _resolve_local_path(path)
     result = qgis.send_command("create_new_project", {"path": path})
     return json.dumps(result, indent=2)
 
@@ -315,6 +330,7 @@ def add_layer(
     Returns:
         JSON string with the added layer ID and status.
     """
+    path = _resolve_local_path(path)
     raster_exts = {
         ".tif", ".tiff", ".img", ".vrt", ".asc", ".bil", ".hdr", ".nc",
         ".grd", ".adf", ".jp2"
@@ -431,6 +447,7 @@ def save_project(ctx: Context, path: str = None) -> str:
     qgis = get_qgis_connection()
     params = {}
     if path:
+        path = _resolve_local_path(path)
         params["path"] = path
     result = qgis.send_command("save_project", params)
     return json.dumps(result, indent=2)
@@ -473,6 +490,7 @@ def capture_map_canvas(ctx: Context, path: str, width: int = 800, height: int = 
         JSON string with success status and the saved file path.
     """
     qgis = get_qgis_connection()
+    path = _resolve_local_path(path)
     result = qgis.send_command("capture_map_canvas", {
         "path": path,
         "width": width,

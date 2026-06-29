@@ -147,6 +147,50 @@ def test_compile_task_plan_rejects_metadata_call_for_unreviewed_step():
     assert calls == []
 
 
+def test_compile_task_plan_normalizes_add_layer_metadata_arguments():
+    task_plan = TaskPlan(
+        task_id="task-normalize-add-layer",
+        task_summary="Load layer",
+        risk_level="low",
+        review_status="approved",
+        required_inputs=[],
+        expected_outputs=[],
+        steps=[
+            PlanStep(
+                step_id=1,
+                description="Load vector layer",
+                candidate_gdal_apis=[],
+                candidate_pyqgis_apis=[],
+                allowed_tools=["add_layer"],
+                input_refs=[],
+                output_refs=[],
+                risk_level="low",
+                requires_review=False,
+            )
+        ],
+        metadata={
+            "tool_calls": [
+                {
+                    "step_id": 1,
+                    "tool_name": "add_layer",
+                    "arguments": {
+                        "uri": "shared/uploads/phase11_points.geojson",
+                        "layer_name": "phase11_points",
+                    },
+                }
+            ]
+        },
+    )
+
+    calls = compile_task_plan_to_tool_calls(task_plan)
+
+    assert calls[0].arguments == {
+        "path": "shared/uploads/phase11_points.geojson",
+        "name": "phase11_points",
+        "layer_type": "vector",
+    }
+
+
 def test_rule_based_planner_generates_load_layer_call_from_input_ref():
     task_plan = TaskPlan(
         task_id="task-load",

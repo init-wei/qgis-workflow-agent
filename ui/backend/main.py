@@ -503,6 +503,37 @@ def serialize_risk_review_required(
     }
 
 
+def build_chat_input_state(
+    request: ChatRequest,
+    thread_id: str,
+    existing_values: Dict[str, Any] | None,
+) -> Dict[str, Any]:
+    """Build graph input for a chat request.
+
+    A new checkpoint thread needs the full AgentState because planner/executor
+    nodes read required keys such as session_id. Existing threads can receive a
+    small delta and let the checkpointer preserve accumulated state.
+    """
+
+    llm_config = (
+        request.llm_config.model_dump(exclude_none=True)
+        if request.llm_config
+        else None
+    )
+    if not existing_values:
+        initial_state = create_initial_state(
+            session_id=thread_id,
+            input_query=request.message,
+            llm_config=llm_config,
+        )
+        return dict(initial_state)
+
+    input_delta: Dict[str, Any] = {"input_query": request.message}
+    if llm_config:
+        input_delta["llm_config"] = llm_config
+    return input_delta
+
+
 async def stream_agent_execution(
     app,
     initial_state: Dict[str, Any],
@@ -1054,43 +1085,23 @@ async def chat_stream(request: ChatRequest):
         app_instance = await get_app_with_checkpointer()
         config = {"configurable": {"thread_id": thread_id}}
 
-        # ----------------------------------------------------------------------
-        # 【修正点 1】: 准备输入数据 (Input Delta)
-        # 不需要读取 previous_state 并复制，只需要构建本次的新输入
-        # ----------------------------------------------------------------------
-        
-        # 默认只传入 input_query
-        input_delta = {
-            "input_query": request.message
-        }
-
-        # LLM 配置覆盖（前端传入则优先使用）
-        if request.llm_config:
-            input_delta["llm_config"] = request.llm_config.model_dump(exclude_none=True)
-
-        # 【修正点 2】: 处理“脏状态” (可选)
-        # 如果你担心上一轮任务崩溃导致状态没清理干净 (Reflector没跑)，
-        # 可以在开始新任务前，强制重置某些覆盖型字段。
-        # 注意：不要在此处重置 messages 或 history (追加型字段)
-        
-        # 检查是否需要强制重置状态 (防御性编程)
         state_snapshot = await app_instance.aget_state(config)
-        if state_snapshot and state_snapshot.values:
-            # 如果上一轮是非正常结束（比如 draft 还在，或者 status=False），
-            # 可以在这里显式修复状态，或者信任 Graph 的 reducer 会处理覆盖
-            pass 
+        input_state = build_chat_input_state(
+            request=request,
+            thread_id=thread_id,
+            existing_values=state_snapshot.values if state_snapshot else {},
+        )
 
         # 如果有文件上传逻辑，添加到 delta
         if request.files:
-            # input_delta["files"] = request.files
+            # input_state["files"] = request.files
             pass
 
         logger.info(f"[Chat] 开始新一轮对话, thread_id: {thread_id}")
 
         # 返回 SSE 流
-        # 注意：这里传入的是 input_delta，而不是完整的 initial_state
         return StreamingResponse(
-            stream_agent_execution(app_instance, input_delta, thread_id, config),
+            stream_agent_execution(app_instance, input_state, thread_id, config),
             media_type="text/event-stream",
             headers={
                 "Cache-Control": "no-cache",
