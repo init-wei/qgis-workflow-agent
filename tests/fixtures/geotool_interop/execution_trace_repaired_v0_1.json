@@ -1,0 +1,143 @@
+{
+  "trace_id": "trace-repaired-001",
+  "task_id": "task-repaired-001",
+  "user_query": "加载缺少路径参数的点图层并修复",
+  "task_plan": {
+    "task_id": "task-repaired-001",
+    "user_query": "加载缺少路径参数的点图层并修复",
+    "goal": "修复缺失路径参数后加载点图层",
+    "steps": [
+      {
+        "step_id": "1",
+        "intent": "load_layer",
+        "description": "加载点矢量图层",
+        "candidate_tools": [
+          "add_layer"
+        ],
+        "input_refs": [
+          "input_points"
+        ],
+        "output_refs": [
+          "loaded_points"
+        ],
+        "risk_level": "low",
+        "requires_review": false,
+        "metadata": {
+          "candidate_gdal_apis": [],
+          "candidate_pyqgis_apis": [
+            "QgsVectorLayer"
+          ],
+          "qgis_step_type": "qgis_operation"
+        }
+      }
+    ],
+    "required_inputs": [
+      {
+        "id": "input_points",
+        "description": "输入点图层",
+        "path": "workspace/input/points.geojson"
+      }
+    ],
+    "expected_outputs": [
+      {
+        "id": "loaded_points",
+        "description": "已加载的点图层"
+      }
+    ],
+    "risk_level": "low",
+    "metadata": {
+      "schema_version": "geotool-interop-v0.1",
+      "source_project": "qgis-workflow-agent",
+      "qgis_review_status": "approved"
+    }
+  },
+  "tool_call_plan": {
+    "task_id": "task-repaired-001",
+    "calls": [
+      {
+        "call_id": "call-repair-001",
+        "step_id": "1",
+        "tool": "add_layer",
+        "args": {},
+        "output_ref": "loaded_points",
+        "depends_on": [],
+        "risk_level": "low",
+        "requires_review": false,
+        "metadata": {}
+      }
+    ],
+    "metadata": {
+      "schema_version": "geotool-interop-v0.1"
+    }
+  },
+  "observations": [
+    {
+      "call_id": "call-repair-001",
+      "tool": "add_layer",
+      "status": "failed",
+      "output_ref": "loaded_points",
+      "artifacts": [],
+      "error_type": "parameter_error",
+      "error_message": "path is required",
+      "raw_response": {
+        "status": "error",
+        "message": "path is required"
+      },
+      "metadata": {
+        "attempt_id": "attempt-repair-001",
+        "qgis_step_id": 1,
+        "qgis_status": "failed"
+      }
+    },
+    {
+      "call_id": "call-repair-001",
+      "tool": "add_layer",
+      "status": "success",
+      "output_ref": "loaded_points",
+      "artifacts": [
+        {
+          "path": "workspace/input/points.geojson"
+        }
+      ],
+      "error_type": null,
+      "error_message": null,
+      "raw_response": {
+        "status": "success",
+        "result": {
+          "loaded": true
+        }
+      },
+      "metadata": {
+        "attempt_id": "attempt-repair-002",
+        "qgis_step_id": 1,
+        "qgis_status": "success"
+      }
+    }
+  ],
+  "repair_actions": [
+    {
+      "task_id": "task-repaired-001",
+      "failed_call_id": "call-repair-001",
+      "error_type": "parameter_error",
+      "observed_error": "path is required",
+      "diagnosis": "The add_layer call omitted the required path argument.",
+      "action_type": "update_args",
+      "repair_calls": [],
+      "updated_args": {
+        "path": "workspace/input/points.geojson",
+        "layer_type": "vector"
+      },
+      "retry_from_call_id": "call-repair-001",
+      "metadata": {
+        "qgis_action_type": "update_arguments",
+        "qgis_reason": "parameter_repair_arguments_available"
+      }
+    }
+  ],
+  "final_status": "success",
+  "metadata": {
+    "source_project": "qgis-workflow-agent",
+    "export_version": "geotool-interop-v0.1",
+    "schema_version": "geotool-interop-v0.1"
+  }
+}

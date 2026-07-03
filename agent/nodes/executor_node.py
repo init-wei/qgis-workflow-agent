@@ -49,11 +49,16 @@ async def controlled_executor_node(state: AgentState) -> dict[str, Any]:
 
     tool_calls = compile_task_plan_to_tool_calls(task_plan)
     if not tool_calls:
+        diagnostic = _no_tool_calls_diagnostic(task_plan)
         trace = ExecutionTrace(
             trace_id=f"trace-{uuid4()}",
             task_id=task_plan.task_id,
             status="failed",
-            metadata={"session_id": session_id, "reason": "no_tool_calls"},
+            metadata={
+                "session_id": session_id,
+                "reason": "no_tool_calls",
+                "diagnostic": diagnostic,
+            },
         )
         return {
             "execution_trace": trace,
@@ -62,6 +67,7 @@ async def controlled_executor_node(state: AgentState) -> dict[str, Any]:
                     content=(
                         "受控执行未开始: TaskPlan 没有可执行的 tool_calls。"
                         "请在计划 metadata.tool_calls 中提供明确工具调用。"
+                        f"\n诊断: {diagnostic}"
                     )
                 )
             ],
@@ -140,6 +146,28 @@ def _success_message(trace: ExecutionTrace, loop_results: list[LoopResult]) -> A
             f"记录 {len(trace.attempts)} 次 attempt。{artifact_text}"
         )
     )
+
+
+def _no_tool_calls_diagnostic(task_plan: Any) -> str:
+    metadata = task_plan.metadata if isinstance(task_plan.metadata, dict) else {}
+    has_metadata_tool_calls = isinstance(metadata.get("tool_calls"), list)
+    step_parts = [
+        (
+            f"step {step.step_id} allowed_tools={list(step.allowed_tools)} "
+            f"output_refs={list(step.output_refs)}"
+        )
+        for step in task_plan.steps
+    ]
+    fallback_reason = metadata.get("fallback_reason") or metadata.get("planner_error")
+    parts = [
+        f"task_id={task_plan.task_id}",
+        f"steps={len(task_plan.steps)}",
+        f"metadata.tool_calls={has_metadata_tool_calls}",
+        "; ".join(step_parts),
+    ]
+    if fallback_reason:
+        parts.append(f"fallback_reason={fallback_reason}")
+    return " | ".join(parts)
 
 
 def _failure_response(

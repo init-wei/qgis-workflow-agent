@@ -253,6 +253,46 @@ def test_executor_node_treats_non_risk_needs_review_as_failure(monkeypatch):
     asyncio.run(_run_non_risk_needs_review_assertions(monkeypatch))
 
 
+def test_executor_node_no_tool_calls_diagnostic_is_actionable(monkeypatch):
+    asyncio.run(_run_no_tool_calls_diagnostic_assertions(monkeypatch))
+
+
+async def _run_no_tool_calls_diagnostic_assertions(monkeypatch):
+    monkeypatch.setenv("QGIS_AGENT_EXECUTION_MODE", "tool_call_plan")
+    state = create_initial_state("session-no-calls", "Do an underspecified task")
+    state["task_plan"] = TaskPlan(
+        task_id="task-no-calls",
+        task_summary="Underspecified task",
+        risk_level="low",
+        review_status="approved",
+        required_inputs=[],
+        expected_outputs=[],
+        steps=[
+            PlanStep(
+                step_id=1,
+                description="Do something unsupported",
+                candidate_gdal_apis=[],
+                candidate_pyqgis_apis=[],
+                allowed_tools=[],
+                input_refs=[],
+                output_refs=["missing_output"],
+                risk_level="low",
+                requires_review=False,
+            )
+        ],
+        metadata={},
+    )
+
+    result = await executor_node(state)
+
+    content = result["messages"][-1].content
+    assert "task_id=task-no-calls" in content
+    assert "steps=1" in content
+    assert "metadata.tool_calls=False" in content
+    assert "step 1 allowed_tools=[] output_refs=['missing_output']" in content
+    assert result["execution_trace"].metadata["reason"] == "no_tool_calls"
+
+
 async def _run_non_risk_needs_review_assertions(monkeypatch):
     fake_client = FakeMCPClient()
 

@@ -20,14 +20,15 @@ class GeoToolTraceSeed(BaseModel):
     task_id: str | None = None
     user_query: str
     task_plan: dict[str, Any] = Field(default_factory=dict)
-    tool_call_plan: list[dict[str, Any]] = Field(default_factory=list)
+    tool_call_plan: dict[str, Any] = Field(default_factory=dict)
     observations: list[dict[str, Any]] = Field(default_factory=list)
     repair_actions: list[dict[str, Any]] = Field(default_factory=list)
     final_status: str
     metadata: dict[str, Any] = Field(
         default_factory=lambda: {
             "source_project": "qgis-workflow-agent",
-            "export_version": "v0",
+            "export_version": "geotool-interop-v0.1",
+            "schema_version": "geotool-interop-v0.1",
         }
     )
 
@@ -37,7 +38,7 @@ def build_geotool_trace_seed(
     *,
     user_query: str,
     task_plan: dict[str, Any] | None = None,
-    tool_call_plan: list[dict[str, Any]] | None = None,
+    tool_call_plan: dict[str, Any] | None = None,
 ) -> GeoToolTraceSeed:
     """Build a serializable seed record from one execution trace."""
 
@@ -47,7 +48,7 @@ def build_geotool_trace_seed(
         task_id=trace_payload["task_id"],
         user_query=user_query,
         task_plan=task_plan or trace_payload.get("task_plan", {}),
-        tool_call_plan=tool_call_plan or _tool_call_plan_from_trace(trace),
+        tool_call_plan=tool_call_plan or trace_payload["tool_call_plan"],
         observations=trace_payload["observations"],
         repair_actions=trace_payload["repair_actions"],
         final_status=trace_payload["final_status"],
@@ -75,19 +76,3 @@ def export_geotool_trace_jsonl(
                 + "\n"
             )
     return path
-
-
-def _tool_call_plan_from_trace(trace: ExecutionTrace) -> list[dict[str, Any]]:
-    seen: set[tuple[int, str, str]] = set()
-    calls: list[dict[str, Any]] = []
-    for attempt in trace.attempts:
-        key = (
-            attempt.step_id,
-            attempt.tool_call.tool_name,
-            json.dumps(attempt.tool_call.arguments, sort_keys=True, ensure_ascii=False),
-        )
-        if key in seen:
-            continue
-        seen.add(key)
-        calls.append(attempt.tool_call.model_dump(mode="json"))
-    return calls

@@ -25,7 +25,7 @@ The project is intentionally conservative: the default path uses explicit tool-c
 - Pause for high-risk actions such as `execute_code`, delete/remove, overwrite, and save-project operations.
 - Run a minimal real E2E task that loads `shared/uploads/phase11_points.geojson` into QGIS.
 - Replay static demo traces and inspect them through `/trace-demo`.
-- Export GeoTool-compatible trace seed JSONL for downstream dataset work.
+- Export GeoTool interop v0.1 trace seed JSONL for downstream dataset work.
 
 ## Current Limits
 
@@ -35,6 +35,17 @@ The project is intentionally conservative: the default path uses explicit tool-c
 - `SkillDraft` extraction creates draft evidence only. Skills are not registered, retrieved, or auto-executed.
 - Static demo cases are replay evidence, not a real QGIS performance benchmark.
 - The legacy `react_agent` mode remains available only as a baseline comparison path. The default mode is `tool_call_plan`.
+
+Switch execution modes with:
+
+```powershell
+$env:QGIS_AGENT_EXECUTION_MODE = "tool_call_plan"
+$env:QGIS_AGENT_EXECUTION_MODE = "react_agent"
+```
+
+`tool_call_plan` runs the controlled `TaskPlan -> ToolCallPlan -> ExecutionLoop`
+route. `react_agent` keeps the legacy create-agent route available for
+comparison and fallback.
 
 ## Requirements
 
@@ -132,6 +143,9 @@ uv run pytest
 
 # Demo replay
 uv run python scripts/replay_demo_cases.py
+
+# Optional real QGIS MCP controlled-execution smoke
+uv run python scripts/run_controlled_execution_smoke.py
 
 # Frontend build
 cd ui/frontend

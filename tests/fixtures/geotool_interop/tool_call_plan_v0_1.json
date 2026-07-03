@@ -1,0 +1,37 @@
+{
+  "task_id": "task-001",
+  "calls": [
+    {
+      "call_id": "call-001",
+      "step_id": "1",
+      "tool": "add_layer",
+      "args": {
+        "path": "workspace/input/points.geojson",
+        "layer_type": "vector"
+      },
+      "output_ref": "loaded_points",
+      "depends_on": [],
+      "risk_level": "low",
+      "requires_review": false,
+      "metadata": {}
+    },
+    {
+      "call_id": "call-002",
+      "step_id": "2",
+      "tool": "capture_map_canvas",
+      "args": {
+        "path": "workspace/output/points_map.png"
+      },
+      "output_ref": "map_screenshot",
+      "depends_on": [
+        "call-001"
+      ],
+      "risk_level": "low",
+      "requires_review": false,
+      "metadata": {}
+    }
+  ],
+  "metadata": {
+    "schema_version": "geotool-interop-v0.1"
+  }
+}

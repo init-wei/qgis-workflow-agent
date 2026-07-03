@@ -5,6 +5,7 @@ from agent.adapters.geotool_schema_adapter import (
     geotool_tool_call_plan_to_qgis_calls,
     qgis_execution_trace_to_geotool_dict,
     qgis_task_plan_to_geotool_dict,
+    qgis_tool_calls_to_geotool_plan,
 )
 from agent.planning.plan_schema import InputSpec, OutputSpec, PlanStep, TaskPlan
 from agent.tools.tool_contracts import ExecutionTrace, ToolCallPlan
@@ -53,6 +54,11 @@ def test_qgis_task_plan_exports_geotool_compatible_dict():
     assert payload["task_id"] == "task-geo-1"
     assert payload["user_query"] == "加载图层"
     assert payload["goal"] == "加载图层并截图"
+    assert "review_status" not in payload
+    assert payload["metadata"]["qgis_review_status"] == "approved"
+    assert payload["steps"][0]["step_id"] == "1"
+    assert payload["steps"][0]["intent"] == "qgis_operation"
+    assert "step_type" not in payload["steps"][0]
     assert payload["steps"][0]["candidate_tools"] == ["add_layer"]
     assert payload["steps"][0]["metadata"]["candidate_pyqgis_apis"] == [
         "QgsVectorLayer"
@@ -88,13 +94,13 @@ def test_geotool_task_plan_imports_legacy_plan():
     assert legacy.steps[0].pyqgis_api == ["QgsVectorLayer"]
 
 
-def test_geotool_tool_call_plan_imports_qgis_calls():
+def test_geotool_tool_call_plan_imports_canonical_calls():
     calls = geotool_tool_call_plan_to_qgis_calls(
         {
-            "tool_calls": [
+            "calls": [
                 {
                     "call_id": "call-1",
-                    "step_id": 1,
+                    "step_id": "1",
                     "tool": "add_layer",
                     "args": {"path": "shared/uploads/points.geojson"},
                     "risk_level": "low",
@@ -113,12 +119,59 @@ def test_geotool_tool_call_plan_imports_qgis_calls():
     assert calls[0].metadata["output_ref"] == "loaded_layer"
 
 
+def test_geotool_tool_call_plan_still_imports_legacy_tool_calls():
+    calls = geotool_tool_call_plan_to_qgis_calls(
+        {
+            "tool_calls": [
+                {
+                    "call_id": "legacy-call-1",
+                    "step_id": 1,
+                    "tool": "add_layer",
+                    "args": {"path": "shared/uploads/points.geojson"},
+                }
+            ]
+        }
+    )
+
+    assert calls[0].step_id == 1
+    assert calls[0].metadata["call_id"] == "legacy-call-1"
+
+
+def test_qgis_tool_calls_export_canonical_geotool_plan():
+    call = ToolCallPlan(
+        step_id=1,
+        tool_name="add_layer",
+        arguments={"path": "shared/uploads/points.geojson"},
+        metadata={"call_id": "call-1", "output_ref": "loaded_layer"},
+    )
+
+    payload = qgis_tool_calls_to_geotool_plan("task-geo-1", [call])
+
+    assert payload == {
+        "task_id": "task-geo-1",
+        "calls": [
+            {
+                "call_id": "call-1",
+                "step_id": "1",
+                "tool": "add_layer",
+                "args": {"path": "shared/uploads/points.geojson"},
+                "output_ref": "loaded_layer",
+                "depends_on": [],
+                "risk_level": "low",
+                "requires_review": False,
+                "metadata": {},
+            }
+        ],
+        "metadata": {"schema_version": "geotool-interop-v0.1"},
+    }
+
+
 @pytest.mark.parametrize(
     "payload",
     [
         {},
-        {"tool_calls": [{"step_id": 1, "args": {}}]},
-        {"tool_calls": [{"step_id": "1", "tool": "add_layer", "args": {}}]},
+        {"calls": [{"step_id": 1, "args": {}}]},
+        {"calls": [{"step_id": "not-an-int", "tool": "add_layer", "args": {}}]},
     ],
 )
 def test_geotool_tool_call_plan_rejects_invalid_payload(payload):
@@ -143,5 +196,5 @@ def test_qgis_execution_trace_exports_geotool_dict():
     assert payload["trace_id"] == "trace-1"
     assert payload["task_id"] == "task-geo-1"
     assert payload["user_query"] == "加载图层"
-    assert payload["tool_call_plan"][0]["tool_name"] == "add_layer"
+    assert payload["tool_call_plan"]["calls"][0]["tool"] == "add_layer"
     assert payload["metadata"]["source_project"] == "qgis-workflow-agent"

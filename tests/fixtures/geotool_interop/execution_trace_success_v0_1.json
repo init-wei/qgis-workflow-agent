@@ -1,0 +1,176 @@
+{
+  "trace_id": "trace-success-001",
+  "task_id": "task-001",
+  "user_query": "加载点图层并截图",
+  "task_plan": {
+    "task_id": "task-001",
+    "user_query": "加载点图层并截图",
+    "goal": "加载一个点矢量图层并导出地图截图",
+    "steps": [
+      {
+        "step_id": "1",
+        "intent": "load_layer",
+        "description": "加载点矢量图层",
+        "candidate_tools": [
+          "add_layer"
+        ],
+        "input_refs": [
+          "input_points"
+        ],
+        "output_refs": [
+          "loaded_points"
+        ],
+        "risk_level": "low",
+        "requires_review": false,
+        "metadata": {
+          "candidate_gdal_apis": [],
+          "candidate_pyqgis_apis": [
+            "QgsVectorLayer"
+          ],
+          "qgis_step_type": "qgis_operation"
+        }
+      },
+      {
+        "step_id": "2",
+        "intent": "capture_map",
+        "description": "导出当前地图画布截图",
+        "candidate_tools": [
+          "capture_map_canvas"
+        ],
+        "input_refs": [
+          "loaded_points"
+        ],
+        "output_refs": [
+          "map_screenshot"
+        ],
+        "risk_level": "low",
+        "requires_review": false,
+        "metadata": {
+          "candidate_gdal_apis": [],
+          "candidate_pyqgis_apis": [
+            "QgsMapCanvas"
+          ],
+          "qgis_step_type": "qgis_operation"
+        }
+      }
+    ],
+    "required_inputs": [
+      {
+        "id": "input_points",
+        "description": "输入点图层",
+        "path": "workspace/input/points.geojson"
+      }
+    ],
+    "expected_outputs": [
+      {
+        "id": "loaded_points",
+        "description": "已加载的点图层"
+      },
+      {
+        "id": "map_screenshot",
+        "description": "地图截图",
+        "path": "workspace/output/points_map.png"
+      }
+    ],
+    "risk_level": "low",
+    "metadata": {
+      "schema_version": "geotool-interop-v0.1",
+      "source_project": "qgis-workflow-agent",
+      "qgis_review_status": "approved"
+    }
+  },
+  "tool_call_plan": {
+    "task_id": "task-001",
+    "calls": [
+      {
+        "call_id": "call-001",
+        "step_id": "1",
+        "tool": "add_layer",
+        "args": {
+          "path": "workspace/input/points.geojson",
+          "layer_type": "vector"
+        },
+        "output_ref": "loaded_points",
+        "depends_on": [],
+        "risk_level": "low",
+        "requires_review": false,
+        "metadata": {}
+      },
+      {
+        "call_id": "call-002",
+        "step_id": "2",
+        "tool": "capture_map_canvas",
+        "args": {
+          "path": "workspace/output/points_map.png"
+        },
+        "output_ref": "map_screenshot",
+        "depends_on": [
+          "call-001"
+        ],
+        "risk_level": "low",
+        "requires_review": false,
+        "metadata": {}
+      }
+    ],
+    "metadata": {
+      "schema_version": "geotool-interop-v0.1"
+    }
+  },
+  "observations": [
+    {
+      "call_id": "call-001",
+      "tool": "add_layer",
+      "status": "success",
+      "output_ref": "loaded_points",
+      "artifacts": [
+        {
+          "path": "workspace/input/points.geojson"
+        }
+      ],
+      "error_type": null,
+      "error_message": null,
+      "raw_response": {
+        "status": "success",
+        "result": {
+          "loaded": true
+        }
+      },
+      "metadata": {
+        "attempt_id": "attempt-001",
+        "qgis_step_id": 1,
+        "qgis_status": "success"
+      }
+    },
+    {
+      "call_id": "call-002",
+      "tool": "capture_map_canvas",
+      "status": "success",
+      "output_ref": "map_screenshot",
+      "artifacts": [
+        {
+          "path": "workspace/output/points_map.png"
+        }
+      ],
+      "error_type": null,
+      "error_message": null,
+      "raw_response": {
+        "status": "success",
+        "result": {
+          "path": "workspace/output/points_map.png"
+        }
+      },
+      "metadata": {
+        "attempt_id": "attempt-002",
+        "qgis_step_id": 2,
+        "qgis_status": "success"
+      }
+    }
+  ],
+  "repair_actions": [],
+  "final_status": "success",
+  "metadata": {
+    "source_project": "qgis-workflow-agent",
+    "export_version": "geotool-interop-v0.1",
+    "schema_version": "geotool-interop-v0.1"
+  }
+}

@@ -5,6 +5,7 @@ QGIS MCP Client - Simple client to connect to the QGIS MCP server
 
 import logging
 import os
+import base64
 from contextlib import asynccontextmanager
 from pathlib import Path
 import socket
@@ -60,6 +61,51 @@ def _resolve_local_path(path: str | None) -> str | None:
     if local_path.is_absolute():
         return str(local_path)
     return str((_PROJECT_ROOT / local_path).resolve())
+
+
+def _is_unknown_command(result: dict[str, Any] | None, command_type: str) -> bool:
+    if not isinstance(result, dict) or result.get("status") != "error":
+        return False
+    message = str(result.get("message", ""))
+    return f"Unknown command type: {command_type}" in message
+
+
+def _payload_from_result(result: dict[str, Any] | None) -> dict[str, Any]:
+    if not isinstance(result, dict):
+        return {}
+    payload = result.get("result", {})
+    return payload if isinstance(payload, dict) else {}
+
+
+def _save_base64_png(payload: dict[str, Any], path: str) -> None:
+    image_data = payload.get("base64_data")
+    if not image_data:
+        return
+    output_path = Path(path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_bytes(base64.b64decode(image_data))
+
+
+def _normalize_canvas_capture_result(
+    result: dict[str, Any] | None,
+    path: str,
+    width: int,
+    height: int,
+    fallback_tool: str,
+) -> dict[str, Any]:
+    payload = _payload_from_result(result)
+    _save_base64_png(payload, path)
+    return {
+        "status": "success",
+        "result": {
+            "success": True,
+            "path": path,
+            "width": payload.get("width", width),
+            "height": payload.get("height", height),
+            "mime_type": payload.get("mime_type", "image/png"),
+            "fallback_tool": fallback_tool,
+        },
+    }
 
 class QgisMCPServer:
     def __init__(self, host='localhost', port=9876, timeout: float = 10.0, max_response_bytes: int = 5 * 1024 * 1024):
@@ -496,6 +542,37 @@ def capture_map_canvas(ctx: Context, path: str, width: int = 800, height: int = 
         "width": width,
         "height": height
     })
+    if _is_unknown_command(result, "capture_map_canvas"):
+        result = qgis.send_command(
+            "render_map_base64",
+            {"path": path, "width": width, "height": height},
+        )
+        if result and result.get("status") == "success":
+            return json.dumps(
+                _normalize_canvas_capture_result(
+                    result,
+                    path,
+                    width,
+                    height,
+                    "render_map_base64",
+                ),
+                indent=2,
+            )
+
+        if _is_unknown_command(result, "render_map_base64"):
+            result = qgis.send_command("get_canvas_screenshot")
+            if result and result.get("status") == "success":
+                return json.dumps(
+                    _normalize_canvas_capture_result(
+                        result,
+                        path,
+                        width,
+                        height,
+                        "get_canvas_screenshot",
+                    ),
+                    indent=2,
+                )
+
     return json.dumps(result, indent=2)
 
 
