@@ -144,6 +144,9 @@ uv run pytest
 # Demo replay
 uv run python scripts/replay_demo_cases.py
 
+# Demo readiness check
+uv run python scripts/demo_preflight.py
+
 # Optional real QGIS MCP controlled-execution smoke
 uv run python scripts/run_controlled_execution_smoke.py
 
@@ -172,6 +175,7 @@ tests/             Unit and smoke tests
 
 - [docs/README.md](docs/README.md): documentation index.
 - [docs/minimal_real_e2e_task.md](docs/minimal_real_e2e_task.md): real local E2E task.
+- [docs/demo_runbook.md](docs/demo_runbook.md): stable demo routes, startup order, and fallback plan.
 - [docs/web_ui.md](docs/web_ui.md): Web UI flow and backend endpoints.
 - [docs/geotool_llm_integration.md](docs/geotool_llm_integration.md): GeoTool schema boundary.
 - [docs/geotool_llm_history.md](docs/geotool_llm_history.md): implemented Q0 history.
