@@ -147,8 +147,13 @@ uv run python scripts/replay_demo_cases.py
 # Demo readiness check
 uv run python scripts/demo_preflight.py
 
-# Optional real QGIS MCP controlled-execution smoke
+# Real QGIS MCP controlled-execution smoke.
+# Writes ignored daily-run artifacts under .target/demo by default.
 uv run python scripts/run_controlled_execution_smoke.py
+uv run python scripts/demo_preflight.py --skip-services --geotool-root D:\project_files\GeoTool-LLM
+
+# Intentionally refresh tracked demo evidence under exports/geotool_traces
+uv run python scripts/run_controlled_execution_smoke.py --update-demo-artifacts
 
 # Frontend build
 cd ui/frontend
