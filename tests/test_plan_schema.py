@@ -60,3 +60,14 @@ def test_task_plan_requires_review_status():
             risk_level="low",
             steps=[],
         )
+
+
+def test_plan_step_requires_review_is_strict_bool():
+    with pytest.raises(ValidationError, match="requires_review"):
+        PlanStep(
+            step_id=1,
+            description="Load layer",
+            allowed_tools=["add_layer"],
+            risk_level="low",
+            requires_review="False",
+        )

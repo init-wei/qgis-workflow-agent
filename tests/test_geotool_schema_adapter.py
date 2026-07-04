@@ -97,6 +97,7 @@ def test_geotool_task_plan_imports_legacy_plan():
 def test_geotool_tool_call_plan_imports_canonical_calls():
     calls = geotool_tool_call_plan_to_qgis_calls(
         {
+            "metadata": {"schema_version": "geotool-interop-v0.1"},
             "calls": [
                 {
                     "call_id": "call-1",
@@ -117,6 +118,41 @@ def test_geotool_tool_call_plan_imports_canonical_calls():
     assert calls[0].arguments["path"] == "shared/uploads/points.geojson"
     assert calls[0].metadata["call_id"] == "call-1"
     assert calls[0].metadata["output_ref"] == "loaded_layer"
+
+
+def test_geotool_tool_call_plan_rejects_wrong_schema_version():
+    with pytest.raises(ValueError, match="schema_version"):
+        geotool_tool_call_plan_to_qgis_calls(
+            {
+                "metadata": {"schema_version": "geopotential-v0.2"},
+                "calls": [
+                    {
+                        "call_id": "call-1",
+                        "step_id": "1",
+                        "tool": "add_layer",
+                        "args": {"path": "shared/uploads/points.geojson"},
+                    }
+                ],
+            }
+        )
+
+
+def test_geotool_tool_call_plan_rejects_string_requires_review():
+    with pytest.raises(ValueError, match="requires_review"):
+        geotool_tool_call_plan_to_qgis_calls(
+            {
+                "metadata": {"schema_version": "geotool-interop-v0.1"},
+                "calls": [
+                    {
+                        "call_id": "call-1",
+                        "step_id": "1",
+                        "tool": "add_layer",
+                        "args": {"path": "shared/uploads/points.geojson"},
+                        "requires_review": "False",
+                    }
+                ],
+            }
+        )
 
 
 def test_geotool_tool_call_plan_still_imports_legacy_tool_calls():

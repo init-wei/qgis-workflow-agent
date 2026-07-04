@@ -1,5 +1,8 @@
 from pathlib import Path
 
+import pytest
+from pydantic import ValidationError
+
 from agent.tools.tool_contracts import ToolCallPlan
 from agent.tools.tool_policy import CodePolicy, PathPolicy, ToolPolicy
 from agent.tools.tool_registry import ToolRegistry
@@ -131,3 +134,13 @@ def test_tool_policy_allows_low_risk_registered_tool_with_safe_path(tmp_path):
     )
 
     assert decision.allowed is True
+
+
+def test_tool_call_plan_requires_review_is_strict_bool():
+    with pytest.raises(ValidationError, match="requires_review"):
+        ToolCallPlan(
+            step_id=1,
+            tool_name="add_layer",
+            arguments={"path": "shared/uploads/points.geojson"},
+            requires_review="False",
+        )

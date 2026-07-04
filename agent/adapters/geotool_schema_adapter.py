@@ -72,6 +72,7 @@ def geotool_tool_call_plan_to_qgis_calls(payload: dict) -> list[ToolCallPlan]:
 
     if not isinstance(payload, dict):
         raise ValueError("GeoTool tool call payload must be a dict.")
+    _validate_schema_version(payload.get("metadata"))
     raw_calls = payload.get("calls")
     if raw_calls is None:
         raw_calls = payload.get("tool_calls")
@@ -98,7 +99,7 @@ def geotool_tool_call_plan_to_qgis_calls(payload: dict) -> list[ToolCallPlan]:
                 tool_name=tool_name,
                 arguments=arguments,
                 risk_level=raw_call.get("risk_level") or "low",
-                requires_review=bool(raw_call.get("requires_review", False)),
+                requires_review=_strict_requires_review(raw_call),
                 metadata={
                     "call_id": raw_call.get("call_id"),
                     "depends_on": raw_call.get("depends_on", []),
@@ -112,6 +113,23 @@ def geotool_tool_call_plan_to_qgis_calls(payload: dict) -> list[ToolCallPlan]:
             )
         )
     return calls
+
+
+def _validate_schema_version(metadata: Any) -> None:
+    if metadata is None:
+        return
+    if not isinstance(metadata, dict):
+        raise ValueError("GeoTool tool call metadata must be a dict.")
+    schema_version = metadata.get("schema_version")
+    if schema_version is not None and schema_version != SCHEMA_VERSION:
+        raise ValueError(f"metadata.schema_version must be {SCHEMA_VERSION}")
+
+
+def _strict_requires_review(raw_call: dict[str, Any]) -> bool:
+    value = raw_call.get("requires_review", False)
+    if not isinstance(value, bool):
+        raise ValueError("GeoTool tool call requires_review must be a boolean.")
+    return value
 
 
 def qgis_tool_calls_to_geotool_plan(

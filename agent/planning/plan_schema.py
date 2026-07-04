@@ -3,7 +3,7 @@
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StrictBool
 
 
 RiskLevel = Literal["low", "medium", "high"]
@@ -40,7 +40,7 @@ class PlanStep(BaseModel):
     input_refs: list[str] = Field(default_factory=list, description="InputSpec IDs used by the step")
     output_refs: list[str] = Field(default_factory=list, description="OutputSpec IDs produced by the step")
     risk_level: RiskLevel = Field(description="Step risk level")
-    requires_review: bool = Field(description="Whether the step requires human review")
+    requires_review: StrictBool = Field(description="Whether the step requires human review")
 
 
 class TaskPlan(BaseModel):
@@ -71,5 +71,5 @@ class PlanValidationReport(BaseModel):
 
     is_valid: bool = Field(description="Whether there are no error-level validation issues")
     issues: list[PlanValidationIssue] = Field(default_factory=list, description="Validation issues")
-    requires_review: bool = Field(description="Whether any step or task requires human review")
+    requires_review: StrictBool = Field(description="Whether any step or task requires human review")
     summary: str = Field(description="Short validation summary")

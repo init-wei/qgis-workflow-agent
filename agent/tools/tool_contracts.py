@@ -4,7 +4,7 @@
 from datetime import UTC, datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StrictBool
 
 RiskLevel = Literal["low", "medium", "high"]
 ObservationStatus = Literal["success", "error", "malformed", "disconnected"]
@@ -33,7 +33,7 @@ class ToolCallPlan(BaseModel):
         default_factory=dict, description="Tool arguments"
     )
     risk_level: RiskLevel = Field(default="low", description="Tool call risk level")
-    requires_review: bool = Field(
+    requires_review: StrictBool = Field(
         default=False, description="Whether this call requires human review"
     )
     metadata: dict[str, Any] = Field(
@@ -70,7 +70,7 @@ class PolicyDecision(BaseModel):
         default="allowed", description="Machine-readable decision reason"
     )
     message: str | None = Field(default=None, description="Human-readable explanation")
-    requires_review: bool = Field(
+    requires_review: StrictBool = Field(
         default=False, description="Whether a human approval gate is required"
     )
 
@@ -81,7 +81,7 @@ class ToolSpec(BaseModel):
     name: str = Field(description="MCP tool name")
     description: str = Field(default="", description="Tool description")
     risk_level: RiskLevel = Field(default="low", description="Default risk level")
-    requires_review: bool = Field(
+    requires_review: StrictBool = Field(
         default=False, description="Whether the tool requires review by default"
     )
     metadata: dict[str, Any] = Field(
