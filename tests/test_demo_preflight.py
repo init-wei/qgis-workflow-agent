@@ -78,6 +78,7 @@ def test_controlled_smoke_trace_check_validates_success_trace(tmp_path):
     assert result.ok is True
     assert result.required is False
     assert "final_status=success" in result.message
+    assert str(trace_path) in result.message
 
 
 def test_controlled_smoke_trace_prefers_default_run_artifact(tmp_path):
@@ -98,6 +99,7 @@ def test_controlled_smoke_trace_prefers_default_run_artifact(tmp_path):
 
     assert result.ok is True
     assert "final_status=success" in result.message
+    assert str(run_trace) in result.message
 
 
 def test_controlled_smoke_trace_falls_back_to_tracked_artifact(tmp_path):
@@ -112,6 +114,7 @@ def test_controlled_smoke_trace_falls_back_to_tracked_artifact(tmp_path):
 
     assert result.ok is True
     assert "final_status=success" in result.message
+    assert str(tracked_trace) in result.message
 
 
 def test_controlled_smoke_trace_check_accepts_custom_trace_path(tmp_path):
@@ -126,6 +129,7 @@ def test_controlled_smoke_trace_check_accepts_custom_trace_path(tmp_path):
 
     assert result.ok is True
     assert "final_status=success" in result.message
+    assert str(trace_path) in result.message
 
 
 def test_controlled_smoke_trace_check_reports_failed_trace(tmp_path):
@@ -186,6 +190,7 @@ def test_geotool_trace_validation_runs_geotool_cli(tmp_path, monkeypatch):
     assert result.required is False
     assert result.name == "GeoTool trace validation"
     assert "QGIS trace validation: ok" in result.message
+    assert str(trace_path) in result.message
     assert calls == [
         (
             [

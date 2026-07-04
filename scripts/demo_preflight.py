@@ -123,13 +123,13 @@ def check_controlled_smoke_trace(
             "Real MCP smoke",
             True,
             False,
-            f"Trace present with final_status=success and {len(statuses)} successful observations.",
+            f"Trace {trace_path} present with final_status=success and {len(statuses)} successful observations.",
         )
     return DemoCheck(
         "Real MCP smoke",
         False,
         False,
-        f"Trace present but final_status={final_status!s}, observation_statuses={statuses!r}.",
+        f"Trace {trace_path} present but final_status={final_status!s}, observation_statuses={statuses!r}.",
     )
 
 
@@ -178,9 +178,10 @@ def check_geotool_trace_validation(
         check=False,
     )
     output = (result.stdout or result.stderr).strip()
+    message = f"Trace {trace_path}\n{output}" if output else f"Trace {trace_path}"
     if result.returncode == 0:
-        return DemoCheck("GeoTool trace validation", True, False, output)
-    return DemoCheck("GeoTool trace validation", False, False, output)
+        return DemoCheck("GeoTool trace validation", True, False, message)
+    return DemoCheck("GeoTool trace validation", False, False, message)
 
 
 def build_checks(
