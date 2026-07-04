@@ -8,9 +8,9 @@ import tomllib
 from pathlib import Path
 from typing import Literal
 
-ExecutionMode = Literal["react_agent", "tool_call_plan"]
+ExecutionMode = Literal["tool_call_plan"]
 DEFAULT_EXECUTION_MODE: ExecutionMode = "tool_call_plan"
-VALID_EXECUTION_MODES: set[str] = {"react_agent", "tool_call_plan"}
+VALID_EXECUTION_MODES: set[str] = {"tool_call_plan"}
 
 
 def load_execution_mode(pyproject_path: str | Path | None = "pyproject.toml") -> ExecutionMode:

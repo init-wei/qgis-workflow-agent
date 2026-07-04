@@ -35,7 +35,9 @@ Show:
 
 - `simple_success`: planned tool call and successful artifact.
 - `failure_repair`: failed attempt followed by repair.
-- `skill_draft_preview`: draft evidence only, not registered execution.
+- `skill_draft_preview`: successful trace generalized into a SkillDraft,
+  demo-registered under safety gates, and rendered as a controlled execution
+  plan preview.
 
 ### Route 2: Real QGIS MCP Smoke
 
@@ -82,6 +84,66 @@ Then show:
 D:\project_files\GeoTool-LLM\data\reports\seed_quality_report.md
 D:\project_files\GeoTool-LLM\data\reports\baseline_mock_eval_report.md
 ```
+
+### Route 4: Skill Registration Execution Preview
+
+Use this to show how a successful trace can become reusable without letting a
+model freely execute arbitrary code.
+
+```powershell
+uv run python scripts/demo_preflight.py --skip-services --skip-external-smoke
+uv run python ui/backend/main.py
+```
+
+Open:
+
+```text
+http://localhost:9000/trace-demo
+```
+
+Select `Registered skill execution preview from a successful trace`, then show:
+
+- `SkillDraft Preview`: generalized variables and reuse preview.
+- `Registered Skill`: approved demo registration metadata.
+- `Controlled Execution Plan`: explicit tool call arguments rendered from
+  replacement variables.
+
+Position this as a controlled reuse preview. Live execution of a registered
+skill must still use the normal `ToolCallPlan -> ToolPolicy -> ExecutionLoop`
+route and any configured review gates.
+
+### Route 5: Real Skill Reuse Smoke
+
+Use this after Route 2 proves QGIS MCP is reachable. It renders the registered
+Skill reuse fixture into explicit `add_layer` and `capture_map_canvas` calls,
+then runs those calls through the same controlled executor path as the live
+smoke.
+
+```powershell
+uv run python scripts/run_skill_reuse_smoke.py
+uv run python scripts/demo_preflight.py --skill-reuse-trace .target\demo\skill_reuse_smoke_v0_1.jsonl --geotool-root D:\project_files\GeoTool-LLM
+```
+
+The preflight command reports separate GeoTool validation checks for the
+controlled smoke trace and the Skill reuse trace when both artifacts are
+available.
+
+Expected output:
+
+```text
+Skill reuse GeoTool trace JSONL: .target\demo\skill_reuse_smoke_v0_1.jsonl
+```
+
+Expected daily-run artifacts:
+
+```text
+.target/demo/skill_reuse_smoke_v0_1.jsonl
+.target/demo/skill_reuse_smoke.png
+```
+
+This route demonstrates registered Skill reuse under controlled execution. If
+the QGIS MCP endpoint is unavailable, skip it and use Route 4 to show the
+registered plan preview.
 
 ## Full Demo Startup
 
@@ -138,6 +200,7 @@ If the LLM is slow or unavailable, use Route 1 and Route 2 instead.
 | `HTTP MCP` fails | Run `uv run python qgis_mcp_server/qgis_mcp_server.py`. |
 | `Frontend build` fails | Run `cd ui/frontend; npm install; npm run build`. |
 | `Real MCP smoke` warns | Skip live smoke and show `/trace-demo`; this warning does not block the static demo. |
+| `Skill reuse smoke` warns | Run `uv run python scripts/run_skill_reuse_smoke.py` after QGIS MCP is reachable, or show Route 4. |
 | LLM live call fails | Do not use the live planner; use static trace replay and controlled smoke. |
 
 ## Pre-Demo Quality Gates

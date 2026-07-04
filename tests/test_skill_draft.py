@@ -126,6 +126,30 @@ def test_generalizes_paths_outputs_and_layer_names_in_arguments_template():
     }
 
 
+def test_does_not_generalize_layer_type_literals():
+    trace = ExecutionTrace(trace_id="trace-layer-type", task_id="task-layer-type")
+    trace.append_attempt(
+        _attempt(
+            tool_name="add_layer",
+            arguments={
+                "path": "shared/uploads/phase11_points.geojson",
+                "name": "phase11_points",
+                "layer_type": "vector",
+            },
+            observation=ToolObservation(
+                tool_name="add_layer",
+                status="success",
+                message="Layer loaded",
+                raw_response={"status": "success"},
+            ),
+        )
+    )
+
+    draft = SkillExtractor().extract(trace)
+
+    assert draft.steps[0].arguments_template["layer_type"] == "vector"
+
+
 def test_extracts_repair_strategy_from_failed_attempt_before_success():
     trace = ExecutionTrace(trace_id="trace-1", task_id="task-1")
     failed_observation = ToolObservation(

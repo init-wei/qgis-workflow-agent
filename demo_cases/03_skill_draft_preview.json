@@ -1,8 +1,8 @@
 {
   "case_id": "skill_draft_preview",
-  "title": "SkillDraft preview from a successful trace",
-  "summary": "A successful processing trace is generalized into an unregistered SkillDraft and rendered with replacement variables.",
-  "tags": ["skill-draft", "reuse-preview", "mock", "trace"],
+  "title": "Registered skill execution preview from a successful trace",
+  "summary": "A successful processing trace is generalized into a SkillDraft, auto-registered for the demo, and rendered into a controlled ToolCallPlan preview.",
+  "tags": ["skill-draft", "skill-registration", "reuse-preview", "mock", "trace"],
   "reuse_variables": {
     "input_path_1": "shared/demo/reuse_input.gpkg",
     "output_path_1": "shared/demo/reuse_output.gpkg",
@@ -96,6 +96,7 @@
   },
   "metadata": {
     "include_skill_draft": true,
-    "baseline_comparison": "The successful trace can be generalized without automatically registering or executing a skill."
+    "auto_register_skill": true,
+    "baseline_comparison": "The successful trace can be generalized, registered under demo-only safety gates, and rendered as a controlled execution plan."
   }
 }

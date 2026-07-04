@@ -10,9 +10,7 @@ from uuid import uuid4
 
 from langchain_core.messages import AIMessage
 
-from agent.config import load_execution_mode
 from agent.planning.legacy_adapter import legacy_plan_to_task_plan
-from agent.nodes.react_agent_executor_node import react_agent_executor_node
 from agent.state import AgentState
 from agent.tools.execution_loop import ExecutionLoop
 from agent.tools.mcp_client import get_mcp_client
@@ -24,10 +22,7 @@ logger = logging.getLogger(__name__)
 
 
 async def executor_node(state: AgentState) -> dict[str, Any]:
-    """Dispatch to the configured execution mode."""
-
-    if load_execution_mode() == "react_agent":
-        return await react_agent_executor_node(state)
+    """Execute the reviewed TaskPlan through the controlled loop runtime."""
     return await controlled_executor_node(state)
 
 

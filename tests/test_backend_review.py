@@ -169,6 +169,11 @@ def test_get_app_with_checkpointer_interrupts_before_risk_review(monkeypatch):
     asyncio.run(_assert_get_app_with_checkpointer_interrupts_before_risk_review(monkeypatch))
 
 
+def test_default_upload_dir_matches_documented_shared_uploads_path():
+    assert backend_main.DEFAULT_UPLOAD_DIR.name == "uploads"
+    assert backend_main.DEFAULT_UPLOAD_DIR.parent == backend_main.SHARED_DIR
+
+
 async def _assert_get_app_with_checkpointer_interrupts_before_risk_review(monkeypatch):
     captured = {}
     app = object()

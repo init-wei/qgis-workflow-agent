@@ -17,6 +17,7 @@ def test_demo_cases_endpoint_lists_fixture_summaries():
         "simple_success",
         "failure_repair",
         "skill_draft_preview",
+        "skill_reuse_live_smoke",
     ]
     assert payload["cases"][0]["trace_status"] == "success"
 
@@ -39,6 +40,11 @@ def test_demo_case_detail_endpoint_includes_replay_summary():
     assert payload["case"]["case_id"] == "skill_draft_preview"
     assert payload["replay"]["status"] == "success"
     assert payload["replay"]["skill_draft"]["is_registered"] is False
+    assert payload["replay"]["registered_skill"]["is_registered"] is True
+    assert (
+        payload["replay"]["skill_execution_plan"]["status"]
+        == "ready_for_controlled_execution"
+    )
 
 
 def test_unknown_demo_case_endpoint_returns_404():

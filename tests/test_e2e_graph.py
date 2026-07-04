@@ -59,22 +59,18 @@ def test_graph_end_to_end():
     print("  2. PostgreSQL数据库正在运行并导入了GDAL文档")
     print("  3. QGIS MCP服务器正在运行")
     print("="*60 + "\n")
-    
-    return True
 
 
 if __name__ == "__main__":
-    success = test_graph_end_to_end()
-    
-    if success:
-        print("\n" + "="*60)
-        print("端到端测试完成！")
-        print("="*60)
-        print("\n✅ Agent Graph已成功构建并准备就绪")
-        print("\n下一步:")
-        print("1. 根据差异分析报告继续完善各个节点的功能")
-        print("2. 实现HITL机制（Human-in-the-Loop）")
-        print("3. 完善Executor的思考模型支持和runtime_api_rag")
-        print("4. 完善Reflector的人工结项检查")
-        print("5. 集成Chainlit UI进行完整的端到端测试")
-        print("="*60 + "\n")
+    test_graph_end_to_end()
+    print("\n" + "="*60)
+    print("端到端测试完成！")
+    print("="*60)
+    print("\n✅ Agent Graph已成功构建并准备就绪")
+    print("\n下一步:")
+    print("1. 根据差异分析报告继续完善各个节点的功能")
+    print("2. 实现HITL机制（Human-in-the-Loop）")
+    print("3. 完善Executor的思考模型支持和runtime_api_rag")
+    print("4. 完善Reflector的人工结项检查")
+    print("5. 集成Chainlit UI进行完整的端到端测试")
+    print("="*60 + "\n")

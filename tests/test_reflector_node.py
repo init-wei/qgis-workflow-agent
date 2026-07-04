@@ -11,6 +11,7 @@ sys.path.insert(0, str(project_root))
 
 
 import asyncio
+import pytest
 from dotenv import load_dotenv
 
 # 加载.env环境变量
@@ -19,6 +20,9 @@ load_dotenv()
 from agent.state import create_initial_state, Plan, Step
 from langchain_core.messages import AIMessage
 from agent.nodes.reflector_node import reflector_node
+
+
+pytestmark = pytest.mark.external
 
 
 async def test_reflector_node():

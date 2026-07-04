@@ -3,12 +3,17 @@
 RAG工具测试
 """
 
+import pytest
+
 from agent.tools.rag import (
     search_gdal_docs,
     search_gdal_docs_fuzzy,
     search_cookbook,
     search_pyqgis_docs
 )
+
+
+pytestmark = pytest.mark.database
 
 
 def test_search_gdal_docs():

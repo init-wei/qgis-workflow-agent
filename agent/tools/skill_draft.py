@@ -20,6 +20,7 @@ PATH_KEY_HINTS = ("path", "file", "filename", "uri")
 INPUT_KEY_HINTS = ("input", "source")
 OUTPUT_KEY_HINTS = ("output", "dest", "destination", "save", "export")
 LAYER_KEY_HINTS = ("layer", "layer_name", "layer_id", "name")
+STATIC_LITERAL_KEYS = {"layer_type", "provider"}
 
 
 class SkillExtractionError(ValueError):
@@ -138,6 +139,8 @@ class _TemplateBuilder:
     ) -> SkillVariableKind | None:
         normalized_keys = [key.lower() for key in key_path]
         leaf_key = normalized_keys[-1] if normalized_keys else ""
+        if leaf_key in STATIC_LITERAL_KEYS:
+            return None
         if artifact and _looks_path_like(value):
             return "artifact_path"
         if _has_hint(leaf_key, INPUT_KEY_HINTS) and _looks_path_like(value):

@@ -26,6 +26,7 @@ REQUIRED_DEMO_CASES = (
     "01_simple_success.json",
     "02_failure_repair.json",
     "03_skill_draft_preview.json",
+    "04_skill_reuse_live_smoke.json",
 )
 
 
@@ -78,9 +79,18 @@ def check_frontend_dist(root: Path = PROJECT_ROOT) -> DemoCheck:
 
 DEFAULT_RUN_SMOKE_TRACE_PATH = Path(".target/demo/controlled_smoke_v0_1.jsonl")
 DEFAULT_DEMO_SMOKE_TRACE_PATH = Path("exports/geotool_traces/controlled_smoke_v0_1.jsonl")
+DEFAULT_SKILL_REUSE_TRACE_PATH = Path(".target/demo/skill_reuse_smoke_v0_1.jsonl")
 
 
-def _resolve_trace_path(root: Path, trace_path: Path | None) -> Path:
+def _resolve_path(root: Path, path: Path | None, default_path: Path) -> Path:
+    if path is not None and path.is_absolute():
+        return path
+    if path is not None:
+        return root / path
+    return root / default_path
+
+
+def _resolve_controlled_trace_path(root: Path, trace_path: Path | None) -> Path:
     if trace_path is not None and trace_path.is_absolute():
         return trace_path
     if trace_path is not None:
@@ -92,11 +102,15 @@ def _resolve_trace_path(root: Path, trace_path: Path | None) -> Path:
     return root / DEFAULT_DEMO_SMOKE_TRACE_PATH
 
 
+def _resolve_skill_reuse_trace_path(root: Path, trace_path: Path | None) -> Path:
+    return _resolve_path(root, trace_path, DEFAULT_SKILL_REUSE_TRACE_PATH)
+
+
 def check_controlled_smoke_trace(
     root: Path = PROJECT_ROOT,
     trace_path: Path | None = None,
 ) -> DemoCheck:
-    trace_path = _resolve_trace_path(root, trace_path)
+    trace_path = _resolve_controlled_trace_path(root, trace_path)
     if not trace_path.exists():
         return DemoCheck(
             "Real MCP smoke",
@@ -133,32 +147,87 @@ def check_controlled_smoke_trace(
     )
 
 
+def check_skill_reuse_smoke_trace(
+    root: Path = PROJECT_ROOT,
+    trace_path: Path | None = None,
+) -> DemoCheck:
+    trace_path = _resolve_skill_reuse_trace_path(root, trace_path)
+    if not trace_path.exists():
+        return DemoCheck(
+            "Skill reuse smoke",
+            False,
+            False,
+            "skill_reuse_smoke_v0_1.jsonl is missing. Run scripts/run_skill_reuse_smoke.py when QGIS is available.",
+        )
+
+    try:
+        first_line = trace_path.read_text(encoding="utf-8").splitlines()[0]
+        payload = json.loads(first_line)
+    except Exception as exc:  # noqa: BLE001 - surface operator-friendly preflight detail.
+        return DemoCheck(
+            "Skill reuse smoke",
+            False,
+            False,
+            f"Could not parse Skill reuse smoke trace: {exc}",
+        )
+
+    observations = [
+        observation
+        for observation in payload.get("observations", [])
+        if isinstance(observation, dict)
+    ]
+    successful_tools = {
+        observation.get("tool")
+        for observation in observations
+        if observation.get("status") == "success"
+    }
+    required_tools = {"add_layer", "capture_map_canvas"}
+    if payload.get("final_status") == "success" and required_tools <= successful_tools:
+        return DemoCheck(
+            "Skill reuse smoke",
+            True,
+            False,
+            f"Trace {trace_path} present with successful tools: {', '.join(sorted(successful_tools))}.",
+        )
+    return DemoCheck(
+        "Skill reuse smoke",
+        False,
+        False,
+        (
+            f"Trace {trace_path} present but final_status={payload.get('final_status')!s}, "
+            f"successful_tools={sorted(tool for tool in successful_tools if tool)!r}."
+        ),
+    )
+
+
 def check_geotool_trace_validation(
     root: Path = PROJECT_ROOT,
     geotool_root: Path | None = None,
-    smoke_trace_path: Path | None = None,
+    trace_path: Path | None = None,
+    *,
+    name: str = "GeoTool trace validation",
 ) -> DemoCheck:
     if geotool_root is None:
         return DemoCheck(
-            "GeoTool trace validation",
+            name,
             False,
             False,
             "GeoTool root is not configured. Pass --geotool-root to validate downstream trace import.",
         )
 
-    trace_path = _resolve_trace_path(root, smoke_trace_path)
-    if not trace_path.exists():
+    resolved_trace_path = _resolve_controlled_trace_path(root, trace_path)
+    if not resolved_trace_path.exists():
         return DemoCheck(
-            "GeoTool trace validation",
+            name,
             False,
             False,
-            "controlled_smoke_v0_1.jsonl is missing. Run scripts/run_controlled_execution_smoke.py first.",
+            f"{resolved_trace_path.name} is missing. Run the matching smoke script first.",
         )
 
     validator_path = geotool_root / "training" / "scripts" / "validate_qgis_trace.py"
     if not validator_path.exists():
         return DemoCheck(
-            "GeoTool trace validation",
+            name,
             False,
             False,
             f"GeoTool validator not found at {validator_path}.",
@@ -170,7 +239,7 @@ def check_geotool_trace_validation(
             "run",
             "python",
             "training/scripts/validate_qgis_trace.py",
-            str(trace_path),
+            str(resolved_trace_path),
         ],
         cwd=geotool_root,
         text=True,
@@ -178,10 +247,14 @@ def check_geotool_trace_validation(
         check=False,
     )
     output = (result.stdout or result.stderr).strip()
-    message = f"Trace {trace_path}\n{output}" if output else f"Trace {trace_path}"
+    message = (
+        f"Trace {resolved_trace_path}\n{output}"
+        if output
+        else f"Trace {resolved_trace_path}"
+    )
     if result.returncode == 0:
-        return DemoCheck("GeoTool trace validation", True, False, message)
-    return DemoCheck("GeoTool trace validation", False, False, message)
+        return DemoCheck(name, True, False, message)
+    return DemoCheck(name, False, False, message)
 
 
 def build_checks(
@@ -190,8 +263,13 @@ def build_checks(
     skip_external_smoke: bool = False,
     geotool_root: Path | None = None,
     smoke_trace_path: Path | None = None,
+    skill_reuse_trace_path: Path | None = None,
 ) -> list[DemoCheck]:
-    resolved_smoke_trace_path = _resolve_trace_path(root, smoke_trace_path)
+    resolved_smoke_trace_path = _resolve_controlled_trace_path(root, smoke_trace_path)
+    resolved_skill_reuse_trace_path = _resolve_skill_reuse_trace_path(
+        root,
+        skill_reuse_trace_path,
+    )
     checks = [
         check_static_demo_cases(root),
         check_frontend_dist(root),
@@ -208,9 +286,26 @@ def build_checks(
 
     if not skip_external_smoke:
         checks.append(check_controlled_smoke_trace(root, resolved_smoke_trace_path))
+        checks.append(check_skill_reuse_smoke_trace(root, resolved_skill_reuse_trace_path))
 
     if geotool_root is not None:
-        checks.append(check_geotool_trace_validation(root, geotool_root, resolved_smoke_trace_path))
+        checks.append(
+            check_geotool_trace_validation(
+                root,
+                geotool_root,
+                resolved_smoke_trace_path,
+                name="GeoTool trace validation (controlled smoke)",
+            )
+        )
+        if skill_reuse_trace_path is not None or resolved_skill_reuse_trace_path.exists():
+            checks.append(
+                check_geotool_trace_validation(
+                    root,
+                    geotool_root,
+                    resolved_skill_reuse_trace_path,
+                    name="GeoTool trace validation (Skill reuse)",
+                )
+            )
 
     return checks
 
@@ -239,6 +334,12 @@ def parse_args() -> argparse.Namespace:
         help="Optional smoke trace JSONL path to validate. Relative paths are resolved from the QGIS-Agent root.",
     )
     parser.add_argument(
+        "--skill-reuse-trace",
+        type=Path,
+        default=None,
+        help="Optional Skill reuse smoke trace JSONL path to validate. Relative paths are resolved from the QGIS-Agent root.",
+    )
+    parser.add_argument(
         "--geotool-root",
         type=Path,
         default=None,
@@ -255,6 +356,7 @@ def main() -> int:
         skip_external_smoke=args.skip_external_smoke,
         geotool_root=args.geotool_root,
         smoke_trace_path=args.smoke_trace,
+        skill_reuse_trace_path=args.skill_reuse_trace,
     )
     print(summarize_demo_checks(checks))
     required_ok = all(check.ok for check in checks if check.required)

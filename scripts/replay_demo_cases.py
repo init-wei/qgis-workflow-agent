@@ -49,6 +49,10 @@ def main() -> int:
             print(f"  repairs={len(result.repair_summaries)}")
         if result.skill_draft:
             print(f"  skill_draft={result.skill_draft['draft_id']} registered=false")
+        if result.registered_skill:
+            print(f"  registered_skill={result.registered_skill['skill_id']}")
+        if result.skill_execution_plan:
+            print(f"  skill_execution_plan={result.skill_execution_plan['status']}")
         if result.reuse_preview:
             print(f"  reuse_tool={result.reuse_preview['tool_name']}")
     return 0

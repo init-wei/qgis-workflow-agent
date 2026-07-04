@@ -56,4 +56,9 @@ The backend can serve the built SPA when `ui/frontend/dist/` exists. Direct rout
 
 ## Trace Demo
 
-`/trace-demo` is a read-only inspection page for static demo cases. It does not execute QGIS, call an LLM, register skills, or replace the main chat UI.
+`/trace-demo` is a read-only inspection page for static demo cases. It does
+not execute QGIS, call an LLM, or replace the main chat UI. The
+`skill_draft_preview` case demonstrates demo-only Skill registration by showing
+the extracted `SkillDraft`, the registered skill metadata, and the rendered
+controlled execution plan that would still need to pass the normal policy and
+review gates before live execution.

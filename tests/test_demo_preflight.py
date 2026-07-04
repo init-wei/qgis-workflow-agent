@@ -7,6 +7,7 @@ from scripts.demo_preflight import (
     check_geotool_trace_validation,
     check_controlled_smoke_trace,
     check_frontend_dist,
+    check_skill_reuse_smoke_trace,
     check_static_demo_cases,
     summarize_demo_checks,
 )
@@ -26,13 +27,14 @@ def test_summarize_demo_checks_marks_required_failure_as_fail():
     assert "[FAIL] Frontend build: dist missing" in summary
 
 
-def test_static_demo_case_check_requires_all_three_demo_cases(tmp_path):
+def test_static_demo_case_check_requires_all_demo_cases(tmp_path):
     demo_dir = tmp_path / "demo_cases"
     demo_dir.mkdir()
     for name in [
         "01_simple_success.json",
         "02_failure_repair.json",
         "03_skill_draft_preview.json",
+        "04_skill_reuse_live_smoke.json",
     ]:
         (demo_dir / name).write_text("{}", encoding="utf-8")
 
@@ -40,7 +42,7 @@ def test_static_demo_case_check_requires_all_three_demo_cases(tmp_path):
 
     assert result.ok is True
     assert result.required is True
-    assert "3 static demo cases" in result.message
+    assert "4 static demo cases" in result.message
 
 
 def test_static_demo_case_check_reports_missing_case(tmp_path):
@@ -52,6 +54,7 @@ def test_static_demo_case_check_reports_missing_case(tmp_path):
     assert result.ok is False
     assert "02_failure_repair.json" in result.message
     assert "03_skill_draft_preview.json" in result.message
+    assert "04_skill_reuse_live_smoke.json" in result.message
 
 
 def test_frontend_dist_check_accepts_built_spa(tmp_path):
@@ -145,6 +148,31 @@ def test_controlled_smoke_trace_check_reports_failed_trace(tmp_path):
     assert result.ok is False
     assert result.required is False
     assert "final_status=failed" in result.message
+
+
+def test_skill_reuse_smoke_trace_check_validates_success_trace(tmp_path):
+    trace_path = tmp_path / ".target" / "demo" / "skill_reuse_smoke_v0_1.jsonl"
+    trace_path.parent.mkdir(parents=True)
+    trace_path.write_text(
+        '{"final_status":"success","metadata":{"source_project":"qgis-workflow-agent"},"observations":[{"tool":"add_layer","status":"success"},{"tool":"capture_map_canvas","status":"success"}]}\n',
+        encoding="utf-8",
+    )
+
+    result = check_skill_reuse_smoke_trace(tmp_path)
+
+    assert result.ok is True
+    assert result.required is False
+    assert "Skill reuse smoke" in result.name
+    assert "add_layer" in result.message
+    assert "capture_map_canvas" in result.message
+
+
+def test_skill_reuse_smoke_trace_check_reports_missing_trace(tmp_path):
+    result = check_skill_reuse_smoke_trace(tmp_path)
+
+    assert result.ok is False
+    assert result.required is False
+    assert "run_skill_reuse_smoke.py" in result.message
 
 
 def test_build_checks_can_skip_external_services():
@@ -243,6 +271,7 @@ def test_build_checks_adds_geotool_trace_validation_when_configured(tmp_path, mo
         "01_simple_success.json",
         "02_failure_repair.json",
         "03_skill_draft_preview.json",
+        "04_skill_reuse_live_smoke.json",
     ]:
         (qgis_root / "demo_cases" / name).write_text("{}", encoding="utf-8")
     dist = qgis_root / "ui" / "frontend" / "dist"
@@ -251,8 +280,8 @@ def test_build_checks_adds_geotool_trace_validation_when_configured(tmp_path, mo
 
     monkeypatch.setattr(
         "scripts.demo_preflight.check_geotool_trace_validation",
-        lambda root, geotool_root, smoke_trace_path: DemoCheck(
-            "GeoTool trace validation", True, False, "ok"
+        lambda root, geotool_root, smoke_trace_path, *, name="GeoTool trace validation": DemoCheck(
+            name, True, False, "ok"
         ),
     )
 
@@ -265,7 +294,7 @@ def test_build_checks_adds_geotool_trace_validation_when_configured(tmp_path, mo
         smoke_trace_path=smoke_trace_path,
     )
 
-    assert [check.name for check in checks][-1] == "GeoTool trace validation"
+    assert [check.name for check in checks][-1] == "GeoTool trace validation (controlled smoke)"
 
 
 def test_build_checks_uses_custom_smoke_trace_for_preflight(tmp_path):
@@ -275,6 +304,7 @@ def test_build_checks_uses_custom_smoke_trace_for_preflight(tmp_path):
         "01_simple_success.json",
         "02_failure_repair.json",
         "03_skill_draft_preview.json",
+        "04_skill_reuse_live_smoke.json",
     ]:
         (qgis_root / "demo_cases" / name).write_text("{}", encoding="utf-8")
     dist = qgis_root / "ui" / "frontend" / "dist"
@@ -309,6 +339,7 @@ def test_build_checks_prefers_default_run_artifact_for_geotool_validation(
         "01_simple_success.json",
         "02_failure_repair.json",
         "03_skill_draft_preview.json",
+        "04_skill_reuse_live_smoke.json",
     ]:
         (qgis_root / "demo_cases" / name).write_text("{}", encoding="utf-8")
     dist = qgis_root / "ui" / "frontend" / "dist"
@@ -322,9 +353,9 @@ def test_build_checks_prefers_default_run_artifact_for_geotool_validation(
     )
     seen_paths = []
 
-    def fake_check(root, geotool_root, smoke_trace_path):
+    def fake_check(root, geotool_root, smoke_trace_path, *, name="GeoTool trace validation"):
         seen_paths.append(smoke_trace_path)
-        return DemoCheck("GeoTool trace validation", True, False, "ok")
+        return DemoCheck(name, True, False, "ok")
 
     monkeypatch.setattr(
         "scripts.demo_preflight.check_geotool_trace_validation",
@@ -334,3 +365,53 @@ def test_build_checks_prefers_default_run_artifact_for_geotool_validation(
     build_checks(root=qgis_root, skip_services=True, geotool_root=geotool_root)
 
     assert seen_paths == [run_trace]
+
+
+def test_build_checks_validates_skill_reuse_trace_with_geotool_when_present(
+    tmp_path,
+    monkeypatch,
+):
+    qgis_root = tmp_path / "qgis"
+    geotool_root = tmp_path / "geotool"
+    (qgis_root / "demo_cases").mkdir(parents=True)
+    for name in [
+        "01_simple_success.json",
+        "02_failure_repair.json",
+        "03_skill_draft_preview.json",
+        "04_skill_reuse_live_smoke.json",
+    ]:
+        (qgis_root / "demo_cases" / name).write_text("{}", encoding="utf-8")
+    dist = qgis_root / "ui" / "frontend" / "dist"
+    dist.mkdir(parents=True)
+    (dist / "index.html").write_text("<div id='app'></div>", encoding="utf-8")
+    controlled_trace = qgis_root / ".target" / "demo" / "controlled_smoke_v0_1.jsonl"
+    skill_reuse_trace = qgis_root / ".target" / "demo" / "skill_reuse_smoke_v0_1.jsonl"
+    controlled_trace.parent.mkdir(parents=True)
+    controlled_trace.write_text(
+        '{"final_status":"success","observations":[{"status":"success"}]}\n',
+        encoding="utf-8",
+    )
+    skill_reuse_trace.write_text(
+        '{"final_status":"success","observations":[{"tool":"add_layer","status":"success"},{"tool":"capture_map_canvas","status":"success"}]}\n',
+        encoding="utf-8",
+    )
+    seen_paths = []
+
+    def fake_check(root, geotool_root, smoke_trace_path, *, name="GeoTool trace validation"):
+        seen_paths.append(smoke_trace_path)
+        return DemoCheck(name, True, False, "ok")
+
+    monkeypatch.setattr(
+        "scripts.demo_preflight.check_geotool_trace_validation",
+        fake_check,
+    )
+
+    build_checks(
+        root=qgis_root,
+        skip_services=True,
+        geotool_root=geotool_root,
+        smoke_trace_path=controlled_trace,
+        skill_reuse_trace_path=skill_reuse_trace,
+    )
+
+    assert seen_paths == [controlled_trace, skill_reuse_trace]

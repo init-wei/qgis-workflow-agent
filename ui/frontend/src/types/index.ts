@@ -110,6 +110,7 @@ export interface DemoCaseSummary {
   artifact_count: number
   has_repair: boolean
   has_skill_draft: boolean
+  has_registered_skill: boolean
 }
 
 export interface DemoReplayResult {
@@ -119,6 +120,8 @@ export interface DemoReplayResult {
   artifact_count: number
   repair_summaries: Record<string, any>[]
   skill_draft?: Record<string, any> | null
+  registered_skill?: Record<string, any> | null
+  skill_execution_plan?: Record<string, any> | null
   reuse_preview?: Record<string, any> | null
   trace_summary: Record<string, any>
 }

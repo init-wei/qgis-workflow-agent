@@ -10,6 +10,7 @@ import asyncio
 import json
 import logging
 import uuid
+from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Dict, Any, Optional, AsyncGenerator, List
 from pathlib import Path
@@ -62,16 +63,28 @@ logger = logging.getLogger(__name__)
 WEB_UI_HOST = os.getenv("WEB_UI_HOST", "0.0.0.0")
 WEB_UI_PORT = int(os.getenv("WEB_UI_PORT", "9000"))
 SHARED_DIR = _project_root / "shared"
+DEFAULT_UPLOAD_DIR = SHARED_DIR / "uploads"
 UPLOAD_DIR = Path(
-    os.getenv("UPLOAD_DIR", str(SHARED_DIR / "upload"))
+    os.getenv("UPLOAD_DIR", str(DEFAULT_UPLOAD_DIR))
 )
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    await preload_sessions_from_db()
+    try:
+        yield
+    finally:
+        await close_checkpointer_pool()
+
 
 # 创建 FastAPI 应用
 app = FastAPI(
     title="QGIS Agent Web UI",
     description="LangGraph Agent 的 Web 界面",
-    version="0.1.0"
+    version="0.1.0",
+    lifespan=lifespan,
 )
 
 # 配置 CORS
@@ -231,7 +244,6 @@ async def fetch_checkpoint_thread_ids(app_instance) -> List[str]:
     return [thread_id for (thread_id,) in rows if thread_id]
 
 
-@app.on_event("startup")
 async def preload_sessions_from_db() -> None:
     """启动时从数据库预加载会话列表"""
     try:
@@ -261,7 +273,6 @@ async def preload_sessions_from_db() -> None:
         logger.warning(f"启动预加载会话失败: {e}")
 
 
-@app.on_event("shutdown")
 async def close_checkpointer_pool() -> None:
     """关闭 AsyncConnectionPool，避免残留后台任务"""
     global _app_with_checkpointer

@@ -61,16 +61,16 @@ Implemented in:
 
 The exporter writes JSONL seed records containing task/query metadata, tool calls, observations, repair actions, final status, and source metadata. These records are intended as dataset seed material, not as a training pipeline by themselves.
 
-## Q0-6: Baseline Execution Mode
+## Q0-6: Controlled Execution Mode
 
 Implemented in:
 
 - `agent/config.py`
-- `agent/nodes/react_agent_executor_node.py`
 - `agent/nodes/executor_node.py`
 - `tests/test_execution_mode_config.py`
 
-The default mode is `tool_call_plan`. The legacy `react_agent` mode remains available for baseline comparison through `QGIS_AGENT_EXECUTION_MODE=react_agent`, but it is not the main execution path.
+The runtime uses `tool_call_plan`. The earlier `react_agent` baseline was removed
+after the controlled execution loop became the only supported path.
 
 ## Q0-7: Tests and Quality Gate
 

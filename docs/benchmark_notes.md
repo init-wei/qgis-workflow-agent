@@ -20,7 +20,8 @@ These commands run without QGIS Desktop, MCP, PostgreSQL, or an LLM key.
 | --- | --- | --- |
 | `simple_success` | one successful `ExecutionTrace` attempt | tool call, normalized observation, artifact recording |
 | `failure_repair` | failed attempt, repair action, successful retry | parameter error is explainable and repair metadata is replayable |
-| `skill_draft_preview` | successful trace, `SkillDraft`, reuse preview | a trace can be generalized without registering or executing a skill |
+| `skill_draft_preview` | successful trace, `SkillDraft`, demo registration, controlled execution-plan preview | a trace can be generalized and rendered into reusable tool calls under safety gates |
+| `skill_reuse_live_smoke` | successful add-layer/screenshot trace, demo registration, live smoke script | registered Skill reuse can feed the controlled QGIS MCP route |
 
 ## Baseline vs Controlled Execution
 
@@ -31,13 +32,20 @@ Current evidence supports these claims:
 - Trace attempts are JSON-serializable and replayable from fixtures.
 - Repair metadata can be inspected after a parameter error.
 - SkillDraft extraction can generalize a successful trace into variables.
+- Demo-only Skill registration can render an explicit controlled execution plan
+  from replacement variables.
+- The registered Skill reuse smoke script can run the rendered plan through the
+  controlled executor when QGIS MCP is available.
 - The demo API and trace viewer inspect static evidence without external services.
 
 Current evidence does not support these claims:
 
 - Controlled execution is faster than legacy execution.
 - Controlled execution has a higher real-world QGIS task success rate.
-- SkillDraft reuse is production-ready or automatically registered.
+- Registered Skill reuse is production-ready or safe to run without the normal
+  `ToolPolicy` and review gates.
+- Registered Skill reuse covers complex QGIS Processing parameter repair beyond
+  the current add-layer/screenshot smoke.
 
 ## Limits
 

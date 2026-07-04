@@ -4,7 +4,11 @@ MCP客户端测试
 """
 
 import asyncio
+import pytest
 from agent.tools.mcp_client import QGISMCPClient, get_mcp_client
+
+
+pytestmark = pytest.mark.external
 
 
 async def test_mcp_client_connection():

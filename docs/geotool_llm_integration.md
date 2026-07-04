@@ -136,17 +136,10 @@ The v0.1 adapter does not align these fields yet:
 
 `qgis-workflow-agent` continues using its internal Pydantic models and legacy UI `Plan` compatibility layer. GeoTool-compatible payloads are generated at the edges for integration tests, JSONL export, and later model training. If GeoTool-LLM changes its schema, the adapter should absorb that difference without changing the runtime execution contracts.
 
-## Execution Mode Switching
+## Execution Runtime
 
-The controlled route remains the default:
+The runtime uses the controlled route:
 
 ```powershell
 $env:QGIS_AGENT_EXECUTION_MODE = "tool_call_plan"
-```
-
-The legacy LangGraph create-agent route remains available for baseline
-comparison:
-
-```powershell
-$env:QGIS_AGENT_EXECUTION_MODE = "react_agent"
 ```

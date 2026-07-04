@@ -25,6 +25,11 @@ The project is intentionally conservative: the default path uses explicit tool-c
 - Pause for high-risk actions such as `execute_code`, delete/remove, overwrite, and save-project operations.
 - Run a minimal real E2E task that loads `shared/uploads/phase11_points.geojson` into QGIS.
 - Replay static demo traces and inspect them through `/trace-demo`.
+- Extract a `SkillDraft` from a successful trace, auto-register it under demo-only
+  safety gates, and render a controlled `ToolCallPlan` preview for reuse.
+- Run an optional real Skill reuse smoke that renders a registered skill into
+  `add_layer` / `capture_map_canvas` calls and executes them through the
+  controlled QGIS MCP route.
 - Export GeoTool interop v0.1 trace seed JSONL for downstream dataset work.
 
 ## Current Limits
@@ -32,20 +37,12 @@ The project is intentionally conservative: the default path uses explicit tool-c
 - The proven real E2E scope is intentionally small: layer loading plus review/confirmation.
 - Processing workflows are supported by the contracts, but complex parameter repair still needs more validation.
 - RAG is connected as retrieval evidence for execution/repair context; it is not a complete parameter-schema verifier yet.
-- `SkillDraft` extraction creates draft evidence only. Skills are not registered, retrieved, or auto-executed.
+- Automatic Skill registration is currently demo-only. Registered skills render
+  inspectable `ToolCallPlan` previews; live execution still goes through the
+  controlled executor, tool policy, and review gates.
 - Static demo cases are replay evidence, not a real QGIS performance benchmark.
-- The legacy `react_agent` mode remains available only as a baseline comparison path. The default mode is `tool_call_plan`.
-
-Switch execution modes with:
-
-```powershell
-$env:QGIS_AGENT_EXECUTION_MODE = "tool_call_plan"
-$env:QGIS_AGENT_EXECUTION_MODE = "react_agent"
-```
-
-`tool_call_plan` runs the controlled `TaskPlan -> ToolCallPlan -> ExecutionLoop`
-route. `react_agent` keeps the legacy create-agent route available for
-comparison and fallback.
+- The legacy unconstrained executor has been removed; the runtime uses the
+  controlled `TaskPlan -> ToolCallPlan -> ExecutionLoop` route.
 
 ## Requirements
 
@@ -151,6 +148,10 @@ uv run python scripts/demo_preflight.py
 # Writes ignored daily-run artifacts under .target/demo by default.
 uv run python scripts/run_controlled_execution_smoke.py
 uv run python scripts/demo_preflight.py --skip-services --geotool-root D:\project_files\GeoTool-LLM
+
+# Real registered Skill reuse smoke
+uv run python scripts/run_skill_reuse_smoke.py
+uv run python scripts/demo_preflight.py --skip-services --skill-reuse-trace .target\demo\skill_reuse_smoke_v0_1.jsonl --geotool-root D:\project_files\GeoTool-LLM
 
 # Intentionally refresh tracked demo evidence under exports/geotool_traces
 uv run python scripts/run_controlled_execution_smoke.py --update-demo-artifacts
