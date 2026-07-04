@@ -80,6 +80,20 @@ def test_controlled_smoke_trace_check_validates_success_trace(tmp_path):
     assert "final_status=success" in result.message
 
 
+def test_controlled_smoke_trace_check_accepts_custom_trace_path(tmp_path):
+    trace_path = tmp_path / ".target" / "demo" / "controlled_smoke_v0_1.jsonl"
+    trace_path.parent.mkdir(parents=True)
+    trace_path.write_text(
+        '{"final_status":"success","observations":[{"status":"success"}]}\n',
+        encoding="utf-8",
+    )
+
+    result = check_controlled_smoke_trace(tmp_path, trace_path)
+
+    assert result.ok is True
+    assert "final_status=success" in result.message
+
+
 def test_controlled_smoke_trace_check_reports_failed_trace(tmp_path):
     trace_path = tmp_path / "exports" / "geotool_traces" / "controlled_smoke_v0_1.jsonl"
     trace_path.parent.mkdir(parents=True)
@@ -132,7 +146,7 @@ def test_geotool_trace_validation_runs_geotool_cli(tmp_path, monkeypatch):
 
     monkeypatch.setattr(subprocess, "run", fake_run)
 
-    result = check_geotool_trace_validation(qgis_root, geotool_root)
+    result = check_geotool_trace_validation(qgis_root, geotool_root, trace_path)
 
     assert result.ok is True
     assert result.required is False
@@ -175,7 +189,7 @@ def test_geotool_trace_validation_reports_cli_failure(tmp_path, monkeypatch):
 
     monkeypatch.setattr(subprocess, "run", fake_run)
 
-    result = check_geotool_trace_validation(qgis_root, geotool_root)
+    result = check_geotool_trace_validation(qgis_root, geotool_root, trace_path)
 
     assert result.ok is False
     assert result.required is False
@@ -198,14 +212,48 @@ def test_build_checks_adds_geotool_trace_validation_when_configured(tmp_path, mo
 
     monkeypatch.setattr(
         "scripts.demo_preflight.check_geotool_trace_validation",
-        lambda root, geotool_root: DemoCheck("GeoTool trace validation", True, False, "ok"),
+        lambda root, geotool_root, smoke_trace_path: DemoCheck(
+            "GeoTool trace validation", True, False, "ok"
+        ),
     )
 
+    smoke_trace_path = qgis_root / ".target" / "demo" / "controlled_smoke_v0_1.jsonl"
     checks = build_checks(
         root=qgis_root,
         skip_services=True,
         skip_external_smoke=True,
         geotool_root=geotool_root,
+        smoke_trace_path=smoke_trace_path,
     )
 
     assert [check.name for check in checks][-1] == "GeoTool trace validation"
+
+
+def test_build_checks_uses_custom_smoke_trace_for_preflight(tmp_path):
+    qgis_root = tmp_path / "qgis"
+    (qgis_root / "demo_cases").mkdir(parents=True)
+    for name in [
+        "01_simple_success.json",
+        "02_failure_repair.json",
+        "03_skill_draft_preview.json",
+    ]:
+        (qgis_root / "demo_cases" / name).write_text("{}", encoding="utf-8")
+    dist = qgis_root / "ui" / "frontend" / "dist"
+    dist.mkdir(parents=True)
+    (dist / "index.html").write_text("<div id='app'></div>", encoding="utf-8")
+    smoke_trace_path = qgis_root / ".target" / "demo" / "controlled_smoke_v0_1.jsonl"
+    smoke_trace_path.parent.mkdir(parents=True)
+    smoke_trace_path.write_text(
+        '{"final_status":"success","observations":[{"status":"success"}]}\n',
+        encoding="utf-8",
+    )
+
+    checks = build_checks(
+        root=qgis_root,
+        skip_services=True,
+        smoke_trace_path=smoke_trace_path,
+    )
+
+    real_smoke = next(check for check in checks if check.name == "Real MCP smoke")
+
+    assert real_smoke.ok is True

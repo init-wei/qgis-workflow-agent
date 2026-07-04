@@ -76,8 +76,22 @@ def check_frontend_dist(root: Path = PROJECT_ROOT) -> DemoCheck:
     )
 
 
-def check_controlled_smoke_trace(root: Path = PROJECT_ROOT) -> DemoCheck:
-    trace_path = root / "exports" / "geotool_traces" / "controlled_smoke_v0_1.jsonl"
+DEFAULT_SMOKE_TRACE_PATH = Path("exports/geotool_traces/controlled_smoke_v0_1.jsonl")
+
+
+def _resolve_trace_path(root: Path, trace_path: Path | None) -> Path:
+    if trace_path is None:
+        return root / DEFAULT_SMOKE_TRACE_PATH
+    if trace_path.is_absolute():
+        return trace_path
+    return root / trace_path
+
+
+def check_controlled_smoke_trace(
+    root: Path = PROJECT_ROOT,
+    trace_path: Path | None = None,
+) -> DemoCheck:
+    trace_path = _resolve_trace_path(root, trace_path)
     if not trace_path.exists():
         return DemoCheck(
             "Real MCP smoke",
@@ -117,6 +131,7 @@ def check_controlled_smoke_trace(root: Path = PROJECT_ROOT) -> DemoCheck:
 def check_geotool_trace_validation(
     root: Path = PROJECT_ROOT,
     geotool_root: Path | None = None,
+    smoke_trace_path: Path | None = None,
 ) -> DemoCheck:
     if geotool_root is None:
         return DemoCheck(
@@ -126,7 +141,7 @@ def check_geotool_trace_validation(
             "GeoTool root is not configured. Pass --geotool-root to validate downstream trace import.",
         )
 
-    trace_path = root / "exports" / "geotool_traces" / "controlled_smoke_v0_1.jsonl"
+    trace_path = _resolve_trace_path(root, smoke_trace_path)
     if not trace_path.exists():
         return DemoCheck(
             "GeoTool trace validation",
@@ -168,6 +183,7 @@ def build_checks(
     skip_services: bool = False,
     skip_external_smoke: bool = False,
     geotool_root: Path | None = None,
+    smoke_trace_path: Path | None = None,
 ) -> list[DemoCheck]:
     checks = [
         check_static_demo_cases(root),
@@ -184,10 +200,10 @@ def build_checks(
         )
 
     if not skip_external_smoke:
-        checks.append(check_controlled_smoke_trace(root))
+        checks.append(check_controlled_smoke_trace(root, smoke_trace_path))
 
     if geotool_root is not None:
-        checks.append(check_geotool_trace_validation(root, geotool_root))
+        checks.append(check_geotool_trace_validation(root, geotool_root, smoke_trace_path))
 
     return checks
 
@@ -210,6 +226,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--skip-services", action="store_true", help="Skip PostgreSQL, QGIS socket, and HTTP MCP checks.")
     parser.add_argument("--skip-external-smoke", action="store_true", help="Skip the optional real MCP smoke trace check.")
     parser.add_argument(
+        "--smoke-trace",
+        type=Path,
+        default=None,
+        help="Optional smoke trace JSONL path to validate. Relative paths are resolved from the QGIS-Agent root.",
+    )
+    parser.add_argument(
         "--geotool-root",
         type=Path,
         default=None,
@@ -225,6 +247,7 @@ def main() -> int:
         skip_services=args.skip_services,
         skip_external_smoke=args.skip_external_smoke,
         geotool_root=args.geotool_root,
+        smoke_trace_path=args.smoke_trace,
     )
     print(summarize_demo_checks(checks))
     required_ok = all(check.ok for check in checks if check.required)
