@@ -76,15 +76,20 @@ def check_frontend_dist(root: Path = PROJECT_ROOT) -> DemoCheck:
     )
 
 
-DEFAULT_SMOKE_TRACE_PATH = Path("exports/geotool_traces/controlled_smoke_v0_1.jsonl")
+DEFAULT_RUN_SMOKE_TRACE_PATH = Path(".target/demo/controlled_smoke_v0_1.jsonl")
+DEFAULT_DEMO_SMOKE_TRACE_PATH = Path("exports/geotool_traces/controlled_smoke_v0_1.jsonl")
 
 
 def _resolve_trace_path(root: Path, trace_path: Path | None) -> Path:
-    if trace_path is None:
-        return root / DEFAULT_SMOKE_TRACE_PATH
-    if trace_path.is_absolute():
+    if trace_path is not None and trace_path.is_absolute():
         return trace_path
-    return root / trace_path
+    if trace_path is not None:
+        return root / trace_path
+
+    run_trace_path = root / DEFAULT_RUN_SMOKE_TRACE_PATH
+    if run_trace_path.exists():
+        return run_trace_path
+    return root / DEFAULT_DEMO_SMOKE_TRACE_PATH
 
 
 def check_controlled_smoke_trace(
@@ -185,6 +190,7 @@ def build_checks(
     geotool_root: Path | None = None,
     smoke_trace_path: Path | None = None,
 ) -> list[DemoCheck]:
+    resolved_smoke_trace_path = _resolve_trace_path(root, smoke_trace_path)
     checks = [
         check_static_demo_cases(root),
         check_frontend_dist(root),
@@ -200,10 +206,10 @@ def build_checks(
         )
 
     if not skip_external_smoke:
-        checks.append(check_controlled_smoke_trace(root, smoke_trace_path))
+        checks.append(check_controlled_smoke_trace(root, resolved_smoke_trace_path))
 
     if geotool_root is not None:
-        checks.append(check_geotool_trace_validation(root, geotool_root, smoke_trace_path))
+        checks.append(check_geotool_trace_validation(root, geotool_root, resolved_smoke_trace_path))
 
     return checks
 

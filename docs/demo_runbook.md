@@ -73,7 +73,7 @@ uv run python scripts/run_controlled_execution_smoke.py --update-demo-artifacts
 Use this to show that the QGIS trace is useful downstream.
 
 ```powershell
-uv run python scripts/demo_preflight.py --skip-services --smoke-trace .target/demo/controlled_smoke_v0_1.jsonl --geotool-root D:\project_files\GeoTool-LLM
+uv run python scripts/demo_preflight.py --skip-services --geotool-root D:\project_files\GeoTool-LLM
 ```
 
 Then show:

@@ -80,6 +80,40 @@ def test_controlled_smoke_trace_check_validates_success_trace(tmp_path):
     assert "final_status=success" in result.message
 
 
+def test_controlled_smoke_trace_prefers_default_run_artifact(tmp_path):
+    tracked_trace = tmp_path / "exports" / "geotool_traces" / "controlled_smoke_v0_1.jsonl"
+    run_trace = tmp_path / ".target" / "demo" / "controlled_smoke_v0_1.jsonl"
+    tracked_trace.parent.mkdir(parents=True)
+    run_trace.parent.mkdir(parents=True)
+    tracked_trace.write_text(
+        '{"final_status":"failed","observations":[{"status":"failed"}]}\n',
+        encoding="utf-8",
+    )
+    run_trace.write_text(
+        '{"final_status":"success","observations":[{"status":"success"}]}\n',
+        encoding="utf-8",
+    )
+
+    result = check_controlled_smoke_trace(tmp_path)
+
+    assert result.ok is True
+    assert "final_status=success" in result.message
+
+
+def test_controlled_smoke_trace_falls_back_to_tracked_artifact(tmp_path):
+    tracked_trace = tmp_path / "exports" / "geotool_traces" / "controlled_smoke_v0_1.jsonl"
+    tracked_trace.parent.mkdir(parents=True)
+    tracked_trace.write_text(
+        '{"final_status":"success","observations":[{"status":"success"}]}\n',
+        encoding="utf-8",
+    )
+
+    result = check_controlled_smoke_trace(tmp_path)
+
+    assert result.ok is True
+    assert "final_status=success" in result.message
+
+
 def test_controlled_smoke_trace_check_accepts_custom_trace_path(tmp_path):
     trace_path = tmp_path / ".target" / "demo" / "controlled_smoke_v0_1.jsonl"
     trace_path.parent.mkdir(parents=True)
@@ -257,3 +291,41 @@ def test_build_checks_uses_custom_smoke_trace_for_preflight(tmp_path):
     real_smoke = next(check for check in checks if check.name == "Real MCP smoke")
 
     assert real_smoke.ok is True
+
+
+def test_build_checks_prefers_default_run_artifact_for_geotool_validation(
+    tmp_path,
+    monkeypatch,
+):
+    qgis_root = tmp_path / "qgis"
+    geotool_root = tmp_path / "geotool"
+    (qgis_root / "demo_cases").mkdir(parents=True)
+    for name in [
+        "01_simple_success.json",
+        "02_failure_repair.json",
+        "03_skill_draft_preview.json",
+    ]:
+        (qgis_root / "demo_cases" / name).write_text("{}", encoding="utf-8")
+    dist = qgis_root / "ui" / "frontend" / "dist"
+    dist.mkdir(parents=True)
+    (dist / "index.html").write_text("<div id='app'></div>", encoding="utf-8")
+    run_trace = qgis_root / ".target" / "demo" / "controlled_smoke_v0_1.jsonl"
+    run_trace.parent.mkdir(parents=True)
+    run_trace.write_text(
+        '{"final_status":"success","observations":[{"status":"success"}]}\n',
+        encoding="utf-8",
+    )
+    seen_paths = []
+
+    def fake_check(root, geotool_root, smoke_trace_path):
+        seen_paths.append(smoke_trace_path)
+        return DemoCheck("GeoTool trace validation", True, False, "ok")
+
+    monkeypatch.setattr(
+        "scripts.demo_preflight.check_geotool_trace_validation",
+        fake_check,
+    )
+
+    build_checks(root=qgis_root, skip_services=True, geotool_root=geotool_root)
+
+    assert seen_paths == [run_trace]
