@@ -69,15 +69,7 @@ Use this to show that the QGIS trace is useful downstream.
 
 ```powershell
 cd D:\project_files\GeoTool-LLM
-@'
-from pathlib import Path
-from geotool_core.traces import load_and_validate_qgis_trace_jsonl
-
-path = Path(r"D:\project_files\QGIS-Agent-Refactoring\exports\geotool_traces\controlled_smoke_v0_1.jsonl")
-traces = load_and_validate_qgis_trace_jsonl(path)
-print(f"traces={len(traces)} final_status={traces[0].final_status}")
-print([obs.tool for obs in traces[0].observations])
-'@ | uv run python -
+uv run python training/scripts/validate_qgis_trace.py D:\project_files\QGIS-Agent-Refactoring\exports\geotool_traces\controlled_smoke_v0_1.jsonl
 ```
 
 Then show:
