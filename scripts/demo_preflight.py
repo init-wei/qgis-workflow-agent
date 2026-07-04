@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -113,10 +114,60 @@ def check_controlled_smoke_trace(root: Path = PROJECT_ROOT) -> DemoCheck:
     )
 
 
+def check_geotool_trace_validation(
+    root: Path = PROJECT_ROOT,
+    geotool_root: Path | None = None,
+) -> DemoCheck:
+    if geotool_root is None:
+        return DemoCheck(
+            "GeoTool trace validation",
+            False,
+            False,
+            "GeoTool root is not configured. Pass --geotool-root to validate downstream trace import.",
+        )
+
+    trace_path = root / "exports" / "geotool_traces" / "controlled_smoke_v0_1.jsonl"
+    if not trace_path.exists():
+        return DemoCheck(
+            "GeoTool trace validation",
+            False,
+            False,
+            "controlled_smoke_v0_1.jsonl is missing. Run scripts/run_controlled_execution_smoke.py first.",
+        )
+
+    validator_path = geotool_root / "training" / "scripts" / "validate_qgis_trace.py"
+    if not validator_path.exists():
+        return DemoCheck(
+            "GeoTool trace validation",
+            False,
+            False,
+            f"GeoTool validator not found at {validator_path}.",
+        )
+
+    result = subprocess.run(
+        [
+            "uv",
+            "run",
+            "python",
+            "training/scripts/validate_qgis_trace.py",
+            str(trace_path),
+        ],
+        cwd=geotool_root,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    output = (result.stdout or result.stderr).strip()
+    if result.returncode == 0:
+        return DemoCheck("GeoTool trace validation", True, False, output)
+    return DemoCheck("GeoTool trace validation", False, False, output)
+
+
 def build_checks(
     root: Path = PROJECT_ROOT,
     skip_services: bool = False,
     skip_external_smoke: bool = False,
+    geotool_root: Path | None = None,
 ) -> list[DemoCheck]:
     checks = [
         check_static_demo_cases(root),
@@ -134,6 +185,9 @@ def build_checks(
 
     if not skip_external_smoke:
         checks.append(check_controlled_smoke_trace(root))
+
+    if geotool_root is not None:
+        checks.append(check_geotool_trace_validation(root, geotool_root))
 
     return checks
 
@@ -155,6 +209,12 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Check whether the local demo environment is ready.")
     parser.add_argument("--skip-services", action="store_true", help="Skip PostgreSQL, QGIS socket, and HTTP MCP checks.")
     parser.add_argument("--skip-external-smoke", action="store_true", help="Skip the optional real MCP smoke trace check.")
+    parser.add_argument(
+        "--geotool-root",
+        type=Path,
+        default=None,
+        help="Optional GeoTool-LLM repository path for downstream trace validation.",
+    )
     return parser.parse_args()
 
 
@@ -164,6 +224,7 @@ def main() -> int:
         root=PROJECT_ROOT,
         skip_services=args.skip_services,
         skip_external_smoke=args.skip_external_smoke,
+        geotool_root=args.geotool_root,
     )
     print(summarize_demo_checks(checks))
     required_ok = all(check.ok for check in checks if check.required)

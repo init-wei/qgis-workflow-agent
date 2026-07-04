@@ -1,8 +1,10 @@
 from pathlib import Path
+import subprocess
 
 from scripts.demo_preflight import (
     DemoCheck,
     build_checks,
+    check_geotool_trace_validation,
     check_controlled_smoke_trace,
     check_frontend_dist,
     check_static_demo_cases,
@@ -106,3 +108,104 @@ def test_build_checks_can_skip_external_services():
     assert "QGIS socket" not in names
     assert "HTTP MCP" not in names
     assert "Real MCP smoke" not in names
+
+
+def test_geotool_trace_validation_runs_geotool_cli(tmp_path, monkeypatch):
+    qgis_root = tmp_path / "qgis"
+    geotool_root = tmp_path / "geotool"
+    trace_path = qgis_root / "exports" / "geotool_traces" / "controlled_smoke_v0_1.jsonl"
+    script_path = geotool_root / "training" / "scripts" / "validate_qgis_trace.py"
+    trace_path.parent.mkdir(parents=True)
+    script_path.parent.mkdir(parents=True)
+    trace_path.write_text('{"final_status":"success"}\n', encoding="utf-8")
+    script_path.write_text("print('ok')\n", encoding="utf-8")
+    calls = []
+
+    def fake_run(command, cwd, text, capture_output, check):
+        calls.append((command, cwd, text, capture_output, check))
+        return subprocess.CompletedProcess(
+            command,
+            0,
+            stdout="QGIS trace validation: ok\ntraces: 1\n",
+            stderr="",
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    result = check_geotool_trace_validation(qgis_root, geotool_root)
+
+    assert result.ok is True
+    assert result.required is False
+    assert result.name == "GeoTool trace validation"
+    assert "QGIS trace validation: ok" in result.message
+    assert calls == [
+        (
+            [
+                "uv",
+                "run",
+                "python",
+                "training/scripts/validate_qgis_trace.py",
+                str(trace_path),
+            ],
+            geotool_root,
+            True,
+            True,
+            False,
+        )
+    ]
+
+
+def test_geotool_trace_validation_reports_cli_failure(tmp_path, monkeypatch):
+    qgis_root = tmp_path / "qgis"
+    geotool_root = tmp_path / "geotool"
+    trace_path = qgis_root / "exports" / "geotool_traces" / "controlled_smoke_v0_1.jsonl"
+    script_path = geotool_root / "training" / "scripts" / "validate_qgis_trace.py"
+    trace_path.parent.mkdir(parents=True)
+    script_path.parent.mkdir(parents=True)
+    trace_path.write_text('{"final_status":"failed"}\n', encoding="utf-8")
+    script_path.write_text("raise SystemExit(1)\n", encoding="utf-8")
+
+    def fake_run(command, cwd, text, capture_output, check):
+        return subprocess.CompletedProcess(
+            command,
+            1,
+            stdout="",
+            stderr="QGIS trace validation: failed\nsource_project mismatch\n",
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    result = check_geotool_trace_validation(qgis_root, geotool_root)
+
+    assert result.ok is False
+    assert result.required is False
+    assert "source_project mismatch" in result.message
+
+
+def test_build_checks_adds_geotool_trace_validation_when_configured(tmp_path, monkeypatch):
+    qgis_root = tmp_path / "qgis"
+    geotool_root = tmp_path / "geotool"
+    (qgis_root / "demo_cases").mkdir(parents=True)
+    for name in [
+        "01_simple_success.json",
+        "02_failure_repair.json",
+        "03_skill_draft_preview.json",
+    ]:
+        (qgis_root / "demo_cases" / name).write_text("{}", encoding="utf-8")
+    dist = qgis_root / "ui" / "frontend" / "dist"
+    dist.mkdir(parents=True)
+    (dist / "index.html").write_text("<div id='app'></div>", encoding="utf-8")
+
+    monkeypatch.setattr(
+        "scripts.demo_preflight.check_geotool_trace_validation",
+        lambda root, geotool_root: DemoCheck("GeoTool trace validation", True, False, "ok"),
+    )
+
+    checks = build_checks(
+        root=qgis_root,
+        skip_services=True,
+        skip_external_smoke=True,
+        geotool_root=geotool_root,
+    )
+
+    assert [check.name for check in checks][-1] == "GeoTool trace validation"

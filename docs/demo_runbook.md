@@ -68,8 +68,7 @@ The trace should contain `final_status=success` and successful `add_layer` /
 Use this to show that the QGIS trace is useful downstream.
 
 ```powershell
-cd D:\project_files\GeoTool-LLM
-uv run python training/scripts/validate_qgis_trace.py D:\project_files\QGIS-Agent-Refactoring\exports\geotool_traces\controlled_smoke_v0_1.jsonl
+uv run python scripts/demo_preflight.py --skip-services --geotool-root D:\project_files\GeoTool-LLM
 ```
 
 Then show:
