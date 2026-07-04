@@ -24,6 +24,11 @@ from agent.tools.export_geotool_trace import (
 )
 from agent.tools.mcp_client import QGIS_MCP_SERVER_URL, QGISMCPClient
 
+DEFAULT_SMOKE_TRACE_PATH = Path(".target/demo/controlled_smoke_v0_1.jsonl")
+DEFAULT_SMOKE_SCREENSHOT_PATH = Path(".target/demo/smoke_points.png")
+DEMO_TRACE_PATH = Path("exports/geotool_traces/controlled_smoke_v0_1.jsonl")
+DEMO_SCREENSHOT_PATH = Path("exports/geotool_traces/smoke_points.png")
+
 
 @dataclass(frozen=True)
 class MCPPreflightResult:
@@ -55,7 +60,8 @@ def skip_reason_for_preflight(result: MCPPreflightResult) -> str:
     )
 
 
-def build_smoke_task_plan() -> TaskPlan:
+def build_smoke_task_plan(screenshot_path: str | Path = DEFAULT_SMOKE_SCREENSHOT_PATH) -> TaskPlan:
+    screenshot_path_text = str(screenshot_path)
     return TaskPlan(
         task_id="smoke-load-layer-capture",
         task_summary="Load one vector layer and capture a screenshot",
@@ -76,7 +82,7 @@ def build_smoke_task_plan() -> TaskPlan:
             OutputSpec(
                 output_id="map_screenshot",
                 description="Smoke screenshot",
-                path="exports/geotool_traces/smoke_points.png",
+                path=screenshot_path_text,
             ),
         ],
         steps=[
@@ -121,7 +127,7 @@ def build_smoke_task_plan() -> TaskPlan:
                     "step_id": 2,
                     "tool_name": "capture_map_canvas",
                     "arguments": {
-                        "path": "exports/geotool_traces/smoke_points.png",
+                        "path": screenshot_path_text,
                     },
                     "metadata": {
                         "call_id": "smoke-call-002",
@@ -134,12 +140,32 @@ def build_smoke_task_plan() -> TaskPlan:
     )
 
 
+def resolve_smoke_outputs(
+    output_path: str | Path | None,
+    screenshot_path: str | Path | None,
+    update_demo_artifacts: bool = False,
+) -> tuple[Path, Path]:
+    if update_demo_artifacts:
+        default_trace_path = DEMO_TRACE_PATH
+        default_screenshot_path = DEMO_SCREENSHOT_PATH
+    else:
+        default_trace_path = DEFAULT_SMOKE_TRACE_PATH
+        default_screenshot_path = DEFAULT_SMOKE_SCREENSHOT_PATH
+
+    resolved_trace_path = Path(output_path) if output_path is not None else default_trace_path
+    resolved_screenshot_path = (
+        Path(screenshot_path) if screenshot_path is not None else default_screenshot_path
+    )
+    return resolved_trace_path, resolved_screenshot_path
+
+
 async def run_smoke(
-    output_path: str | Path = "exports/geotool_traces/controlled_smoke_v0_1.jsonl",
+    output_path: str | Path = DEFAULT_SMOKE_TRACE_PATH,
+    screenshot_path: str | Path = DEFAULT_SMOKE_SCREENSHOT_PATH,
 ) -> Path:
     os.environ["QGIS_AGENT_EXECUTION_MODE"] = "tool_call_plan"
     user_query = "Load one vector layer and capture a screenshot."
-    task_plan = build_smoke_task_plan()
+    task_plan = build_smoke_task_plan(screenshot_path)
     state = create_initial_state("controlled-smoke", user_query)
     state["task_plan"] = task_plan
     state["status"] = True
@@ -162,11 +188,26 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--output",
-        default="exports/geotool_traces/controlled_smoke_v0_1.jsonl",
+        default=None,
         help="Path to write the GeoTool interop v0.1 JSONL trace.",
     )
+    parser.add_argument(
+        "--screenshot-output",
+        default=None,
+        help="Path to write the captured QGIS map canvas screenshot.",
+    )
+    parser.add_argument(
+        "--update-demo-artifacts",
+        action="store_true",
+        help="Write tracked demo artifacts under exports/geotool_traces.",
+    )
     args = parser.parse_args()
-    output_path = asyncio.run(run_smoke(args.output))
+    trace_path, screenshot_path = resolve_smoke_outputs(
+        args.output,
+        args.screenshot_output,
+        update_demo_artifacts=args.update_demo_artifacts,
+    )
+    output_path = asyncio.run(run_smoke(trace_path, screenshot_path))
     print(f"GeoTool trace JSONL: {output_path}")
 
 

@@ -50,18 +50,23 @@ uv run python scripts/run_controlled_execution_smoke.py
 Expected output:
 
 ```text
-GeoTool trace JSONL: exports\geotool_traces\controlled_smoke_v0_1.jsonl
+GeoTool trace JSONL: .target\demo\controlled_smoke_v0_1.jsonl
 ```
 
-Expected artifacts:
+Expected daily-run artifacts:
 
 ```text
-exports/geotool_traces/controlled_smoke_v0_1.jsonl
-exports/geotool_traces/smoke_points.png
+.target/demo/controlled_smoke_v0_1.jsonl
+.target/demo/smoke_points.png
 ```
 
 The trace should contain `final_status=success` and successful `add_layer` /
-`capture_map_canvas` observations.
+`capture_map_canvas` observations. To intentionally refresh the tracked demo
+evidence under `exports/geotool_traces`, run:
+
+```powershell
+uv run python scripts/run_controlled_execution_smoke.py --update-demo-artifacts
+```
 
 ### Route 3: GeoTool Cross-Repo Validation
 
