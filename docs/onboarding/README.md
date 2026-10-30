@@ -29,7 +29,7 @@
 
 端口：PostgreSQL 55433、MCP HTTP 8000、后端 9000、Vite 5173、QGIS socket 9876，均以本机回环为运行入口。若占用先查所属进程，不终止其他项目。`dev.sh` 的服务端口固定为该开发约定；如需修改，同时改 `.env`、前端代理与脚本，不宣称当前支持动态端口配置。
 
-`./scripts/dev.sh health --llm-live` 会实际使用 `.env` 的临时 key 调用模型。LangSmith 默认关闭；缺 LangSmith key 不阻塞 T01–T03。`./scripts/dev.sh db-stop` 停止本项目数据库，保留卷；不要为日常清理执行 `down -v`。
+`./scripts/dev.sh health --llm-live` 会实际使用 `.env` 的临时 key 调用模型。LangSmith 默认关闭；配置与真实平台复验见[可选观测](langsmith.md)，缺 key 不阻塞核心 GIS 开发。`./scripts/dev.sh db-stop` 停止本项目数据库，保留卷；不要为日常清理执行 `down -v`。
 
 生产构建使用 `./scripts/dev.sh build`，产物在 ui/frontend/dist，后端从同一目录提供页面和静态资源。构建后访问 `http://127.0.0.1:9000/` 或 `/settings`；此入口无需 Vite 进程。开发热更新继续使用 5173。
 

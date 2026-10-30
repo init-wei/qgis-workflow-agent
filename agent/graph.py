@@ -18,13 +18,6 @@ from agent.state import AgentState
 from agent.nodes.planner_node import planner_node
 from agent.nodes.executor_node import executor_node
 from agent.nodes.reflector_node import reflector_node
-try:
-    from agent.observability import configure_langsmith
-except ModuleNotFoundError:
-    def configure_langsmith() -> None:
-        """Optional LangSmith hook; local development works without it."""
-        return None
-
 load_dotenv()
 
 
@@ -251,7 +244,6 @@ async def get_graph(
     Returns:
         编译后的StateGraph
     """
-    configure_langsmith()
     if with_checkpointer:
         checkpointer = await create_checkpointer()
         if reset_thread_id:

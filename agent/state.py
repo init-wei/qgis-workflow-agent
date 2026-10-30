@@ -42,6 +42,7 @@ class AgentState(TypedDict):
     session_name: Optional[str]
     session_created_at: Optional[str]
     task_id: str
+    case_id: Optional[str]  # Optional evaluation identity; not an authorization input.
     uploaded_files: List[Dict[str, Any]]
     llm_config: Optional[Dict[str, Any]]  # 非敏感运行选项；密钥与入口仅由服务端环境决定
     
@@ -93,6 +94,7 @@ def create_initial_state(
     uploaded_files: List[Dict[str, Any]] | None = None,
     session_name: str | None = None,
     session_created_at: str | None = None,
+    case_id: str | None = None,
 ) -> AgentState:
     """
     创建初始状态
@@ -111,6 +113,7 @@ def create_initial_state(
         session_name=session_name,
         session_created_at=session_created_at,
         task_id=task_id or str(uuid.uuid4()),
+        case_id=case_id,
         uploaded_files=uploaded_files or [],
         
         # LLM配置

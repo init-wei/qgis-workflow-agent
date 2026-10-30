@@ -10,6 +10,7 @@ from time import perf_counter
 from typing import Iterable
 from uuid import uuid4
 
+from agent.observability import call_metadata, span, span_result
 from agent.tools.mcp_response_parser import MCPResponseParser
 from agent.tools.tool_contracts import (
     ExecutionTrace,
@@ -82,51 +83,58 @@ class StepExecutor:
             trace.append_attempt(attempt)
             return attempt
 
-        try:
-            raw_response = await self.mcp_client.call_tool(
-                call.tool_name, call.arguments
-            )
-        except Exception as exc:
-            observation = self.parser.parse(call.tool_name, exc)
-            observation = observation.model_copy(
-                update={
-                    "raw_response": {
-                        "exception_type": type(exc).__name__,
-                        "message": str(exc),
+        with span("qgis.mcp_call", step_id=call.step_id, tool_name=call.tool_name,
+                  algorithm=call.arguments.get("algorithm"), **call_metadata(call)) as run:
+            try:
+                raw_response = await self.mcp_client.call_tool(
+                    call.tool_name, call.arguments
+                )
+            except Exception as exc:
+                observation = self.parser.parse(call.tool_name, exc)
+                observation = observation.model_copy(
+                    update={
+                        "raw_response": {
+                            "exception_type": type(exc).__name__,
+                            "message": str(exc),
+                        }
                     }
-                }
-            )
-        else:
-            observation = self.parser.parse(call.tool_name, raw_response)
-            if observation.status == "success" and call.tool_name in {
-                "capture_map_canvas", "execute_processing", "save_project"
-            }:
-                try:
-                    self._verify_output_files(call, observation)
-                except ActiveSQLiteSidecar as exc:
-                    # The tool completed, but its database is not a verifiable
-                    # standalone artifact. Keep tool facts; the executor aborts
-                    # on this separate integrity evidence before spatial readback.
-                    for artifact in observation.artifacts:
-                        artifact.update(deliverable=False, integrity_validation={
-                            'status': 'failed', 'errors': [str(exc)],
+                )
+            else:
+                observation = self.parser.parse(call.tool_name, raw_response)
+                if observation.status == "success" and call.tool_name in {
+                    "capture_map_canvas", "execute_processing", "save_project"
+                }:
+                    try:
+                        self._verify_output_files(call, observation)
+                    except ActiveSQLiteSidecar as exc:
+                        # The tool completed, but its database is not a verifiable
+                        # standalone artifact. Keep tool facts; the executor aborts
+                        # on this separate integrity evidence before spatial readback.
+                        for artifact in observation.artifacts:
+                            artifact.update(deliverable=False, integrity_validation={
+                                'status': 'failed', 'errors': [str(exc)],
+                            })
+                    except (ValueError, OSError) as exc:
+                        observation = observation.model_copy(update={
+                            "status": "error", "error_type": "execution_error",
+                            "message": f"Cannot verify the write result: {exc}",
+                            "outcome": "unknown", "retryable": False,
                         })
-                except (ValueError, OSError) as exc:
-                    observation = observation.model_copy(update={
-                        "status": "error", "error_type": "execution_error",
-                        "message": f"Cannot verify the write result: {exc}",
-                        "outcome": "unknown", "retryable": False,
-                    })
 
-        status = "success" if observation.status == "success" else "failed"
-        attempt = self._build_attempt(
-            call=call,
-            observation=observation,
-            status=status,
-            started_at=started_at,
-            start_counter=start_counter,
-        )
-        trace.append_attempt(attempt)
+            status = "success" if observation.status == "success" else "failed"
+            attempt = self._build_attempt(
+                call=call,
+                observation=observation,
+                status=status,
+                started_at=started_at,
+                start_counter=start_counter,
+            )
+            trace.append_attempt(attempt)
+            evidence = next((item for item in observation.artifacts if item.get("sha256")), {})
+            span_result(run, status=observation.status, outcome=observation.outcome,
+                        reason_code=observation.error_type, attempt_id=attempt.attempt_id,
+                        size_bytes=evidence.get("size_bytes"),
+                        sha256=evidence.get("sha256"))
         return attempt
 
     def _verify_output_files(self, call: ToolCallPlan, observation: ToolObservation) -> None:

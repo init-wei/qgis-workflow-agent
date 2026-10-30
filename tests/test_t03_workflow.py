@@ -196,7 +196,8 @@ def test_processing_chain_requires_independently_validated_results(monkeypatch, 
             errors.append('Reprojected coordinate differs from expected location')
         if geometry['type'] == 'Polygon' and geometry['coordinates'][0][0][0] != 449900:
             errors.append('Buffer radius differs from 100 meters')
-        return {"status": "failed" if errors else "passed", "checks": ["independent GIS check"],
+        check = 'target_crs' if geometry['type'] == 'Point' else 'buffer_geometry_and_attributes'
+        return {"status": "failed" if errors else "passed", "checks": [{"check": check}],
                 "errors": errors, "facts": {"output": {"crs": "EPSG:32650"}}}
 
     class Model:

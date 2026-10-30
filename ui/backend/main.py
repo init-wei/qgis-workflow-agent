@@ -14,6 +14,7 @@ import uuid
 import hashlib
 import subprocess
 from contextlib import asynccontextmanager
+from contextvars import ContextVar
 from functools import wraps
 from datetime import datetime
 from typing import Dict, Any, Optional, AsyncGenerator, List, Literal
@@ -39,11 +40,13 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict
 from langchain.messages import RemoveMessage
 from langgraph.graph.message import REMOVE_ALL_MESSAGES
+from langsmith import tracing_context
 
 from dotenv import load_dotenv
 
 # 导入 Agent 相关模块
 from agent.graph import get_graph
+from agent.observability import graph_events, close_langsmith, guard_global_tracing
 from agent.state import AgentState, create_initial_state
 from agent.planning.plan_schema import TaskPlan
 from agent.planning.plan_validator import PlanValidator
@@ -198,11 +201,16 @@ def resolve_selected_files(file_references: list[str | FileReference]) -> list[d
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    await preload_sessions_from_db()
-    try:
-        yield
-    finally:
-        await close_checkpointer_pool()
+    guard_global_tracing()
+    with tracing_context(enabled=False):
+        await preload_sessions_from_db()
+        try:
+            yield
+        finally:
+            try:
+                await close_langsmith()
+            finally:
+                await close_checkpointer_pool()
 
 
 # 创建 FastAPI 应用
@@ -212,6 +220,24 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+
+class DisableImplicitTracing:
+    """Only the owned graph producer may opt into configured tracing."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http":
+            guard_global_tracing()
+            with tracing_context(enabled=False):
+                await self.app(scope, receive, send)
+        else:
+            await self.app(scope, receive, send)
+
+
+app.add_middleware(DisableImplicitTracing)
 
 # 配置 CORS
 app.add_middleware(
@@ -262,6 +288,7 @@ class ChatRequest(BaseModel):
 
     message: str
     thread_id: Optional[str] = None
+    case_id: Optional[str] = None
     files: list[str | FileReference] = []
     llm_config: Optional[LLMConfig] = None
 
@@ -697,12 +724,14 @@ def build_chat_input_state(
             uploaded_files=uploaded_files or [],
             session_name=sessions.get(thread_id, {}).get('name'),
             session_created_at=sessions.get(thread_id, {}).get('created_at'),
+            case_id=request.case_id,
         )
         return dict(initial_state)
 
     return {
         "input_query": request.message,
         "task_id": new_task_id,
+        "case_id": request.case_id,
         "uploaded_files": uploaded_files or [],
         "llm_config": llm_config,
         "task_plan": None,
@@ -731,7 +760,7 @@ async def stream_agent_execution(
     app,
     initial_state: Dict[str, Any] | None,
     thread_id: str,
-    config: Dict[str, Any]
+    config: Dict[str, Any],
 ) -> AsyncGenerator[str, None]:
     """
     流式执行 Agent 并推送事件
@@ -757,10 +786,12 @@ async def stream_agent_execution(
         thinking_state = init_thinking_parse_state()
 
         # 执行 Agent 并流式推送事件
-        async for event in app.astream_events(
+        async for event in graph_events(
+            app,
             initial_state,
-            config=config,
-            version="v2"
+            config,
+            thread_id,
+            _trace_identity.get() or initial_state or {},
         ):
             # 解析事件
             event_type = event.get("event", "")
@@ -1757,6 +1788,7 @@ async def confirm_result(request: ResultConfirmRequest):
 
 
 _graph_producers: set[asyncio.Task] = set()
+_trace_identity: ContextVar[dict[str, Any] | None] = ContextVar("trace_identity", default=None)
 
 
 class ExecutionStreamingResponse(StreamingResponse):
@@ -1901,7 +1933,8 @@ def checkpoint_continuation(snapshot) -> dict[str, Any] | None:
     return None
 
 
-def start_owned_stream(app_instance, initial_state, thread_id, config, *, slot=None, owner=None, **kwargs):
+def start_owned_stream(app_instance, initial_state, thread_id, config, *, slot=None, owner=None,
+                       trace_values=None, **kwargs):
     try:
         run = owner or ThreadRun(thread_id)
     except ExecutionBusy as exc:
@@ -1933,6 +1966,9 @@ def start_owned_stream(app_instance, initial_state, thread_id, config, *, slot=N
             await asyncio.gather(pending_put, pending_disconnect, return_exceptions=True)
 
     async def produce():
+        identity = ({key: trace_values.get(key) for key in ("task_id", "case_id", "planning_revision")}
+                    if trace_values is not None else None)
+        token = _trace_identity.set(identity)
         try:
             if slot is None:
                 async for event in stream_agent_execution(app_instance, initial_state, thread_id, config):
@@ -1945,6 +1981,7 @@ def start_owned_stream(app_instance, initial_state, thread_id, config, *, slot=N
             logger.error('Graph producer failed for thread %s: %s', thread_id, exc)
             await publish(format_sse_event('error', {'message': str(exc)}))
         finally:
+            _trace_identity.reset(token)
             if slot is not None:
                 slot.release()
             run.release()
@@ -1999,6 +2036,7 @@ async def resume_execution(thread_id: str):
                 raise HTTPException(status_code=409, detail=str(exc)) from exc
         response = start_owned_stream(
             app_instance, None, thread_id, config, slot=slot, owner=run,
+            trace_values=snapshot.values,
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
         )

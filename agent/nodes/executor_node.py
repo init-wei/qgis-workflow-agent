@@ -17,6 +17,7 @@ from agent.planning.plan_schema import TaskPlan
 from agent.planning.plan_validator import PlanValidator
 from agent.planning.processing_preflight import validate_original_inputs, validate_processing_calls
 from agent.spatial_validation import preflight_spatial_plan, validate_spatial_step
+from agent.observability import call_metadata, span, span_result, validation_metadata
 from agent.state import AgentState
 from agent.tools.execution_loop import ExecutionLoop
 from agent.tools.mcp_client import get_mcp_client
@@ -144,28 +145,32 @@ async def _execute_reviewed_plan(state: AgentState, *, spatial_inspector=None) -
         if result.status == 'success' and call.tool_name == 'execute_processing':
             attempt = trace.latest_attempt()
             output_paths = {}
-            try:
-                output_paths = _actual_outputs(task_plan, call, attempt)
-                if await asyncio.to_thread(_verified_inputs, task_plan, trace, call) != input_paths:
-                    raise ValueError('Processing inputs changed before spatial validation.')
-                report = await validate_spatial_step(
-                    call, input_paths=input_paths, output_paths=output_paths,
-                    inspector=spatial_inspector,
-                )
-                if report.get('status') != 'passed':
-                    if not report.get('errors'):
-                        report = {**report, 'status': 'failed',
-                                  'errors': ['Processing result has no applicable spatial validation.']}
-                else:
-                    # The inspector's verdict applies only to these exact file bytes.
-                    for artifact in attempt.artifacts:
-                        if artifact.get('kind') == 'path':
-                            _verify_recorded_file(artifact)
+            with span("qgis.spatial_validation", run_type="chain", step_id=call.step_id,
+                      tool_name=call.tool_name, attempt_id=attempt.attempt_id,
+                      algorithm=call.arguments.get("algorithm"), **call_metadata(call)) as run:
+                try:
+                    output_paths = _actual_outputs(task_plan, call, attempt)
                     if await asyncio.to_thread(_verified_inputs, task_plan, trace, call) != input_paths:
-                        raise ValueError('Processing inputs changed during spatial validation.')
-            except Exception as exc:
-                report = {'status': 'failed', 'checks': [],
-                          'errors': [f'Spatial result could not be verified: {exc}'], 'facts': {}}
+                        raise ValueError('Processing inputs changed before spatial validation.')
+                    report = await validate_spatial_step(
+                        call, input_paths=input_paths, output_paths=output_paths,
+                        inspector=spatial_inspector,
+                    )
+                    if report.get('status') != 'passed':
+                        if not report.get('errors'):
+                            report = {**report, 'status': 'failed',
+                                      'errors': ['Processing result has no applicable spatial validation.']}
+                    else:
+                        # The inspector's verdict applies only to these exact file bytes.
+                        for artifact in attempt.artifacts:
+                            if artifact.get('kind') == 'path':
+                                _verify_recorded_file(artifact)
+                        if await asyncio.to_thread(_verified_inputs, task_plan, trace, call) != input_paths:
+                            raise ValueError('Processing inputs changed during spatial validation.')
+                except Exception as exc:
+                    report = {'status': 'failed', 'checks': [],
+                              'errors': [f'Spatial result could not be verified: {exc}'], 'facts': {}}
+                span_result(run, **validation_metadata(report))
             for artifact in attempt.artifacts:
                 if artifact.get('kind') == 'path':
                     artifact['spatial_validation'] = report
