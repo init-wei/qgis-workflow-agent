@@ -1,6 +1,6 @@
 # SPEC-QWA-V1：可审核、可恢复的本地 GIS 工作流 Agent
 
-状态：最终规划基线；未实现。日期：2026-10-30。已确认选型见[已确认决策](../adr/README.md)。
+状态：已确认的 V1 业务规格；业务尚待切片验收。日期：2026-10-30。已确认选型见[已确认决策](../adr/README.md)。
 
 ## Problem Statement
 
@@ -110,7 +110,7 @@ AC10 的“假成功为零”只针对固定验收集合，不声称覆盖所有
 
 现有[审核测试](https://github.com/init-wei/qgis-workflow-agent/blob/9602db0dd517ab6f0ce0ea4514174425b9a55142/tests/test_backend_review.py)、[受控执行测试](https://github.com/init-wei/qgis-workflow-agent/blob/9602db0dd517ab6f0ce0ea4514174425b9a55142/tests/test_controlled_executor_node.py)和[真实 MCP smoke](https://github.com/init-wei/qgis-workflow-agent/blob/9602db0dd517ab6f0ce0ea4514174425b9a55142/tests/test_controlled_executor_real_mcp_smoke.py)可作为测试组织参考；其中默认强制执行等旧预期必须按本规格更正。默认 CI 不要求付费模型、桌面或云端 key；真实验收单列，不把跳过记为通过。
 
-每个行为切片先获得目标行为的失败证据，再最小实现并验证；只为有意义的行为风险增加测试。只读分析和文档整理不运行目标项目代码。
+每个行为切片先获得目标行为的失败证据，再最小实现并验证；只为有意义的行为风险增加测试。文档与纯配置按实际影响选择检查，环境报告记录真正运行的命令与结果。
 
 ## Out of Scope
 
@@ -119,8 +119,7 @@ AC10 的“假成功为零”只针对固定验收集合，不声称覆盖所有
 - 多用户权限、分布式 worker、消息队列、高并发、运行中 QGIS 操作可靠取消和外部副作用 exactly-once。
 - 自动学习/自动发布 Skill、完整跨文档知识问答、图谱、向量数据库、默认在线模型裁判。
 - 自建通用 Trace 搜索器、标注系统、评测 Dashboard；平台记录也不作为业务权威。
-- 本轮的克隆、安装、实现、远端 issue/PR 发布、push、SDK 接入和真实付费请求。
 
 ## Further Notes
 
-规格所写均为目标行为，当前原型不能据此宣称已达标。评估基线为固定提交 `9602db0dd517ab6f0ce0ea4514174425b9a55142`；进入实施时重新核对远端变化。阶段与 blockers 见[实施清单](../implementation-plan.md)，现有测量与估算见[代码规模](../size-estimate.md)。
+规格所写均为目标行为，当前原型不能据此宣称已达标。评估基线为固定提交 `9602db0dd517ab6f0ce0ea4514174425b9a55142`；后续依赖升级和范围变化单独验收。阶段与 blockers 见[实施清单](../implementation-plan.md)，现有测量与估算见[代码规模](../size-estimate.md)。

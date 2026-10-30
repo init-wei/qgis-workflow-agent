@@ -1,6 +1,6 @@
 # T04：可关闭的 LangSmith Cloud 观测
 
-**状态：** 本地草稿；选型已确认，接入未实现、未发布。
+**正式 issue：** [#24](https://github.com/init-wei/qgis-workflow-agent/issues/24)；状态以 GitHub 为准，选型已确认。
 
 **What to build：** 开发者从 LangSmith 查看真实成功和失败的图/模型/工具/验证过程，应用在关闭观测时仍完整可用。
 
