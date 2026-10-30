@@ -1,0 +1,130 @@
+{
+  "skill_id": "qwa-reproject",
+  "version": "1.0.0",
+  "family": "reproject",
+  "name": "矢量图层重投影",
+  "summary": "按用户指定的适用目标 CRS 生成新文件；示例 CRS 只是参考。",
+  "tags": [
+    "重投影",
+    "reproject"
+  ],
+  "aliases": [
+    "坐标转换",
+    "转换坐标系",
+    "投影转换",
+    "reprojection"
+  ],
+  "input_conditions": [
+    {
+      "role": "source",
+      "geometry": "vector"
+    }
+  ],
+  "variables": [
+    {
+      "name": "source_file_id",
+      "type": "string",
+      "source": "file_id",
+      "role": "source"
+    },
+    {
+      "name": "source_path",
+      "type": "string",
+      "source": "file_path",
+      "role": "source"
+    },
+    {
+      "name": "source_layer_name",
+      "type": "string",
+      "source": "layer_name",
+      "role": "source"
+    },
+    {
+      "name": "source_filename",
+      "type": "string",
+      "source": "filename",
+      "role": "source"
+    },
+    {
+      "name": "target_crs",
+      "type": "string",
+      "source": "example",
+      "example": "EPSG:32650"
+    },
+    {
+      "name": "output_filename",
+      "type": "string",
+      "source": "example",
+      "example": "reprojected.gpkg"
+    }
+  ],
+  "task_plan_template": {
+    "task_id": "skill-example-reproject",
+    "revision": 1,
+    "task_summary": "将所选图层重投影到示例目标 CRS",
+    "risk_level": "low",
+    "review_status": "pending_review",
+    "required_inputs": [
+      {
+        "input_id": "source",
+        "description": "用户选择的输入图层",
+        "file_id": "${source_file_id}",
+        "path": "${source_path}",
+        "layer_name": "${source_layer_name}",
+        "source": "${source_filename}"
+      }
+    ],
+    "expected_outputs": [
+      {
+        "output_id": "projected",
+        "description": "重投影结果",
+        "path": "${output_filename}"
+      }
+    ],
+    "steps": [
+      {
+        "step_id": 1,
+        "description": "重投影",
+        "allowed_tools": [
+          "execute_processing"
+        ],
+        "input_refs": [
+          "source"
+        ],
+        "output_refs": [
+          "projected"
+        ],
+        "risk_level": "low",
+        "requires_review": false
+      }
+    ],
+    "tool_calls": [
+      {
+        "step_id": 1,
+        "tool_name": "execute_processing",
+        "arguments": {
+          "algorithm": "native:reprojectlayer",
+          "parameters": {
+            "INPUT": "${source_path}",
+            "TARGET_CRS": "${target_crs}",
+            "OUTPUT": "${output_filename}"
+          }
+        },
+        "risk_level": "low",
+        "requires_review": false
+      }
+    ],
+    "metadata": {}
+  },
+  "provenance": [
+    {
+      "task_id": "f35b427f-6ef7-490f-83ad-f2fa8349bd5a",
+      "operation": "native:reprojectlayer",
+      "evidence_url": "https://github.com/init-wei/qgis-workflow-agent/issues/23#issuecomment-6529726256",
+      "qgis_version": "3.40.15-Bratislava",
+      "validation": "三点到 EPSG:32650，固定数学坐标和属性读回"
+    }
+  ],
+  "curation_status": "agent_curated",
+  "review_status": "pending_human_review"
+}

@@ -738,6 +738,7 @@ def build_chat_input_state(
         "plan_validation": None,
         "planning_error": None,
         "planning_revision": 1,
+        "parameter_requirements": None,
         "last_plan_decision": None,
         "last_result_decision": None,
         "last_risk_decision": None,

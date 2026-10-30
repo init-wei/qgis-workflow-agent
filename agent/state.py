@@ -53,6 +53,7 @@ class AgentState(TypedDict):
     plan_validation: Optional[PlanValidationReport]  # TaskPlan验证报告
     planning_error: Optional[str]
     planning_revision: int            # 修订目标；生成失败时仍保留身份
+    parameter_requirements: Optional[Dict[str, Any]]  # 本任务明确参数约束，只能否决计划，不能授权执行
     last_plan_decision: Optional[Dict[str, Any]]
     last_result_decision: Optional[Dict[str, Any]]
     last_risk_decision: Optional[Dict[str, Any]]
@@ -126,6 +127,7 @@ def create_initial_state(
         plan_validation=None,
         planning_error=None,
         planning_revision=1,
+        parameter_requirements=None,
         last_plan_decision=None,
         last_result_decision=None,
         last_risk_decision=None,

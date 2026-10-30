@@ -1,8 +1,8 @@
 {
   "case_id": "skill_reuse_live_smoke",
-  "title": "Live Skill reuse smoke from a registered trace",
-  "summary": "A successful add-layer-and-screenshot trace is registered as a demo skill and rendered into a controlled live QGIS smoke plan.",
-  "tags": ["skill-registration", "live-smoke", "qgis-mcp", "trace"],
+  "title": "Historical SkillDraft preview from a static layer trace",
+  "summary": "A static add-layer-and-screenshot trace illustrates draft extraction and is not evidence of a reviewed Skill or a live task.",
+  "tags": ["skill-draft", "mock", "trace"],
   "reuse_variables": {
     "parameter_1": "shared/uploads/phase11_points.geojson",
     "layer_name_1": "phase11_points_reuse",
@@ -14,8 +14,7 @@
     "task_id": "demo-task-skill-reuse",
     "status": "success",
     "metadata": {
-      "demo": true,
-      "live_smoke_candidate": true
+      "demo": true
     },
     "attempts": [
       {
@@ -140,8 +139,6 @@
   },
   "metadata": {
     "include_skill_draft": true,
-    "auto_register_skill": true,
-    "live_smoke_candidate": true,
-    "baseline_comparison": "Registered Skill reuse can be rendered into the same controlled add_layer and capture_map_canvas path used by the real QGIS smoke."
+    "baseline_comparison": "Historical static trace for inspecting draft extraction; not a live Skill reuse test."
   }
 }

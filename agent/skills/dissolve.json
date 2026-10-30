@@ -1,0 +1,138 @@
+{
+  "skill_id": "qwa-dissolve",
+  "version": "1.0.0",
+  "family": "dissolve",
+  "name": "按字段融合",
+  "summary": "示例按 grp 融合；实际字段或全部融合须按用户需求和元数据调整。",
+  "tags": [
+    "融合",
+    "dissolve"
+  ],
+  "aliases": [
+    "合并几何",
+    "合并面",
+    "dissolving"
+  ],
+  "input_conditions": [
+    {
+      "role": "source",
+      "geometry": "vector"
+    }
+  ],
+  "variables": [
+    {
+      "name": "source_file_id",
+      "type": "string",
+      "source": "file_id",
+      "role": "source"
+    },
+    {
+      "name": "source_path",
+      "type": "string",
+      "source": "file_path",
+      "role": "source"
+    },
+    {
+      "name": "source_layer_name",
+      "type": "string",
+      "source": "layer_name",
+      "role": "source"
+    },
+    {
+      "name": "source_filename",
+      "type": "string",
+      "source": "filename",
+      "role": "source"
+    },
+    {
+      "name": "fields",
+      "type": "string_list",
+      "source": "example",
+      "example": [
+        "grp"
+      ]
+    },
+    {
+      "name": "separate_disjoint",
+      "type": "boolean",
+      "source": "example",
+      "example": false
+    },
+    {
+      "name": "output_filename",
+      "type": "string",
+      "source": "example",
+      "example": "dissolved.gpkg"
+    }
+  ],
+  "task_plan_template": {
+    "task_id": "skill-example-dissolve",
+    "revision": 1,
+    "task_summary": "按示例字段融合",
+    "risk_level": "low",
+    "review_status": "pending_review",
+    "required_inputs": [
+      {
+        "input_id": "source",
+        "description": "用户选择的输入图层",
+        "file_id": "${source_file_id}",
+        "path": "${source_path}",
+        "layer_name": "${source_layer_name}",
+        "source": "${source_filename}"
+      }
+    ],
+    "expected_outputs": [
+      {
+        "output_id": "dissolved",
+        "description": "融合结果",
+        "path": "${output_filename}"
+      }
+    ],
+    "steps": [
+      {
+        "step_id": 1,
+        "description": "按字段融合",
+        "allowed_tools": [
+          "execute_processing"
+        ],
+        "input_refs": [
+          "source"
+        ],
+        "output_refs": [
+          "dissolved"
+        ],
+        "risk_level": "low",
+        "requires_review": false
+      }
+    ],
+    "tool_calls": [
+      {
+        "step_id": 1,
+        "tool_name": "execute_processing",
+        "arguments": {
+          "algorithm": "native:dissolve",
+          "parameters": {
+            "INPUT": "${source_path}",
+            "FIELD": "${fields}",
+            "SEPARATE_DISJOINT": "${separate_disjoint}",
+            "OUTPUT": "${output_filename}"
+          }
+        },
+        "risk_level": "low",
+        "requires_review": false
+      }
+    ],
+    "metadata": {}
+  },
+  "provenance": [
+    {
+      "task_id": "8a7b119c-d342-45ad-aba9-6b587e86d274",
+      "operation": "native:dissolve",
+      "evidence_url": "https://github.com/init-wei/qgis-workflow-agent/issues/25#issuecomment-6532123611",
+      "qgis_version": "3.40.15-Bratislava",
+      "validation": "裁剪结果按 grp 融合两组，面积 10/2 平方米"
+    }
+  ],
+  "curation_status": "agent_curated",
+  "review_status": "pending_human_review"
+}

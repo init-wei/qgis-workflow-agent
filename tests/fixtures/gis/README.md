@@ -32,3 +32,17 @@ cmp tests/fixtures/gis/reprojection-buffer-oracle.json /tmp/qwa-reprojection-buf
 ```
 
 生成清单绑定定义、oracle、脚本与每个实际文件的 SHA。GeoPackage 的生成时间可能改变二进制校验和，以当次清单为准。样例包括正常来源/裁剪面、远离裁剪面、有 schema 的空来源、显式 REAL 全 NULL 来源和 `area`/`perimeter` 字段碰撞来源。这里只创建输入，不执行 Processing；真实模型、MCP、桌面 QGIS、产物与界面按[测试规范](../../../docs/testing.md)另行验收。
+
+## T06 新文件与新参数开发样例
+
+[复用输入](t06_reuse.json)包含四个新的 WGS84 点，以及 EPSG:32650 的四个矩形和裁剪面。字段改为 `pid/zone/amount`，与 T05 的输入、文件名及参数区分；它们仍是开发样例，不进入 T07 留出集。
+
+```sh
+/usr/bin/python3 scripts/build_t06_fixtures.py --output-dir /tmp/qwa-t06-new-inputs
+```
+
+输出目录必须不存在，清单记录当次文件、定义和生成器的 SHA。点的重投影仍可用上述 Snyder 公式独立计算；以 250 米、每象限 8 段且不融合缓冲时，四个要素分别满足正 32 边形半径、边长、面积与周长公式，原属性应保留。
+
+四个矩形的裁剪交集面积分别为 6、8、4、2 平方米，按 `zone` 融合后的 E/W 并集面积为 10/6 平方米；分组属性取该组任一原成员的完整属性。来源 `amount` 为 7、NULL、3、9，总数 4、有效数 3、NULL 1、和 19、最小 3、最大 9；E 总数 2、有效 1、和 7，W 总数 2、有效 2、和 12、最小 3、最大 9。预期来自矩形区间和算术，不以同一 Processing 重跑作为唯一判断。
+
+新模板提示、人工审阅与实际复用分别验收，不能将历史来源或这里的正确输入清单当成新模板任务已成功的证据。

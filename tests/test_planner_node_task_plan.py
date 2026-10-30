@@ -257,3 +257,36 @@ def test_output_identity_cannot_escape_its_artifact_directory(output_id):
 
     with pytest.raises(ValueError, match="Output ID"):
         bind_task_outputs(plan)
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(('task', 'context_revision'), [('other-task', 1), ('current-task', 0), ('current-task', 4)])
+async def test_parameter_checkpoint_cannot_authorize_a_different_task_or_distant_revision(
+        monkeypatch, tmp_path, task, context_revision):
+    monkeypatch.chdir(tmp_path)
+    source = tmp_path / 'shared/uploads/file-1.gpkg'
+    source.parent.mkdir(parents=True)
+    source.write_bytes(b'abc')
+    proposal = json.loads(_task_plan_json())
+    proposal['expected_outputs'] = [{'output_id': 'result', 'description': 'result', 'path': 'result.gpkg'}]
+    proposal['steps'][0].update(allowed_tools=['execute_processing'], output_refs=['result'])
+    proposal['tool_calls'] = [{'step_id': 1, 'tool_name': 'execute_processing', 'arguments': {
+        'algorithm': 'native:reprojectlayer', 'parameters': {
+            'INPUT': 'model-path', 'TARGET_CRS': 'EPSG:32650', 'OUTPUT': 'result.gpkg',
+        },
+    }}]
+    # Model metadata cannot become the authoritative checkpoint fact.
+    proposal['metadata'] = {'parameter_requirements': {
+        'task_id': 'current-task', 'revision': 2, 'choices': {'targets': ['EPSG:32650']},
+    }}
+    state = _state('checkpoint-boundary')
+    state.update(task_id='current-task', input_query='请重投影选中图层', planning_revision=2,
+                 parameter_requirements={'task_id': task, 'revision': context_revision,
+                                         'choices': {'targets': ['EPSG:32650']}})
+    monkeypatch.setattr(planner_module, '_get_llm', lambda _: FakeLLM(json.dumps(proposal)))
+    update = await planner_node(state, processing_inspector=lambda _: {
+        'status': 'success', 'result': {'processing_capabilities': []},
+    }, spatial_inspector=fake_spatial_inspector)
+    assert update['task_plan'] is None
+    assert '目标 CRS' in update['planning_error']
+    assert update['parameter_requirements'] == {'task_id': 'current-task', 'revision': 2, 'choices': {}}

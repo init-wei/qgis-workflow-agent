@@ -1,4 +1,6 @@
 > 原型历史/基线说明。V1 当前范围和开发入口见[文档索引](README.md)，不可据此宣称重构已完成。
+>
+> T06 已移除下文的自动 Skill 注册、`run_skill_reuse_smoke.py` 和对应预检选项。保留本页作为历史，不按旧快速执行路径验证 V1；当前模板复用须经[正式规划与审核](onboarding/skills.md)。
 
 # Demo Runbook
 

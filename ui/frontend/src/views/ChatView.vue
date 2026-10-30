@@ -268,6 +268,20 @@
 
         <!-- 输入区域 -->
         <div class="chat-input p-5 border-t border-dark-border flex-shrink-0 bg-dark-bgDark/80">
+          <div v-if="executionSkillCandidates.length" class="mb-3 p-3 border border-dark-border rounded-lg text-sm" aria-label="任务业务记录中的参考示例">
+            <p>业务计划记录中的参考条目；每次生成的计划仍需批准。</p>
+            <p class="break-all">记录任务：{{ executionCandidateRecord?.taskId ?? '未记录' }} · 修订：{{ executionCandidateRecord?.revisionLabel ?? '未记录' }} · 状态：{{ executionCandidateRecord?.status ?? '未记录' }}</p>
+            <p v-if="executionCandidateRecord && !executionCandidateRecord.isCurrent" class="text-amber-300">
+              以下是业务记录中的修订，不代表当前方案<span v-if="executionCandidateRecord.currentRevision">（当前方案 r{{ executionCandidateRecord.currentRevision }}）</span>。
+            </p>
+            <p v-for="candidate in executionSkillCandidates" :key="`${candidate.id}-${candidate.version}`" class="mt-1 break-all text-dark-textSecondary">
+              {{ candidate.id }} · 记录版本 v{{ candidate.version }}
+              <span v-for="source in candidate.sources" :key="source.taskId">
+                · 记录的来源引用：<a v-if="source.url" :href="source.url" target="_blank" rel="noopener noreferrer" class="underline">{{ source.taskId }}</a><span v-else>{{ source.taskId }}</span><span v-if="source.qgisVersion">（QGIS {{ source.qgisVersion }}）</span>
+              </span>
+              <span v-if="candidate.catalogUrl"> · <a :href="candidate.catalogUrl" target="_blank" rel="noopener noreferrer" class="underline">查看目录当前版本与审阅记录</a></span>
+            </p>
+          </div>
           <div v-if="executionStatus === 'success' || executionStatus === 'failed'" class="mb-3 max-h-[40vh] overflow-y-auto p-3 border border-dark-border rounded-lg text-sm">
             <p>任务状态：{{ executionStatus === 'success' ? '执行结束' : '执行失败' }}</p>
             <p v-if="executionStatus === 'failed'" class="whitespace-pre-wrap">失败原因：{{ executionSummary }}</p>
@@ -388,6 +402,16 @@
           <div class="text-xs text-dark-textSecondary mt-2 break-all">
             task_id: {{ currentDraft.task_id }} · revision: {{ currentDraft.revision }} · 状态: {{ currentDraft.review_status }}
           </div>
+        </div>
+        <div v-if="planSkillCandidates.length" class="mb-4 text-sm" aria-label="当前方案的参考示例">
+          <p>计划记录中的参考条目，仍需批准当前计划。</p>
+          <p v-for="candidate in planSkillCandidates" :key="`${candidate.id}-${candidate.version}`" class="mt-1 break-all text-dark-textSecondary">
+            {{ candidate.id }} · 记录版本 v{{ candidate.version }}
+            <span v-for="source in candidate.sources" :key="source.taskId">
+              · 记录的来源引用：<a v-if="source.url" :href="source.url" target="_blank" rel="noopener noreferrer" class="underline">{{ source.taskId }}</a><span v-else>{{ source.taskId }}</span><span v-if="source.qgisVersion">（QGIS {{ source.qgisVersion }}）</span>
+            </span>
+            <span v-if="candidate.catalogUrl"> · <a :href="candidate.catalogUrl" target="_blank" rel="noopener noreferrer" class="underline">查看目录当前版本与审阅记录</a></span>
+          </p>
         </div>
         <h4 class="font-semibold mb-2">必需输入</h4>
         <div v-if="currentDraft.required_inputs.length" class="space-y-2 mb-4">
@@ -655,6 +679,13 @@ interface PlanPreflightStep {
   unit: 'm2' | 'm' | null
 }
 
+interface SkillCandidate {
+  id: string
+  version: string
+  catalogUrl: string | null
+  sources: Array<{ taskId: string; url: string | null; qgisVersion: string | null }>
+}
+
 const router = useRouter()
 const chatStore = useChatStore()
 
@@ -708,6 +739,25 @@ const qgisStatusDetail = computed(() => {
     return `工具数: ${qgisToolsCount.value}`
   }
   return '请检查 QGIS MCP 插件'
+})
+
+const planSkillCandidates = computed(() => readSkillCandidates(currentDraft.value))
+const executionSkillCandidates = computed(() => readSkillCandidates(asRecord(currentExecutionResult.value)?.plan))
+const executionCandidateRecord = computed(() => {
+  const record = asRecord(currentExecutionResult.value)
+  const plan = asRecord(record?.plan)
+  if (!record || !plan) return null
+  const taskId = readString(record, 'task_id') ?? readString(plan, 'task_id')
+  const revision = record.plan_revision
+  const knownRevision = typeof revision === 'number' && Number.isInteger(revision) && revision > 0
+  const current = currentDraft.value
+  return {
+    taskId,
+    revisionLabel: knownRevision ? `r${revision}` : '未记录',
+    status: readString(record, 'status'),
+    currentRevision: current?.revision,
+    isCurrent: knownRevision && current != null && current.task_id === taskId && current.revision === revision && plan.revision === revision,
+  }
 })
 
 const planPreflightSteps = computed<PlanPreflightStep[]>(() => {
@@ -1669,6 +1719,40 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 function readString(record: Record<string, unknown> | null, key: string): string | undefined {
   const value = record?.[key]
   return typeof value === 'string' ? value : undefined
+}
+
+function readSkillCandidates(plan: unknown): SkillCandidate[] {
+  const metadata = asRecord(asRecord(plan)?.metadata)
+  const facts = asRecord(metadata?.skill_candidates)
+  if (facts?.enabled !== true || !Array.isArray(facts.provided)) return []
+  return facts.provided.flatMap(value => {
+    const item = asRecord(value)
+    const id = readString(item, 'skill_id')
+    const version = readString(item, 'version')
+    if (!id || !version) return []
+    const sources = Array.isArray(item?.provenance) ? item.provenance.flatMap(value => {
+      const source = asRecord(value)
+      const taskId = readString(source, 'task_id')
+      if (!taskId) return []
+      const evidenceUrl = readString(source, 'evidence_url')
+      return [{
+        taskId,
+        url: evidenceUrl?.startsWith('https://github.com/') ? evidenceUrl : null,
+        qgisVersion: readString(source, 'qgis_version') ?? null,
+      }]
+    }) : []
+    // Historical TaskPlan metadata was model-controlled. Render references,
+    // never use copied review fields as proof of human approval.
+    const catalogFiles: Record<string, string> = {
+      'qwa-load': 'load', 'qwa-reproject': 'reproject', 'qwa-buffer': 'buffer',
+      'qwa-clip': 'clip', 'qwa-dissolve': 'dissolve', 'qwa-statistics': 'statistics',
+    }
+    const file = catalogFiles[id]
+    const catalogUrl = file
+      ? `https://github.com/init-wei/qgis-workflow-agent/blob/codex/v1-refactor/agent/skills/${file}.json`
+      : null
+    return [{ id, version, sources, catalogUrl }]
+  })
 }
 
 function isTaskPlan(value: unknown): value is TaskPlan {

@@ -1,0 +1,193 @@
+{
+  "skill_id": "qwa-buffer",
+  "version": "1.0.0",
+  "family": "buffer",
+  "name": "重投影后缓冲",
+  "summary": "示例先重投影再按米缓冲；目标 CRS、距离和选项必须按需求及输入确认。",
+  "tags": [
+    "缓冲",
+    "buffer"
+  ],
+  "aliases": [
+    "缓冲区",
+    "buffering"
+  ],
+  "input_conditions": [
+    {
+      "role": "source",
+      "geometry": "vector"
+    }
+  ],
+  "variables": [
+    {
+      "name": "source_file_id",
+      "type": "string",
+      "source": "file_id",
+      "role": "source"
+    },
+    {
+      "name": "source_path",
+      "type": "string",
+      "source": "file_path",
+      "role": "source"
+    },
+    {
+      "name": "source_layer_name",
+      "type": "string",
+      "source": "layer_name",
+      "role": "source"
+    },
+    {
+      "name": "source_filename",
+      "type": "string",
+      "source": "filename",
+      "role": "source"
+    },
+    {
+      "name": "target_crs",
+      "type": "string",
+      "source": "example",
+      "example": "EPSG:32650"
+    },
+    {
+      "name": "projected_filename",
+      "type": "string",
+      "source": "example",
+      "example": "projected.gpkg"
+    },
+    {
+      "name": "distance",
+      "type": "number",
+      "source": "example",
+      "example": 100
+    },
+    {
+      "name": "segments",
+      "type": "integer",
+      "source": "example",
+      "example": 8
+    },
+    {
+      "name": "dissolve",
+      "type": "boolean",
+      "source": "example",
+      "example": false
+    },
+    {
+      "name": "buffer_filename",
+      "type": "string",
+      "source": "example",
+      "example": "buffer.gpkg"
+    }
+  ],
+  "task_plan_template": {
+    "task_id": "skill-example-buffer",
+    "revision": 1,
+    "task_summary": "重投影后按示例距离缓冲",
+    "risk_level": "low",
+    "review_status": "pending_review",
+    "required_inputs": [
+      {
+        "input_id": "source",
+        "description": "用户选择的输入图层",
+        "file_id": "${source_file_id}",
+        "path": "${source_path}",
+        "layer_name": "${source_layer_name}",
+        "source": "${source_filename}"
+      }
+    ],
+    "expected_outputs": [
+      {
+        "output_id": "projected",
+        "description": "重投影结果",
+        "path": "${projected_filename}"
+      },
+      {
+        "output_id": "buffered",
+        "description": "缓冲结果",
+        "path": "${buffer_filename}"
+      }
+    ],
+    "steps": [
+      {
+        "step_id": 1,
+        "description": "重投影到适合计算距离的 CRS",
+        "allowed_tools": [
+          "execute_processing"
+        ],
+        "input_refs": [
+          "source"
+        ],
+        "output_refs": [
+          "projected"
+        ],
+        "risk_level": "low",
+        "requires_review": false
+      },
+      {
+        "step_id": 2,
+        "description": "缓冲",
+        "allowed_tools": [
+          "execute_processing"
+        ],
+        "input_refs": [
+          "projected"
+        ],
+        "output_refs": [
+          "buffered"
+        ],
+        "risk_level": "low",
+        "requires_review": false
+      }
+    ],
+    "tool_calls": [
+      {
+        "step_id": 1,
+        "tool_name": "execute_processing",
+        "arguments": {
+          "algorithm": "native:reprojectlayer",
+          "parameters": {
+            "INPUT": "${source_path}",
+            "TARGET_CRS": "${target_crs}",
+            "OUTPUT": "${projected_filename}"
+          }
+        },
+        "risk_level": "low",
+        "requires_review": false
+      },
+      {
+        "step_id": 2,
+        "tool_name": "execute_processing",
+        "arguments": {
+          "algorithm": "native:buffer",
+          "parameters": {
+            "INPUT": "${projected_filename}",
+            "DISTANCE": "${distance}",
+            "SEGMENTS": "${segments}",
+            "END_CAP_STYLE": 0,
+            "JOIN_STYLE": 0,
+            "MITER_LIMIT": 2,
+            "DISSOLVE": "${dissolve}",
+            "SEPARATE_DISJOINT": false,
+            "OUTPUT": "${buffer_filename}"
+          }
+        },
+        "risk_level": "low",
+        "requires_review": false,
+        "distance_unit": "m"
+      }
+    ],
+    "metadata": {}
+  },
+  "provenance": [
+    {
+      "task_id": "f35b427f-6ef7-490f-83ad-f2fa8349bd5a",
+      "operation": "native:reprojectlayer → native:buffer",
+      "evidence_url": "https://github.com/init-wei/qgis-workflow-agent/issues/23#issuecomment-6529726256",
+      "qgis_version": "3.40.15-Bratislava",
+      "validation": "100 米、每象限 8 段、不融合；坐标、半径、面积和周长按固定预期读回"
+    }
+  ],
+  "curation_status": "agent_curated",
+  "review_status": "pending_human_review"
+}

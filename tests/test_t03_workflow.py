@@ -424,8 +424,11 @@ def test_processing_chain_requires_independently_validated_results(monkeypatch, 
         'unnamed_quotes_repeated_chinese': '先重投影，先缓冲100米，名称为中间结果接着缓冲100米，最后查看',
         'unnamed_quotes_repeated_english': 'Reproject, buffer 100 meters, called first then buffer 100 meters, and view',
     }
+    # These cases vary distance interpretation or output validation; their fake
+    # plan always targets 32650, so the request must explicitly name that CRS.
+    request_text = "目标 CRS 为 EPSG:32650。" + requests.get(mode, "Reproject, buffer 100 meters, and view")
     response = client.post("/api/chat/stream", json={"thread_id": "wrong-coordinate",
-                 "message": requests.get(mode, "Reproject, buffer 100 meters, and view"), "files": ["file-1"]})
+                 "message": request_text, "files": ["file-1"]})
     if writes == 0 and mode not in {'preflight_unavailable', 'original_wal'}:
         assert error in event(response, 'error')['message'].lower()
         assert calls == [] and mcp_requests == [] and mcp_connections == []
@@ -524,7 +527,7 @@ def test_processing_chain_requires_independently_validated_results(monkeypatch, 
         assert client.get('/api/state/wrong-coordinate').json()['can_start_task'] is True
         prior_requests = list(mcp_requests)
         next_plan = event(client.post('/api/chat/stream', json={
-            'thread_id': 'wrong-coordinate', 'message': 'Reproject, buffer 100 meters, and view',
+            'thread_id': 'wrong-coordinate', 'message': 'Reproject to EPSG:32650, buffer 100 meters, and view',
             'files': ['file-1'],
         }), 'human_review_required')['task_plan']
         assert next_plan['task_id'] != plan['task_id']

@@ -152,22 +152,6 @@
               </div>
             </section>
 
-            <section
-              v-if="detail.replay.registered_skill"
-              class="bg-dark-bgDark border border-dark-border rounded-lg p-4"
-            >
-              <h3 class="text-lg font-semibold">Registered Skill</h3>
-              <div class="mt-3 space-y-3">
-                <div>
-                  <div class="text-xs uppercase text-dark-textSecondary mb-2">Registration</div>
-                  <pre class="code-block">{{ formatJson(detail.replay.registered_skill) }}</pre>
-                </div>
-                <div v-if="detail.replay.skill_execution_plan">
-                  <div class="text-xs uppercase text-dark-textSecondary mb-2">Controlled Execution Plan</div>
-                  <pre class="code-block">{{ formatJson(detail.replay.skill_execution_plan) }}</pre>
-                </div>
-              </div>
-            </section>
           </div>
         </section>
       </div>

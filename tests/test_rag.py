@@ -8,7 +8,6 @@ import pytest
 from agent.tools.rag import (
     search_gdal_docs,
     search_gdal_docs_fuzzy,
-    search_cookbook,
     search_pyqgis_docs
 )
 
@@ -47,21 +46,6 @@ def test_search_gdal_docs_fuzzy():
     print("✅ GDAL文档模糊搜索测试通过")
 
 
-def test_search_cookbook():
-    """测试Cookbook搜索"""
-    user_intent = "加载图层"
-    
-    results = search_cookbook(user_intent, similarity_threshold=0.1, top_k=3)
-    
-    print(f"Cookbook搜索 '{user_intent}' 找到 {len(results)} 个案例")
-    
-    if results:
-        print(f"第一个案例: {results[0]['user_intent'][:50]}...")
-        print(f"相似度: {results[0]['similarity_score']:.2f}")
-    
-    print("✅ Cookbook搜索测试通过")
-
-
 if __name__ == "__main__":
     print("运行RAG工具测试...")
     print("注意: 需要PostgreSQL数据库运行并导入GDAL文档")
@@ -72,9 +56,6 @@ if __name__ == "__main__":
         print()
         
         test_search_gdal_docs_fuzzy()
-        print()
-        
-        test_search_cookbook()
         print()
         
         print("=" * 60)

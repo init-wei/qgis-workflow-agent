@@ -1,0 +1,107 @@
+{
+  "skill_id": "qwa-load",
+  "version": "1.0.0",
+  "family": "load",
+  "name": "加载已选图层",
+  "summary": "使用已选择文件加载矢量图层；显示名称是示例，须按用户需求调整。",
+  "tags": [
+    "加载",
+    "load"
+  ],
+  "aliases": [
+    "载入",
+    "添加图层",
+    "add layer",
+    "open layer"
+  ],
+  "input_conditions": [
+    {
+      "role": "source",
+      "geometry": "vector"
+    }
+  ],
+  "variables": [
+    {
+      "name": "source_file_id",
+      "type": "string",
+      "source": "file_id",
+      "role": "source"
+    },
+    {
+      "name": "source_path",
+      "type": "string",
+      "source": "file_path",
+      "role": "source"
+    },
+    {
+      "name": "source_layer_name",
+      "type": "string",
+      "source": "layer_name",
+      "role": "source"
+    },
+    {
+      "name": "source_filename",
+      "type": "string",
+      "source": "filename",
+      "role": "source"
+    }
+  ],
+  "task_plan_template": {
+    "task_id": "skill-example-load",
+    "revision": 1,
+    "task_summary": "加载用户选择的矢量图层",
+    "risk_level": "low",
+    "review_status": "pending_review",
+    "required_inputs": [
+      {
+        "input_id": "source",
+        "description": "用户选择的输入图层",
+        "file_id": "${source_file_id}",
+        "path": "${source_path}",
+        "layer_name": "${source_layer_name}",
+        "source": "${source_filename}"
+      }
+    ],
+    "expected_outputs": [],
+    "steps": [
+      {
+        "step_id": 1,
+        "description": "加载所选图层",
+        "allowed_tools": [
+          "add_layer"
+        ],
+        "input_refs": [
+          "source"
+        ],
+        "output_refs": [],
+        "risk_level": "low",
+        "requires_review": false
+      }
+    ],
+    "tool_calls": [
+      {
+        "step_id": 1,
+        "tool_name": "add_layer",
+        "arguments": {
+          "path": "${source_path}",
+          "layer_type": "vector",
+          "name": "${source_layer_name}"
+        },
+        "risk_level": "low",
+        "requires_review": false
+      }
+    ],
+    "metadata": {}
+  },
+  "provenance": [
+    {
+      "task_id": "3b9ea257-e98c-4a15-b23e-e3b450cba382",
+      "operation": "add_layer",
+      "evidence_url": "https://github.com/init-wei/qgis-workflow-agent/issues/21#issuecomment-6526916539",
+      "qgis_version": "3.40.15-Bratislava",
+      "validation": "EPSG:4326 三点，来源、字段、属性与坐标读回"
+    }
+  ],
+  "curation_status": "agent_curated",
+  "review_status": "pending_human_review"
+}

@@ -7,7 +7,6 @@ from scripts.demo_preflight import (
     check_geotool_trace_validation,
     check_controlled_smoke_trace,
     check_frontend_dist,
-    check_skill_reuse_smoke_trace,
     check_static_demo_cases,
     summarize_demo_checks,
 )
@@ -148,31 +147,6 @@ def test_controlled_smoke_trace_check_reports_failed_trace(tmp_path):
     assert result.ok is False
     assert result.required is False
     assert "final_status=failed" in result.message
-
-
-def test_skill_reuse_smoke_trace_check_validates_success_trace(tmp_path):
-    trace_path = tmp_path / ".target" / "demo" / "skill_reuse_smoke_v0_1.jsonl"
-    trace_path.parent.mkdir(parents=True)
-    trace_path.write_text(
-        '{"final_status":"success","metadata":{"source_project":"qgis-workflow-agent"},"observations":[{"tool":"add_layer","status":"success"},{"tool":"capture_map_canvas","status":"success"}]}\n',
-        encoding="utf-8",
-    )
-
-    result = check_skill_reuse_smoke_trace(tmp_path)
-
-    assert result.ok is True
-    assert result.required is False
-    assert "Skill reuse smoke" in result.name
-    assert "add_layer" in result.message
-    assert "capture_map_canvas" in result.message
-
-
-def test_skill_reuse_smoke_trace_check_reports_missing_trace(tmp_path):
-    result = check_skill_reuse_smoke_trace(tmp_path)
-
-    assert result.ok is False
-    assert result.required is False
-    assert "run_skill_reuse_smoke.py" in result.message
 
 
 def test_build_checks_can_skip_external_services():
@@ -367,7 +341,7 @@ def test_build_checks_prefers_default_run_artifact_for_geotool_validation(
     assert seen_paths == [run_trace]
 
 
-def test_build_checks_validates_skill_reuse_trace_with_geotool_when_present(
+def test_build_checks_ignores_retired_skill_trace_when_present(
     tmp_path,
     monkeypatch,
 ):
@@ -411,7 +385,6 @@ def test_build_checks_validates_skill_reuse_trace_with_geotool_when_present(
         skip_services=True,
         geotool_root=geotool_root,
         smoke_trace_path=controlled_trace,
-        skill_reuse_trace_path=skill_reuse_trace,
     )
 
-    assert seen_paths == [controlled_trace, skill_reuse_trace]
+    assert seen_paths == [controlled_trace]

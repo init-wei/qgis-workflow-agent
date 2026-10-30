@@ -11,14 +11,18 @@ import json
 import re
 import requests
 import uvicorn
-import os
 import logging
 from bs4 import BeautifulSoup
 from typing import Optional, Dict, Any, List
 import sys
+from pathlib import Path
 from mcp.server.fastmcp import FastMCP, Context
-from psycopg_pool import ConnectionPool
 from psycopg.rows import dict_row
+
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from agent.tools.database import _get_pool
 
 
 class QGISMethodExtractor:
@@ -583,6 +587,7 @@ def search_gdal_docs(method_names: List[str]) -> List[Dict[str, Any]]:
         else:
             normalized_names.append(query.lower())
     
+    pool = _get_pool()
     try:
         with pool.connection() as conn:
             with conn.cursor(row_factory=dict_row) as cur:
@@ -599,43 +604,15 @@ def search_gdal_docs(method_names: List[str]) -> List[Dict[str, Any]]:
                 return docs
     except Exception as e:
         logger.error(f"GDAL search failed: {e}")
-        return []
+        raise
     
 
-
-def search_cookbook(user_intent: str, similarity_threshold: float = 0.8, top_k: int = 3) -> List[Dict[str, Any]]:
-    """Search cookbook for similar examples using pg_trgm similarity."""
-    if not user_intent:
-        return []
-    
-    try:
-        with pool.connection() as conn:
-            with conn.cursor(row_factory=dict_row) as cur:
-                cur.execute(
-                    """SELECT id, user_intent, verified_code, tags, complexity_score, steps, usage_count,
-                              similarity(user_intent, %s) as similarity_score
-                       FROM cookbook
-                       WHERE similarity(user_intent, %s) > %s
-                       ORDER BY similarity(user_intent, %s) DESC
-                       LIMIT %s""",
-                    (user_intent, user_intent, similarity_threshold, user_intent, top_k)
-                )
-                results = cur.fetchall()
-                logger.info(f"Found {len(results)} cookbook examples (threshold>{similarity_threshold})")
-                return results
-    except Exception as e:
-        logger.error(f"Cookbook search failed: {e}")
-        return []
 
 mcp = FastMCP("PyQGIS_Doc_Extractor")
 _pyqgis_extractor = QGISMethodExtractor()
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@127.0.0.1:5432/qgis_db")
-pool = ConnectionPool(conninfo=DATABASE_URL, min_size=1, max_size=10)
-
 
 @mcp.tool()
 def search_pyqgis_api(ctx: Context, api_names: list[str], output_file: str | None = None) -> str:
@@ -662,23 +639,6 @@ def search_gdal_api(ctx: Context, api_names: list[str]) -> str:
         JSON string with matched GDAL API documentation
     """
     results = search_gdal_docs(api_names)
-    return json.dumps({"count": len(results), "results": results}, ensure_ascii=False, indent=2)
-
-
-@mcp.tool()
-def search_qgis_cookbook(ctx: Context, user_intent: str, similarity_threshold: float = 0.8, top_k: int = 3) -> str:
-    """
-    Search QGIS cookbook for similar examples.
-    
-    Args:
-        user_intent: User intent description
-        similarity_threshold: Similarity threshold (0.0-1.0), default 0.8
-        top_k: Return top k results, default 3
-    
-    Returns:
-        JSON string with similar cookbook examples
-    """
-    results = search_cookbook(user_intent, similarity_threshold, top_k)
     return json.dumps({"count": len(results), "results": results}, ensure_ascii=False, indent=2)
 
 

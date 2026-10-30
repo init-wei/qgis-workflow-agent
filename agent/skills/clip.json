@@ -1,0 +1,160 @@
+{
+  "skill_id": "qwa-clip",
+  "version": "1.0.0",
+  "family": "clip",
+  "name": "按裁剪面裁剪",
+  "summary": "示例按选中文件顺序将第一个作为源、第二个作为裁剪面；实际角色须核对。",
+  "tags": [
+    "裁剪",
+    "clip"
+  ],
+  "aliases": [
+    "剪裁",
+    "裁切",
+    "clipping"
+  ],
+  "input_conditions": [
+    {
+      "role": "source",
+      "geometry": "vector"
+    },
+    {
+      "role": "overlay",
+      "geometry": "polygon"
+    }
+  ],
+  "variables": [
+    {
+      "name": "source_file_id",
+      "type": "string",
+      "source": "file_id",
+      "role": "source"
+    },
+    {
+      "name": "source_path",
+      "type": "string",
+      "source": "file_path",
+      "role": "source"
+    },
+    {
+      "name": "source_layer_name",
+      "type": "string",
+      "source": "layer_name",
+      "role": "source"
+    },
+    {
+      "name": "source_filename",
+      "type": "string",
+      "source": "filename",
+      "role": "source"
+    },
+    {
+      "name": "overlay_file_id",
+      "type": "string",
+      "source": "file_id",
+      "role": "overlay"
+    },
+    {
+      "name": "overlay_path",
+      "type": "string",
+      "source": "file_path",
+      "role": "overlay"
+    },
+    {
+      "name": "overlay_layer_name",
+      "type": "string",
+      "source": "layer_name",
+      "role": "overlay"
+    },
+    {
+      "name": "overlay_filename",
+      "type": "string",
+      "source": "filename",
+      "role": "overlay"
+    },
+    {
+      "name": "output_filename",
+      "type": "string",
+      "source": "example",
+      "example": "clipped.gpkg"
+    }
+  ],
+  "task_plan_template": {
+    "task_id": "skill-example-clip",
+    "revision": 1,
+    "task_summary": "使用所选裁剪面裁剪",
+    "risk_level": "low",
+    "review_status": "pending_review",
+    "required_inputs": [
+      {
+        "input_id": "source",
+        "description": "用户选择的输入图层",
+        "file_id": "${source_file_id}",
+        "path": "${source_path}",
+        "layer_name": "${source_layer_name}",
+        "source": "${source_filename}"
+      },
+      {
+        "input_id": "overlay",
+        "description": "用户选择的裁剪面",
+        "file_id": "${overlay_file_id}",
+        "path": "${overlay_path}",
+        "layer_name": "${overlay_layer_name}",
+        "source": "${overlay_filename}"
+      }
+    ],
+    "expected_outputs": [
+      {
+        "output_id": "clipped",
+        "description": "裁剪结果",
+        "path": "${output_filename}"
+      }
+    ],
+    "steps": [
+      {
+        "step_id": 1,
+        "description": "按裁剪面裁剪",
+        "allowed_tools": [
+          "execute_processing"
+        ],
+        "input_refs": [
+          "source",
+          "overlay"
+        ],
+        "output_refs": [
+          "clipped"
+        ],
+        "risk_level": "low",
+        "requires_review": false
+      }
+    ],
+    "tool_calls": [
+      {
+        "step_id": 1,
+        "tool_name": "execute_processing",
+        "arguments": {
+          "algorithm": "native:clip",
+          "parameters": {
+            "INPUT": "${source_path}",
+            "OVERLAY": "${overlay_path}",
+            "OUTPUT": "${output_filename}"
+          }
+        },
+        "risk_level": "low",
+        "requires_review": false
+      }
+    ],
+    "metadata": {}
+  },
+  "provenance": [
+    {
+      "task_id": "8a7b119c-d342-45ad-aba9-6b587e86d274",
+      "operation": "native:clip",
+      "evidence_url": "https://github.com/init-wei/qgis-workflow-agent/issues/25#issuecomment-6532123611",
+      "qgis_version": "3.40.15-Bratislava",
+      "validation": "独立矩形交集三面面积 6/8/2 平方米"
+    }
+  ],
+  "curation_status": "agent_curated",
+  "review_status": "pending_human_review"
+}

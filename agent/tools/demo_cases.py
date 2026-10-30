@@ -8,7 +8,6 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from agent.tools.skill_draft import SkillDraft, SkillExtractor
-from agent.tools.skill_registry import SkillRegistry, build_skill_execution_plan
 from agent.tools.tool_contracts import ExecutionTrace
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -41,8 +40,6 @@ class DemoReplayResult(BaseModel):
     artifact_count: int = Field(description="Number of artifacts recorded")
     repair_summaries: list[dict[str, Any]] = Field(default_factory=list)
     skill_draft: dict[str, Any] | None = Field(default=None)
-    registered_skill: dict[str, Any] | None = Field(default=None)
-    skill_execution_plan: dict[str, Any] | None = Field(default=None)
     reuse_preview: dict[str, Any] | None = Field(default=None)
     trace_summary: dict[str, Any] = Field(default_factory=dict)
 
@@ -72,8 +69,6 @@ def replay_demo_case(case: DemoCase) -> DemoReplayResult:
 
     trace = case.trace
     skill_draft = None
-    registered_skill = None
-    skill_execution_plan = None
     reuse_preview = None
     repair_summaries: list[dict[str, Any]] = []
 
@@ -83,17 +78,6 @@ def replay_demo_case(case: DemoCase) -> DemoReplayResult:
         if case.reuse_variables or case.metadata.get("include_skill_draft"):
             skill_draft = draft.model_dump(mode="json")
             reuse_preview = build_reuse_preview(draft, case.reuse_variables)
-        if case.metadata.get("auto_register_skill"):
-            registry = SkillRegistry()
-            registered = registry.register(
-                draft,
-                auto_approve=True,
-                source="demo_fixture",
-            )
-            plan = build_skill_execution_plan(registered, case.reuse_variables)
-            registered_skill = registered.model_dump(mode="json")
-            skill_execution_plan = plan.model_dump(mode="json")
-
     return DemoReplayResult(
         case_id=case.case_id,
         status="success" if trace.status == "success" else "failed",
@@ -101,8 +85,6 @@ def replay_demo_case(case: DemoCase) -> DemoReplayResult:
         artifact_count=sum(len(attempt.artifacts) for attempt in trace.attempts),
         repair_summaries=repair_summaries,
         skill_draft=skill_draft,
-        registered_skill=registered_skill,
-        skill_execution_plan=skill_execution_plan,
         reuse_preview=reuse_preview,
         trace_summary={
             "trace_id": trace.trace_id,
@@ -129,7 +111,6 @@ def summarize_demo_case(case: DemoCase) -> dict[str, Any]:
         "artifact_count": replay.artifact_count,
         "has_repair": bool(replay.repair_summaries),
         "has_skill_draft": replay.skill_draft is not None,
-        "has_registered_skill": replay.registered_skill is not None,
     }
 
 

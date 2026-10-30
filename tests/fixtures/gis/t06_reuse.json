@@ -1,0 +1,35 @@
+{
+  "fixture_version": 1,
+  "purpose": "T06 new-file and new-parameter development cases; not the T07 holdout set",
+  "datasets": {
+    "places": {
+      "filename": "t06_places.geojson",
+      "crs": "EPSG:4326",
+      "features": [
+        {"coordinates": [117.01, 32.01], "properties": {"id": 11, "group": "E", "value": 7}},
+        {"coordinates": [117.02, 32.02], "properties": {"id": 12, "group": "E", "value": null}},
+        {"coordinates": [117.03, 32.01], "properties": {"id": 13, "group": "W", "value": 3}},
+        {"coordinates": [117.04, 32.02], "properties": {"id": 14, "group": "W", "value": 9}}
+      ]
+    },
+    "regions": {
+      "filename": "t06_regions.gpkg",
+      "layer": "regions",
+      "crs": "EPSG:32650",
+      "fields": {"pid": "Integer", "zone": "String", "amount": "Real"},
+      "features": [
+        {"bounds": [500100, 1000, 500104, 1004], "properties": {"pid": 11, "zone": "E", "amount": 7}},
+        {"bounds": [500102, 1000, 500106, 1004], "properties": {"pid": 12, "zone": "E", "amount": null}},
+        {"bounds": [500106, 1000, 500108, 1004], "properties": {"pid": 13, "zone": "W", "amount": 3}},
+        {"bounds": [500108, 1000, 500110, 1004], "properties": {"pid": 14, "zone": "W", "amount": 9}}
+      ]
+    },
+    "window": {
+      "filename": "t06_window.gpkg",
+      "layer": "window",
+      "crs": "EPSG:32650",
+      "fields": {"mask_id": "Integer"},
+      "features": [{"bounds": [500101, 1001, 500109, 1003], "properties": {"mask_id": 1}}]
+    }
+  }
+}

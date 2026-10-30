@@ -12,6 +12,7 @@
 | `uv run --locked pytest -o addopts= -q tests/test_processing_inspection.py tests/test_artifact_integrity.py` | 隔离系统 QGIS 的参数预检和基本产物完整性；属于 external，不能代替独立空间数值验证 |
 | `uv run --locked pytest -o addopts= -q tests/test_spatial_validation.py tests/test_spatial_validation_gdal.py tests/test_spatial_oracle.py` | 空间验证接口、系统 GDAL 读回反例及固定数学预期；不代替真实 MCP 任务 |
 | `DATABASE_URL='' PYTHON_DOTENV_DISABLED=1 uv run --locked pytest -o addopts= -q tests/test_t05_fixtures.py tests/test_spatial_validation_t05.py` | 固定矩形数学、输入物化与系统 GIS 的裁剪/融合/统计反例；不读取项目凭据，不代替公开用户路径 |
+| `DATABASE_URL='' PYTHON_DOTENV_DISABLED=1 uv run --locked pytest tests/test_skill_registry.py tests/test_t06_workflow.py tests/test_rag_pool_import.py` | 六类候选、类型与占位符、同一审核路径，以及 RAG 导入和调用时连接池的无网络替身验证；不等于人工模板审阅或真实 GIS 复用 |
 | `./scripts/dev.sh health --llm-live` | 配置/数据库/桌面桥接/MCP/真实模型连通；不能证明 GIS 任务正确 |
 
 T00 的类型错误与 advisory 是历史基线，见[当次记录](onboarding/baseline-2026-10-30.md)，不能作为当前门禁豁免。不要删除断言、扩大忽略或将失败悄悄标成通过。原型测试通过也不代表新的审核语义满足 AC。
