@@ -152,7 +152,11 @@ class MCPResponseParser:
                 retryable=False,
             )
 
-        if tool_name in {"capture_map_canvas", "save_project"}:
+        if tool_name == 'add_layer':
+            # Loading returns an existing source reference, not a generated file.
+            # Keep id/source/provider facts in data and the original reply.
+            artifacts = []
+        elif tool_name in {"capture_map_canvas", "save_project"}:
             artifacts = [{"kind": "path", "path": data["path"]}]
         elif tool_name == "execute_processing":
             artifacts = [

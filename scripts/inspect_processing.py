@@ -30,12 +30,48 @@ def inspect_processing(requests):
             from qgis_mcp_server.qgis_mcp_plugin.qgis_mcp_plugin import QgisMCPServer
 
             Processing.initialize()
+            if requests == {"capabilities": True}:
+                return inspect_capabilities()
             server = QgisMCPServer(iface=None)
             return server.execute_command({
                 "type": "get_qgis_info", "params": {"processing_requests": requests},
             })
         finally:
             app.exitQgis()
+
+
+def inspect_capabilities():
+    """Describe only the allowed algorithms using the installed QGIS definitions."""
+    from qgis.core import Qgis, QgsApplication, QgsProcessingParameterDefinition
+    from qgis_mcp_server.qgis_mcp_plugin.processing_policy import SUPPORTED_PROCESSING_ALGORITHMS
+
+    algorithms = []
+    for algorithm_id in sorted(SUPPORTED_PROCESSING_ALGORITHMS):
+        definition = QgsApplication.processingRegistry().algorithmById(algorithm_id)
+        item = {"algorithm": algorithm_id, "available": definition is not None}
+        if definition is not None:
+            parameters = []
+            for parameter in definition.parameterDefinitions():
+                flags = parameter.flags()
+                if flags & QgsProcessingParameterDefinition.FlagHidden:
+                    continue
+                details = {
+                    "name": parameter.name(), "type": parameter.type(),
+                    "description": parameter.description(),
+                    "optional": bool(flags & QgsProcessingParameterDefinition.FlagOptional),
+                }
+                default = parameter.defaultValue()
+                if isinstance(default, (str, int, float, bool, list)) or default is None:
+                    details["default"] = default
+                if parameter.type() == "enum":
+                    details["options"] = parameter.options()
+                parameters.append(details)
+            item.update(name=definition.displayName(), provider=definition.provider().id(),
+                        parameters=parameters)
+        algorithms.append(item)
+    return {"status": "success", "result": {
+        "qgis_version": Qgis.version(), "processing_capabilities": algorithms,
+    }}
 
 
 def main():

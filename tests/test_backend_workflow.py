@@ -877,7 +877,6 @@ def test_disconnect_before_response_body_releases_the_execution_slot(execution_a
 
 
 def test_invalid_processing_after_load_is_rejected_before_review_and_before_any_write(monkeypatch, tmp_path, selected_file):
-    import subprocess
     from agent.nodes import executor_node as executor_module
     monkeypatch.chdir(tmp_path)
     calls = []
@@ -891,7 +890,7 @@ def test_invalid_processing_after_load_is_rejected_before_review_and_before_any_
             plan['steps'].append({'step_id': 2, 'description': 'Buffer', 'allowed_tools': ['execute_processing'],
                                   'input_refs': ['input'], 'output_refs': ['buffer'],
                                   'risk_level': 'low', 'requires_review': False})
-            plan['tool_calls'].append({'step_id': 2, 'tool_name': 'execute_processing', 'arguments': {
+            plan['tool_calls'].append({'step_id': 2, 'tool_name': 'execute_processing', 'distance_unit': 'm', 'arguments': {
                 'algorithm': 'native:buffer', 'parameters': {'INPUT': 'model-path', 'OUTPUT': 'buffer.gpkg',
                 'DISTANCE': 'not-numeric', 'SEGMENTS': 5, 'END_CAP_STYLE': 0, 'JOIN_STYLE': 0,
                 'MITER_LIMIT': 2, 'DISSOLVE': False}}})
@@ -906,25 +905,22 @@ def test_invalid_processing_after_load_is_rejected_before_review_and_before_any_
     async def get_gis():
         return FakeGIS()
 
-    graph = build_graph(MemorySaver())
+    def inspect_parameters(requests):
+        if requests == {'capabilities': True}:
+            return {'status': 'success', 'result': {'qgis_version': 'test', 'processing_capabilities': []}}
+        inspections.append(requests)
+        assert requests[0]['algorithm'] == 'native:buffer'
+        return {'status': 'error', 'message': 'Invalid JSON type for QGIS parameter DISTANCE', 'outcome': 'not_started'}
+
+    graph = build_graph(MemorySaver(), processing_inspector=inspect_parameters)
 
     async def get_graph():
         return graph
 
     monkeypatch.setattr(backend, 'get_app_with_checkpointer', get_graph)
     monkeypatch.setattr(planner_module, '_get_llm', lambda state: ProcessingModel())
-    def inspect_parameters(command, **kwargs):
-        assert command[0] == '/usr/bin/python3'
-        assert command[1].endswith('/scripts/inspect_processing.py')
-        requests = json.loads(kwargs['input'])
-        inspections.append(requests)
-        assert requests[0]['algorithm'] == 'native:buffer'
-        return SimpleNamespace(returncode=0, stdout=json.dumps({
-            'status': 'error', 'message': 'Invalid JSON type for QGIS parameter DISTANCE', 'outcome': 'not_started'}))
-
-    monkeypatch.setattr(subprocess, 'run', inspect_parameters)
     monkeypatch.setattr(executor_module, 'get_mcp_client', get_gis)
-    response = TestClient(backend.app).post('/api/chat/stream', json={'thread_id': 'late-processing', 'message': 'Load and buffer', 'files': [selected_file]})
+    response = TestClient(backend.app).post('/api/chat/stream', json={'thread_id': 'late-processing', 'message': 'Load and buffer 100 meters', 'files': [selected_file]})
     assert 'Invalid JSON type for QGIS parameter DISTANCE' in _sse_event(response, 'error')['message']
     assert 'human_review_required' not in response.text
     assert inspections

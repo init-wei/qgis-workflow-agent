@@ -6,6 +6,16 @@ import pytest
 from agent.tools.mcp_response_parser import MCPResponseParser
 
 
+@pytest.mark.parametrize('source', ['/workspace/buffer.gpkg', '/workspace/points.geojson'])
+def test_loaded_layer_source_is_reference_not_generated_artifact(source):
+    observation = MCPResponseParser().parse('add_layer', {
+        'status': 'success', 'result': {'id': 'layer-1', 'source': source},
+    })
+    assert observation.status == 'success' and observation.outcome == 'completed'
+    assert observation.data == {'id': 'layer-1', 'source': source}
+    assert observation.artifacts == []
+
+
 @pytest.mark.parametrize('tool,reply', [
     ('capture_map_canvas', {}),
     ('capture_map_canvas', {'status': 'success', 'result': {}}),

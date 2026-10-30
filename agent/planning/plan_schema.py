@@ -62,6 +62,9 @@ class ToolCallPlan(BaseModel):
     arguments: dict[str, Any] = Field(description="Exact arguments sent to the MCP tool")
     risk_level: RiskLevel = Field(default="low", description="Call risk level")
     requires_review: StrictBool = Field(default=False, description="Whether this call has an additional risk gate")
+    distance_unit: Literal["m"] | None = Field(
+        default=None, description="Reviewed physical unit of a buffer DISTANCE; not an MCP argument"
+    )
     metadata: dict[str, Any] = Field(default_factory=dict, description="Non-executable call annotations")
 
 

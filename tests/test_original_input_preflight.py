@@ -1,7 +1,9 @@
 """Original inputs are checked before GIS execution; future outputs are not inputs."""
 
 import asyncio
+import hashlib
 from pathlib import Path
+import sqlite3
 
 import pytest
 
@@ -83,3 +85,35 @@ def test_missing_original_stops_before_processing_metadata_request(tmp_path):
     with pytest.raises(ValueError, match="in-0.*unavailable"):
         asyncio.run(validate_processing_calls(plan, gis))
     assert gis.calls == []
+
+
+def test_registered_sqlite_input_rejects_committed_wal_despite_unchanged_main_checksum(tmp_path):
+    source = tmp_path / 'source.gpkg'
+    with sqlite3.connect(source) as setup:
+        setup.execute('CREATE TABLE points (value INTEGER)')
+        setup.execute('INSERT INTO points VALUES (1)')
+    with sqlite3.connect(source) as writer:
+        writer.execute('PRAGMA journal_mode=WAL')
+        writer.execute('PRAGMA wal_autocheckpoint=0')
+        before = hashlib.sha256(source.read_bytes()).hexdigest()
+        plan = plan_for([source])
+        plan.required_inputs[0].sha256 = before
+        writer.execute('UPDATE points SET value=2')
+        writer.commit()
+        assert writer.execute('SELECT value FROM points').fetchone() == (2,)
+        assert hashlib.sha256(source.read_bytes()).hexdigest() == before
+        with pytest.raises(ValueError, match='SQLite transaction sidecar'):
+            validate_original_inputs(plan)
+        assert Path(str(source) + '-wal').is_file()
+        assert hashlib.sha256(source.read_bytes()).hexdigest() == before
+
+
+@pytest.mark.parametrize('suffix', ['-wal', '-shm', '-journal'])
+def test_original_sqlite_sidecars_are_rejected_without_cleanup_even_when_empty(tmp_path, suffix):
+    source = tmp_path / 'source.GPKG'
+    source.write_bytes(b'input')
+    sidecar = Path(str(source) + suffix)
+    sidecar.touch()
+    with pytest.raises(ValueError, match='SQLite transaction sidecar'):
+        validate_original_inputs(plan_for([f'{source}|layername=points']))
+    assert sidecar.exists() and source.read_bytes() == b'input'

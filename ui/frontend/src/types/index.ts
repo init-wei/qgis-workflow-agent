@@ -49,6 +49,7 @@ export interface TaskPlanToolCall {
   arguments: Record<string, unknown>
   risk_level: RiskLevel
   requires_review: boolean
+  distance_unit?: 'm' | null
   metadata?: Record<string, unknown>
 }
 

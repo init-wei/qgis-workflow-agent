@@ -19,6 +19,23 @@ def inspect(requests):
     )
 
 
+def test_installed_capabilities_expose_allowed_algorithm_definitions():
+    result = inspect({"capabilities": True})
+    assert result.returncode == 0, result.stderr + result.stdout
+    facts = json.loads(result.stdout)["result"]
+    assert facts["qgis_version"]
+    capabilities = {item['algorithm']: item for item in facts['processing_capabilities']}
+    assert set(capabilities) == {
+        'native:reprojectlayer', 'native:buffer', 'native:clip', 'native:dissolve',
+        'qgis:statisticsbycategories', 'native:basicstatisticsforfields',
+    }
+    assert capabilities['native:buffer']['available'] is True
+    assert capabilities['native:buffer']['provider'] == 'native'
+    params = {item['name']: item for item in capabilities['native:buffer']['parameters']}
+    assert params['DISTANCE']['type'] == 'distance'
+    assert params['DISTANCE']['optional'] is False
+
+
 def test_valid_processing_inspection_returns_reference_paths_without_writing(tmp_path):
     source = ROOT / "tests/fixtures/gis/phase11_points.geojson"
     output = tmp_path / "projected.gpkg"

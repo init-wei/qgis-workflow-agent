@@ -268,6 +268,22 @@
 
         <!-- 输入区域 -->
         <div class="chat-input p-5 border-t border-dark-border flex-shrink-0 bg-dark-bgDark/80">
+          <div v-if="executionStatus === 'success' || executionStatus === 'failed'" class="mb-3 p-3 border border-dark-border rounded-lg text-sm">
+            <p>任务状态：{{ executionStatus === 'success' ? '执行结束' : '执行失败' }}</p>
+            <p v-if="executionStatus === 'failed'" class="whitespace-pre-wrap">失败原因：{{ executionSummary }}</p>
+            <p>工具执行：{{ toolCompletionSummary }}</p>
+            <p>文件完整性：{{ fileEvidenceSummary }}</p>
+            <p>空间验证：{{ spatialEvidenceSummary }}</p>
+            <p>用户确认：{{ userConfirmationSummary }}</p>
+            <div v-for="detail in spatialArtifactDetails" :key="detail.path" class="mt-2 break-all">
+              <p>{{ detail.path }}：{{ detail.deliverable ? '空间验证通过' : '诊断文件，不可交付' }}</p>
+              <p v-for="error in detail.errors" :key="error">{{ error }}</p>
+              <details v-if="detail.checks.length || detail.facts">
+                <summary>查看空间验证依据</summary>
+                <pre class="whitespace-pre-wrap break-all">{{ formatJson({ checks: detail.checks, facts: detail.facts }) }}</pre>
+              </details>
+            </div>
+          </div>
           <div v-if="executionStatus === 'needs_attention'" class="mb-3 p-3 border border-yellow-500 rounded-lg text-sm">
             <p>上次操作结果未知。请在实际 QGIS 中检查工程、图层和产物，确认该操作已结束或原进程已停止；核查不会重放旧操作。</p>
             <el-button class="mt-2" @click="handleProbeReconciliation">读取当前 QGIS 身份</el-button>
@@ -387,6 +403,9 @@
             <div class="text-xs text-dark-textSecondary mt-1">
               调用级审核: {{ call.requires_review ? '需要' : '不需要' }}
             </div>
+            <div v-if="call.distance_unit" class="text-xs text-dark-textSecondary mt-1">
+              缓冲距离单位: {{ call.distance_unit === 'm' ? '米 (m)' : call.distance_unit }}
+            </div>
             <pre class="mt-2 text-xs whitespace-pre-wrap break-all overflow-auto">{{ formatJson(call.arguments) }}</pre>
           </div>
           <p v-if="currentDraft.tool_calls.length === 0" class="text-sm text-red-400">
@@ -424,7 +443,7 @@
       <div class="bg-dark-bgLight p-4 rounded-lg mb-4">
         <strong>执行摘要：</strong>
         <pre class="mt-2 text-sm whitespace-pre-wrap">{{ executionSummary }}</pre>
-        <p class="mt-2 text-sm">工具执行：{{ executionStatus || '等待记录' }}</p>
+        <p class="mt-2 text-sm">工具执行：{{ toolCompletionSummary }}</p>
         <p class="text-sm">文件完整性：{{ fileEvidenceSummary }}</p>
         <p class="text-sm">空间验证：{{ spatialEvidenceSummary }}</p>
         <p class="text-sm">用户确认：{{ userConfirmationSummary }}</p>
@@ -583,15 +602,60 @@ const executionSummary = computed(() => {
 })
 
 const executionStatus = computed(() => readString(asRecord(currentExecutionResult.value), 'status'))
+const toolCompletionSummary = computed(() => {
+  const attempts = asRecord(currentExecutionResult.value)?.attempts
+  if (!Array.isArray(attempts)) return '等待记录'
+  if (!attempts.length) return '尚无工具调用'
+  const observations = attempts.map(asRecord).map(attempt => asRecord(attempt?.observation))
+  const completed = observations.filter(item => item?.status === 'success').length
+  const unknown = observations.filter(item => item?.outcome === 'unknown').length
+  return `${completed}/${observations.length} 次工具调用返回成功${unknown ? `；${unknown} 次结果未知` : ''}`
+})
 const fileEvidenceSummary = computed(() => {
   const artifacts = asRecord(currentExecutionResult.value)?.artifacts
   if (!Array.isArray(artifacts)) return '等待记录'
-  const paths = artifacts.map(asRecord).filter(item => item?.kind === 'path')
+  // Old records may repeat a produced path in add_layer's source echo. The
+  // producer owns file evidence; a later reference neither replaces it nor
+  // creates another unverified file. No checksum is inferred or copied.
+  const pathsByName = new Map<string, Record<string, unknown>>()
+  for (const item of artifacts.map(asRecord)) {
+    const path = readString(item, 'path')
+    if (item?.kind !== 'path' || !path) continue
+    const previous = pathsByName.get(path)
+    if (!previous || (!previous.producer_step_id && item.producer_step_id)) pathsByName.set(path, item)
+  }
+  const paths = [...pathsByName.values()]
   if (!paths.length) return '无文件产物'
-  const verified = paths.filter(item => typeof item?.sha256 === 'string' && typeof item?.size_bytes === 'number').length
+  const verified = paths.filter(item => typeof item?.sha256 === 'string' && typeof item?.size_bytes === 'number'
+    && asRecord(item?.integrity_validation)?.status !== 'failed').length
   return `${verified}/${paths.length} 个文件具有可读性和校验和证据`
 })
-const spatialEvidenceSummary = computed(() => '未提供独立空间验证')
+const spatialArtifactDetails = computed(() => {
+  const artifacts = asRecord(currentExecutionResult.value)?.artifacts
+  if (!Array.isArray(artifacts)) return []
+  return artifacts.map(asRecord).flatMap(item => {
+    const report = asRecord(item?.spatial_validation)
+    const path = readString(item, 'path')
+    const status = readString(report, 'status')
+    if (!path || !status || status === 'not_applicable') return []
+    const errors = Array.isArray(report?.errors)
+      ? report.errors.filter((error): error is string => typeof error === 'string') : []
+    const integrity = asRecord(item?.integrity_validation)
+    if (Array.isArray(integrity?.errors)) {
+      errors.push(...integrity.errors.filter((error): error is string => typeof error === 'string'))
+    }
+    const checks = Array.isArray(report?.checks) ? report.checks : []
+    const facts = asRecord(report?.facts)
+    return [{ path, status, errors, checks, facts, deliverable: item?.deliverable === true && status === 'passed' }]
+  })
+})
+const spatialEvidenceSummary = computed(() => {
+  const reports = spatialArtifactDetails.value
+  if (!reports.length) return '未提供独立空间验证'
+  const passed = reports.filter(report => report.deliverable).length
+  const failed = reports.length - passed
+  return `${passed} 个产物通过${failed ? `；${failed} 个未通过，仅供诊断` : ''}`
+})
 const userConfirmationSummary = computed(() => {
   const confirmed = asRecord(currentExecutionResult.value)?.confirmed
   return confirmed === true ? '已确认成功' : confirmed === false ? '已确认失败' : '尚未确认'
@@ -1042,6 +1106,7 @@ function handleSSEEvent(event: string, data: unknown) {
       resetStreamingState()
       chatStore.addAssistantMessage(`❌ 错误: ${readString(payload, 'message') || '未知错误'}`)
       chatStore.setExecuting(false)
+      if (currentDraft.value) void loadExecutionDetails(currentDraft.value.task_id)
       break
     case 'paused':
       resetStreamingState()

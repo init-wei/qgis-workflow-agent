@@ -334,6 +334,15 @@ class PlanValidator:
                     step_id=call.step_id, field='tool_calls',
                 ))
 
+            if (call.tool_name == 'execute_processing'
+                    and call.arguments.get('algorithm') == 'native:buffer'
+                    and call.distance_unit != 'm'):
+                issues.append(PlanValidationIssue(
+                    code='buffer_distance_unit_required',
+                    message='Buffer distance unit is required; specify meters and review the plan.',
+                    step_id=call.step_id, field='tool_calls.distance_unit',
+                ))
+
             if step is not None:
                 references = {item.input_id: item.path for item in task_plan.required_inputs}
                 references.update({item.output_id: item.path for item in task_plan.expected_outputs})

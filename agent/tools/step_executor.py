@@ -20,8 +20,10 @@ from agent.tools.tool_contracts import (
 from agent.tools.tool_policy import ToolPolicy
 from agent.tools.tool_registry import ToolRegistry
 from qgis_mcp_server.qgis_mcp_plugin.artifact_paths import (
+    ActiveSQLiteSidecar,
     artifact_component_paths,
     call_output_paths,
+    require_standalone_sqlite,
     resolve_owned_output_path,
     validate_qgz_archive,
 )
@@ -101,6 +103,14 @@ class StepExecutor:
             }:
                 try:
                     self._verify_output_files(call, observation)
+                except ActiveSQLiteSidecar as exc:
+                    # The tool completed, but its database is not a verifiable
+                    # standalone artifact. Keep tool facts; the executor aborts
+                    # on this separate integrity evidence before spatial readback.
+                    for artifact in observation.artifacts:
+                        artifact.update(deliverable=False, integrity_validation={
+                            'status': 'failed', 'errors': [str(exc)],
+                        })
                 except (ValueError, OSError) as exc:
                     observation = observation.model_copy(update={
                         "status": "error", "error_type": "execution_error",
@@ -146,6 +156,7 @@ class StepExecutor:
                         item["components"] = components[1:]
 
     def _read_file_evidence(self, path: Path, *, project: bool = False) -> dict:
+        require_standalone_sqlite(path)
         digest = hashlib.sha256()
         with path.open("rb") as stream:
             info = os.fstat(stream.fileno())
@@ -160,6 +171,7 @@ class StepExecutor:
             raise ValueError(f"artifact is empty: {path}")
         if (info.st_size, info.st_mtime_ns) != (after.st_size, after.st_mtime_ns):
             raise ValueError(f"artifact changed while being read: {path}")
+        require_standalone_sqlite(path)
         return {"path": str(path), "size_bytes": info.st_size, "sha256": digest.hexdigest()}
 
     def _build_attempt(

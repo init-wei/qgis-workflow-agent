@@ -1,0 +1,119 @@
+{
+  "schema_version": 1,
+  "input": {
+    "path": "tests/fixtures/gis/phase11_points.geojson",
+    "sha256": "bee3424d61d00f88e25ce8a123ec0062abc65a7d8dc9189823f4e975327c8b5d",
+    "crs": "EPSG:4326",
+    "coordinate_order": "longitude, latitude",
+    "geometry_type": "Point",
+    "feature_count": 3
+  },
+  "reprojection": {
+    "target_crs": "EPSG:32650",
+    "coordinate_order": "easting, northing",
+    "unit": "m",
+    "projection_parameters": {
+      "semi_major_axis_m": 6378137.0,
+      "inverse_flattening": 298.257223563,
+      "latitude_of_origin_deg": 0.0,
+      "central_meridian_deg": 117.0,
+      "scale_factor": 0.9996,
+      "false_easting_m": 500000.0,
+      "false_northing_m": 0.0
+    },
+    "tolerance_m_per_axis": 0.02,
+    "features": [
+      {
+        "attributes": {
+          "id": 1,
+          "group": "a",
+          "value": 10
+        },
+        "input_coordinates_deg": [
+          116.38,
+          39.9
+        ],
+        "expected_coordinates_m": [
+          446999.681,
+          4416842.239
+        ]
+      },
+      {
+        "attributes": {
+          "id": 2,
+          "group": "a",
+          "value": 20
+        },
+        "input_coordinates_deg": [
+          116.39,
+          39.91
+        ],
+        "expected_coordinates_m": [
+          447862.112,
+          4417946.248
+        ]
+      },
+      {
+        "attributes": {
+          "id": 3,
+          "group": "b",
+          "value": 30
+        },
+        "input_coordinates_deg": [
+          116.4,
+          39.92
+        ],
+        "expected_coordinates_m": [
+          448724.295,
+          4419050.354
+        ]
+      }
+    ]
+  },
+  "buffer": {
+    "input": "reprojection output",
+    "crs": "EPSG:32650",
+    "parameters": {
+      "DISTANCE": 100.0,
+      "SEGMENTS": 8,
+      "END_CAP_STYLE": 0,
+      "JOIN_STYLE": 0,
+      "MITER_LIMIT": 2.0,
+      "DISSOLVE": false,
+      "SEPARATE_DISJOINT": false
+    },
+    "expected_per_feature": {
+      "geometry_types": [
+        "Polygon",
+        "MultiPolygon"
+      ],
+      "native_buffer_sink_type": "MultiPolygon",
+      "polygon_part_count": 1,
+      "ring_count_per_polygon": 1,
+      "edges_per_ring": 32,
+      "coordinates_in_closed_ring": 33,
+      "vertex_radius_m": 100.0,
+      "edge_length_m": 19.603428,
+      "area_m2": 31214.451523,
+      "perimeter_m": 627.309698,
+      "circle_area_upper_bound_m2": 31415.926536
+    },
+    "expected_feature_count": 3,
+    "attributes_and_centers": "match reprojection features by attributes",
+    "absolute_tolerances": {
+      "vertex_radius_from_frozen_center_m": 0.03,
+      "vertex_radius_from_actual_reprojected_center_m": 0.001,
+      "edge_length_m": 0.001,
+      "area_m2": 0.05,
+      "perimeter_m": 0.005
+    }
+  },
+  "method": {
+    "reprojection": "Snyder 1987 equations 8-9, 8-10, 3-21; latitude of origin zero; standard-library math",
+    "reprojection_source": "https://pubs.usgs.gov/pp/1395/report.pdf",
+    "buffer": "inscribed regular 32-gon: area=N*r^2*sin(2*pi/N)/2; edge=2*r*sin(pi/N); perimeter=N*edge",
+    "qgis_parameter_source": "https://docs.qgis.org/3.40/en/docs/user_manual/processing_algs/qgis/vectorgeometry.html#buffer",
+    "qgis_buffer_implementation_source": "https://github.com/qgis/QGIS/blob/release-3_40/src/analysis/processing/qgsalgorithmbuffer.cpp",
+    "scope": "this fixed point fixture and these parameters only"
+  }
+}

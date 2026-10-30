@@ -16,32 +16,34 @@ from langchain_core.messages import AIMessage
 from agent.planning.plan_schema import TaskPlan
 from agent.planning.plan_validator import PlanValidator
 from agent.planning.processing_preflight import validate_original_inputs, validate_processing_calls
+from agent.spatial_validation import preflight_spatial_plan, validate_spatial_step
 from agent.state import AgentState
 from agent.tools.execution_loop import ExecutionLoop
 from agent.tools.mcp_client import get_mcp_client
 from agent.tools.tool_call_planner import compile_task_plan_to_tool_calls
-from agent.tools.tool_contracts import ExecutionTrace, LoopResult
+from agent.tools.tool_contracts import EvaluationDecision, ExecutionTrace, LoopResult
 from agent.tools.database import save_task_execution_record
 from agent.tools.execution_guard import block_unknown_task, execution_slot
 from agent.tools.tool_registry import ToolRegistry
+from qgis_mcp_server.qgis_mcp_plugin.artifact_paths import require_standalone_sqlite
 
 logger = logging.getLogger(__name__)
 
 
-async def executor_node(state: AgentState) -> dict[str, Any]:
+async def executor_node(state: AgentState, *, spatial_inspector=None) -> dict[str, Any]:
     """Execute the reviewed TaskPlan through the controlled loop runtime."""
-    return await controlled_executor_node(state)
+    return await controlled_executor_node(state, spatial_inspector=spatial_inspector)
 
 
-async def controlled_executor_node(state: AgentState) -> dict[str, Any]:
+async def controlled_executor_node(state: AgentState, *, spatial_inspector=None) -> dict[str, Any]:
     """Execute the reviewed TaskPlan through the one non-queued process slot."""
     task_plan = state.get("task_plan")
     task_id = task_plan.get("task_id") if isinstance(task_plan, dict) else getattr(task_plan, "task_id", None)
     with execution_slot(task_id):
-        return await _execute_reviewed_plan(state)
+        return await _execute_reviewed_plan(state, spatial_inspector=spatial_inspector)
 
 
-async def _execute_reviewed_plan(state: AgentState) -> dict[str, Any]:
+async def _execute_reviewed_plan(state: AgentState, *, spatial_inspector=None) -> dict[str, Any]:
     session_id = state["session_id"]
     task_plan = state.get("task_plan")
     if task_plan is None:
@@ -86,18 +88,15 @@ async def _execute_reviewed_plan(state: AgentState) -> dict[str, Any]:
         completed_step_ids = _completed_prefix(task_plan, trace, start_index, feedback)
     validation_report = PlanValidator().validate(task_plan, completed_step_ids=completed_step_ids)
     if not validation_report.is_valid:
+        response = _failed_trace(trace, '受控执行未开始：当前 TaskPlan 校验失败。 ' + validation_report.summary)
         await _persist_execution_record(task_plan, session_id, trace, "failed")
-        trace.status = 'failed'
-        return {
-            "execution_trace": trace,
-            "messages": [AIMessage(content="受控执行未开始：当前 TaskPlan 校验失败。 " + validation_report.summary)],
-            "is_completed": None,
-        }
+        return response
     if not tool_calls:
         raise RuntimeError("Validated TaskPlan unexpectedly contains no tool calls.")
 
     try:
         await asyncio.to_thread(validate_original_inputs, task_plan)
+        await preflight_spatial_plan(task_plan, inspector=spatial_inspector)
         mcp_client = await get_mcp_client()
         await validate_processing_calls(task_plan, mcp_client)
         tools = await mcp_client.list_tools()
@@ -105,9 +104,10 @@ async def _execute_reviewed_plan(state: AgentState) -> dict[str, Any]:
         registry = ToolRegistry.from_mcp_tools(tools)
         loop = ExecutionLoop(mcp_client=mcp_client, registry=registry,
                              workspace_root=Path.cwd(), max_attempts=1)
-    except Exception:
+    except Exception as exc:
+        response = _failed_trace(trace, f'受控执行未开始：{exc}')
         await _persist_execution_record(task_plan, session_id, trace, "failed")
-        raise
+        return response
 
     allowed_tools = sorted(
         {tool_name for step in task_plan.steps for tool_name in step.allowed_tools}
@@ -117,6 +117,12 @@ async def _execute_reviewed_plan(state: AgentState) -> dict[str, Any]:
     for call_index, call in enumerate(tool_calls[start_index:], start=start_index):
         logger.info("Controlled executor calling %s for step %s", call.tool_name, call.step_id)
         human_feedback = risk_review_feedback if call_index == start_index else None
+        try:
+            input_paths = await asyncio.to_thread(_verified_inputs, task_plan, trace, call)
+        except (OSError, ValueError) as exc:
+            response = _failed_trace(trace, f'受控执行停止：无法验证步骤输入。{exc}')
+            await _persist_execution_record(task_plan, session_id, trace, 'failed')
+            return response
         await _persist_execution_record(
             task_plan, session_id, trace, "running",
             inflight_call=call.model_dump(mode="json"),
@@ -135,6 +141,49 @@ async def _execute_reviewed_plan(state: AgentState) -> dict[str, Any]:
                 logger.error('Could not persist interrupted operation outcome for task %s', task_plan.task_id)
             raise
         risk_review_feedback = None
+        if result.status == 'success' and call.tool_name == 'execute_processing':
+            attempt = trace.latest_attempt()
+            output_paths = {}
+            try:
+                output_paths = _actual_outputs(task_plan, call, attempt)
+                if await asyncio.to_thread(_verified_inputs, task_plan, trace, call) != input_paths:
+                    raise ValueError('Processing inputs changed before spatial validation.')
+                report = await validate_spatial_step(
+                    call, input_paths=input_paths, output_paths=output_paths,
+                    inspector=spatial_inspector,
+                )
+                if report.get('status') != 'passed':
+                    if not report.get('errors'):
+                        report = {**report, 'status': 'failed',
+                                  'errors': ['Processing result has no applicable spatial validation.']}
+                else:
+                    # The inspector's verdict applies only to these exact file bytes.
+                    for artifact in attempt.artifacts:
+                        if artifact.get('kind') == 'path':
+                            _verify_recorded_file(artifact)
+                    if await asyncio.to_thread(_verified_inputs, task_plan, trace, call) != input_paths:
+                        raise ValueError('Processing inputs changed during spatial validation.')
+            except Exception as exc:
+                report = {'status': 'failed', 'checks': [],
+                          'errors': [f'Spatial result could not be verified: {exc}'], 'facts': {}}
+            for artifact in attempt.artifacts:
+                if artifact.get('kind') == 'path':
+                    artifact['spatial_validation'] = report
+                    artifact['deliverable'] = report.get('status') == 'passed'
+                    artifact['producer_step_id'] = call.step_id
+                    artifact['output_ref'] = next(
+                        (ref for ref, path in output_paths.items() if path == artifact.get('path')),
+                        None,
+                    )
+            if report.get('status') != 'passed':
+                trace.status = 'failed'
+                result = result.model_copy(update={
+                    'status': 'failed',
+                    'decision': EvaluationDecision(
+                        outcome='abort', reason='spatial_validation_failed',
+                        message='; '.join(report.get('errors') or ['Spatial validation failed.']),
+                    ),
+                })
         loop_results.append(result)
         latest_attempt = trace.latest_attempt()
         unknown_outcome = (
@@ -154,6 +203,8 @@ async def _execute_reviewed_plan(state: AgentState) -> dict[str, Any]:
             if result.status != "success"
             else "running"
         )
+        if record_status == 'failed':
+            _failed_trace(trace, result.decision.message or result.decision.reason)
         if unknown_outcome:
             block_unknown_task(task_plan.task_id)
         try:
@@ -186,6 +237,72 @@ async def _execute_reviewed_plan(state: AgentState) -> dict[str, Any]:
     }
 
 
+def _verify_recorded_file(artifact: dict) -> None:
+    """Require each consumed byte sequence to match the completed producer's evidence."""
+    try:
+        for item in [artifact, *artifact.get('components', [])]:
+            path = Path(item['path'])
+            require_standalone_sqlite(path)
+            with path.open('rb') as stream:
+                digest = hashlib.file_digest(stream, 'sha256').hexdigest()
+            if path.stat().st_size != item.get('size_bytes') or digest != item.get('sha256'):
+                raise ValueError(f'Produced artifact changed after validation: {path}')
+            require_standalone_sqlite(path)
+    except (KeyError, OSError, ValueError) as exc:
+        artifact['deliverable'] = False
+        artifact['integrity_validation'] = {'status': 'failed', 'errors': [str(exc)]}
+        raise ValueError(f'Produced artifact changed or is unreadable: {exc}') from exc
+
+
+def _verified_inputs(plan: TaskPlan, trace: ExecutionTrace, call) -> dict[str, str]:
+    """Resolve each reference only from its original or a verified actual producer."""
+    validate_original_inputs(plan)
+    step = next(item for item in plan.steps if item.step_id == call.step_id)
+    originals = {item.input_id: item.path for item in plan.required_inputs}
+    outputs = {item.output_id: item.path for item in plan.expected_outputs}
+    result = {}
+    for ref in step.input_refs:
+        if ref in originals:
+            result[ref] = originals[ref]
+            continue
+        producer = next(item for item in plan.steps if ref in item.output_refs)
+        attempts = [attempt for attempt in trace.attempts
+                    if attempt.step_id == producer.step_id and attempt.status == 'success'
+                    and attempt.observation.status == 'success'
+                    and attempt.observation.outcome == 'completed']
+        if len(attempts) != 1:
+            raise ValueError(f'No completed producer for output reference {ref}.')
+        artifact = next((item for item in attempts[0].artifacts
+                         if item.get('kind') == 'path' and item.get('path') == outputs[ref]), None)
+        if artifact is None:
+            raise ValueError(f'Producer did not return the approved output for {ref}.')
+        if attempts[0].tool_call.tool_name == 'execute_processing' and (
+            artifact.get('output_ref') != ref
+            or artifact.get('producer_step_id') != producer.step_id
+            or artifact.get('deliverable') is not True
+            or (artifact.get('spatial_validation') or {}).get('status') != 'passed'
+        ):
+            raise ValueError(f'Producer output {ref} has not passed spatial validation.')
+        _verify_recorded_file(artifact)
+        result[ref] = artifact['path']
+    return result
+
+
+def _actual_outputs(plan: TaskPlan, call, attempt) -> dict[str, str]:
+    step = next(item for item in plan.steps if item.step_id == call.step_id)
+    outputs = {item.output_id: item.path for item in plan.expected_outputs}
+    result = {}
+    for ref in step.output_refs:
+        expected = outputs[ref]
+        matches = [item for item in attempt.artifacts
+                   if item.get('kind') == 'path' and item.get('path') == expected]
+        if len(matches) != 1:
+            raise ValueError(f'Producer did not return the approved output for {ref}.')
+        _verify_recorded_file(matches[0])
+        result[ref] = matches[0]['path']
+    return result
+
+
 def _resume_proof(trace: ExecutionTrace, cursor: int, feedback) -> dict:
     """Compact comparison evidence, derived exclusively from checkpoint values."""
     if hasattr(feedback, 'model_dump'):
@@ -212,15 +329,10 @@ def _completed_prefix(plan: TaskPlan, trace: ExecutionTrace, cursor: int, feedba
         if attempt.status == 'success' and attempt.observation.outcome != 'unknown':
             for artifact in attempt.artifacts:
                 if artifact.get('kind') == 'path':
-                    for item in [artifact, *artifact.get('components', [])]:
-                        path = Path(item['path'])
-                        digest = hashlib.sha256()
-                        with path.open('rb') as stream:
-                            while chunk := stream.read(1024 * 1024):
-                                digest.update(chunk)
-                        if (path.stat().st_size != item.get('size_bytes')
-                                or digest.hexdigest() != item.get('sha256')):
-                            raise RuntimeError('Completed checkpoint artifact changed; needs attention.')
+                    try:
+                        _verify_recorded_file(artifact)
+                    except ValueError as exc:
+                        raise RuntimeError(f'Completed checkpoint artifact changed; needs attention. {exc}') from exc
             index += 1
         elif attempt.status != 'blocked' or not attempt.metadata.get('risk_review'):
             raise RuntimeError('Checkpoint attempts are not a completed prefix; needs attention.')
@@ -274,7 +386,19 @@ async def _persist_execution_record(
         checkpoint_resume=checkpoint_resume,
         plan=task_plan.model_dump(mode="json"),
         attempts=[attempt.model_dump(mode="json") for attempt in trace.attempts],
+        summary=trace.metadata.get('failure_reason'),
     )
+
+
+def _failed_trace(trace: ExecutionTrace, reason: str) -> dict[str, Any]:
+    """Record a known failure without fabricating a tool attempt or unknown write."""
+    trace.status = 'failed'
+    trace.metadata['failure_reason'] = reason
+    return {
+        'execution_trace': trace, 'messages': [AIMessage(content=reason)],
+        'pending_risk_review': None, 'risk_review_feedback': None,
+        'execution_cursor': None, 'is_completed': None,
+    }
 
 
 def _success_message(trace: ExecutionTrace, loop_results: list[LoopResult]) -> AIMessage:

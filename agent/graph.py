@@ -6,6 +6,7 @@ LangGraph 构建模块
 
 import os
 import asyncio
+from functools import partial
 from typing import Optional, Literal
 from dotenv import load_dotenv
 
@@ -107,7 +108,10 @@ def should_continue_after_executor(state: AgentState) -> Literal["risk_review_no
 def build_graph(
     checkpointer: Optional[AsyncPostgresSaver] = None,
     interrupt_before: Optional[list] = None,
-    interrupt_after: Optional[list] = None
+    interrupt_after: Optional[list] = None,
+    *,
+    processing_inspector=None,
+    spatial_inspector=None,
 ) -> StateGraph:
     """
     构建LangGraph状态图
@@ -134,9 +138,12 @@ def build_graph(
     workflow = StateGraph(AgentState)
     
     # 添加节点
-    workflow.add_node("planner_node", planner_node)
+    workflow.add_node("planner_node", partial(
+        planner_node, processing_inspector=processing_inspector,
+        spatial_inspector=spatial_inspector,
+    ))
     workflow.add_node("human_review_node", human_review_node)  # 新增：人工审核节点
-    workflow.add_node("executor_node", executor_node)
+    workflow.add_node("executor_node", partial(executor_node, spatial_inspector=spatial_inspector))
     workflow.add_node("risk_review_node", risk_review_node)
     workflow.add_node("reflector_node", reflector_node)
     

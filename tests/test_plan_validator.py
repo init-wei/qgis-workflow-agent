@@ -32,6 +32,7 @@ def _plan(**updates):
             ToolCallPlan(
                 step_id=1,
                 tool_name="execute_processing",
+                distance_unit="m",
                 arguments={
                     "algorithm": "native:buffer",
                     "parameters": {"INPUT": "data/input.gpkg", "OUTPUT": "shared/outputs/task-validate/r1/output/output.gpkg"},
@@ -223,7 +224,7 @@ def test_bound_processing_chain_rejects_reverse_tool_call_order(tmp_path, monkey
                         input_refs=['o1'], output_refs=['o2'], risk_level='low', requires_review=False)],
         tool_calls=[ToolCallPlan(step_id=1, tool_name='execute_processing', arguments={
                         'algorithm': 'native:reprojectlayer', 'parameters': {'INPUT': source, 'OUTPUT': first}}),
-                    ToolCallPlan(step_id=2, tool_name='execute_processing', arguments={
+                    ToolCallPlan(step_id=2, tool_name='execute_processing', distance_unit='m', arguments={
                         'algorithm': 'native:buffer', 'parameters': {'INPUT': first, 'OUTPUT': second}})],
     )
     bound = bind_uploaded_files(plan, [{'file_id': 'source-id', 'filename': 'source.geojson',

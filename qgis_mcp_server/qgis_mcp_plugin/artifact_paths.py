@@ -12,6 +12,30 @@ OUTPUT_SUBDIRECTORY = Path('shared/outputs')
 WRITE_TOOLS = frozenset({'add_layer', 'execute_processing', 'capture_map_canvas', 'save_project'})
 
 
+class ActiveSQLiteSidecar(ValueError):
+    """The main file alone cannot establish the SQLite dataset's content."""
+
+
+def require_standalone_sqlite(path):
+    """Reject transaction sidecars without opening or changing the database.
+
+    WAL can contain committed data absent from the main-file checksum; a rollback
+    journal may require recovery, and SHM indicates WAL coordination. Even empty
+    or stale files are rejected: V1 does not decide whether checkpoint/recovery
+    is safe, or modify the user's files to obtain a standalone snapshot.
+    """
+    path = Path(path)
+    if path.suffix.lower() not in {'.gpkg', '.sqlite', '.sqlite3', '.db'}:
+        return
+    for suffix in ('-wal', '-shm', '-journal'):
+        sidecar = Path(str(path) + suffix)
+        if os.path.lexists(sidecar):
+            raise ActiveSQLiteSidecar(
+                f'SQLite transaction sidecar prevents standalone file verification: {sidecar}. '
+                'Close the writer and provide a safely finalized standalone dataset.'
+            )
+
+
 def workspace_directory(workspace_root=None):
     if workspace_root is not None:
         return Path(workspace_root).resolve()

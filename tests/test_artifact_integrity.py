@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import select
+import sqlite3
 import subprocess
 
 import pytest
@@ -16,6 +17,53 @@ from agent.tools.tool_registry import ToolRegistry
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+@pytest.mark.external
+def test_gdal_committed_wal_changes_logical_input_without_changing_recorded_main_file(tmp_path):
+    """A real GPKG read proves why the main-file checksum cannot cover WAL."""
+    from agent.planning.plan_schema import InputSpec, TaskPlan
+    from agent.planning.processing_preflight import validate_original_inputs
+
+    source = tmp_path / 'points.gpkg'
+    script = '''
+import json, sys
+from osgeo import ogr, osr
+path, mode = sys.argv[1:]
+if mode == 'create':
+    ds = ogr.GetDriverByName('GPKG').CreateDataSource(path)
+    crs = osr.SpatialReference()
+    crs.ImportFromEPSG(4326)
+    layer = ds.CreateLayer('points', crs, ogr.wkbPoint, options=['SPATIAL_INDEX=NO'])
+    layer.CreateField(ogr.FieldDefn('value', ogr.OFTInteger))
+    feature = ogr.Feature(layer.GetLayerDefn())
+    feature.SetField('value', 1)
+    feature.SetGeometry(ogr.CreateGeometryFromWkt('POINT (116.4 39.9)'))
+    layer.CreateFeature(feature)
+    feature = layer = ds = None
+else:
+    ds = ogr.Open(path, 0)
+    print(json.dumps(ds.GetLayerByName('points').GetNextFeature().GetField('value')))
+'''
+    subprocess.run(['/usr/bin/python3', '-c', script, str(source), 'create'], check=True,
+                   capture_output=True, text=True, timeout=30)
+    with sqlite3.connect(source) as writer:
+        writer.execute('PRAGMA journal_mode=WAL')
+        writer.execute('PRAGMA wal_autocheckpoint=0')
+        before = hashlib.sha256(source.read_bytes()).hexdigest()
+        writer.execute('UPDATE points SET value=2')
+        writer.commit()
+        result = subprocess.run(['/usr/bin/python3', '-c', script, str(source), 'read'], check=True,
+                                capture_output=True, text=True, timeout=30)
+        assert json.loads(result.stdout) == 2
+        assert hashlib.sha256(source.read_bytes()).hexdigest() == before
+        plan = TaskPlan(task_id='wal-input', task_summary='Load', steps=[], risk_level='low',
+                        review_status='approved', required_inputs=[InputSpec(
+                            input_id='source', description='GPKG', path=f'{source}|layername=points', sha256=before)])
+        with pytest.raises(ValueError, match='SQLite transaction sidecar'):
+            validate_original_inputs(plan)
+        assert Path(str(source) + '-wal').is_file()
+        assert hashlib.sha256(source.read_bytes()).hexdigest() == before
 
 
 @pytest.mark.external
