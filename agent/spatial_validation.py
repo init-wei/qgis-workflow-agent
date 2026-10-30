@@ -46,11 +46,15 @@ def _checked(report):
     return report
 
 
-async def preflight_spatial_plan(plan, *, inspector=None):
-    """Check original layers and planned buffer units before any Processing write."""
-    if not any(call.tool_name == "execute_processing" for call in plan.tool_calls):
+async def preflight_spatial_plan(plan, *, inspector=None, input_facts=None):
+    """Check spatial inputs and planned operations before any Processing write."""
+    if not any(call.tool_name == "execute_processing" or
+               (call.tool_name == "add_layer" and call.arguments.get("layer_type") == "vector")
+               for call in plan.tool_calls):
         return {"status": "passed", "checks": [], "errors": [], "facts": {}}
     request = {"mode": "preflight", "plan": plan.model_dump(mode="json")}
+    if input_facts:
+        request["input_facts"] = input_facts
     try:
         raw = await asyncio.to_thread(inspector or _system_inspector, request)
     except Exception as exc:
@@ -61,14 +65,20 @@ async def preflight_spatial_plan(plan, *, inspector=None):
     return report
 
 
-async def validate_spatial_step(call, *, input_paths, output_paths, inspector=None):
+async def validate_spatial_step(call, *, input_paths, output_paths, inspector=None,
+                                observation=None, input_facts=None):
     """Read the actual output against actual input; return compact evidence or failure."""
-    if call.tool_name != "execute_processing":
+    if (call.tool_name != "execute_processing"
+            and not (call.tool_name == "add_layer" and call.arguments.get("layer_type") == "vector")):
         return {"status": "not_applicable", "checks": [], "errors": [], "facts": {}}
     request = {
         "mode": "validate", "call": call.model_dump(mode="json"),
         "input_paths": dict(input_paths), "output_paths": dict(output_paths),
     }
+    if observation is not None:
+        request["observation"] = observation
+    if input_facts:
+        request["input_facts"] = input_facts
     try:
         return _checked(await asyncio.to_thread(inspector or _system_inspector, request))
     except Exception:

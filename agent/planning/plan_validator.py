@@ -7,7 +7,7 @@ from agent.planning.plan_schema import PlanValidationIssue, PlanValidationReport
 from qgis_mcp_server.qgis_mcp_plugin.artifact_paths import (
     call_output_paths, new_output_path, resolve_owned_output_path,
 )
-from qgis_mcp_server.qgis_mcp_plugin.processing_policy import SUPPORTED_PROCESSING_ALGORITHMS
+from qgis_mcp_server.qgis_mcp_plugin.processing_policy import validate_processing_request
 
 
 COARSE_API_REFERENCES = {
@@ -510,10 +510,10 @@ class PlanValidator:
         elif tool_name == "execute_processing":
             algorithm = arguments.get("algorithm")
             parameters = arguments.get("parameters")
-            if algorithm not in SUPPORTED_PROCESSING_ALGORITHMS:
-                return f"Unsupported processing algorithm '{algorithm}'."
-            if not isinstance(parameters, dict) or not parameters:
-                return "execute_processing requires non-empty parameters."
+            try:
+                validate_processing_request(algorithm, parameters)
+            except ValueError as exc:
+                return str(exc)
         elif tool_name in {"capture_map_canvas", "save_project"}:
             if not isinstance(arguments.get("path"), str) or not arguments["path"]:
                 return f"{tool_name} requires a path."

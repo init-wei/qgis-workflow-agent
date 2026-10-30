@@ -20,3 +20,15 @@ cmp tests/fixtures/gis/reprojection-buffer-oracle.json /tmp/qwa-reprojection-buf
 ```
 
 生成器默认输出到标准输出；`--output` 只创建不存在的路径，输入哈希不符时拒绝生成。容差与公式仅适用于此固定数据和参数，不能推断其他坐标、线或面缓冲均已验证；真实产物仍需实际读取、匹配并报告验证结果。
+
+## T05 裁剪、融合与统计开发样例
+
+[输入定义](t05_workflows.json)拥有 EPSG:32650 的三个重叠/相邻矩形、裁剪面、字段类型及空值；[固定预期](t05_workflow_oracle.json)拥有独立区间交并与手算统计、容差及适用范围。它们用于开发验证，不是 T07 留出集。面积和与融合后的并集面积不同，数值字段的非空计数也不同于总要素数。
+
+使用系统 GDAL 从定义物化 GeoPackage；输出目录必须不存在，父目录须存在，不覆盖既有文件：
+
+```sh
+/usr/bin/python3 scripts/build_t05_fixtures.py --output-dir /tmp/qwa-t05-new-inputs
+```
+
+生成清单绑定定义、oracle、脚本与每个实际文件的 SHA。GeoPackage 的生成时间可能改变二进制校验和，以当次清单为准。样例包括正常来源/裁剪面、远离裁剪面、有 schema 的空来源、显式 REAL 全 NULL 来源和 `area`/`perimeter` 字段碰撞来源。这里只创建输入，不执行 Processing；真实模型、MCP、桌面 QGIS、产物与界面按[测试规范](../../../docs/testing.md)另行验收。

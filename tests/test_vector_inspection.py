@@ -59,7 +59,8 @@ def test_metadata_matches_known_geojson_without_changing_input(tmp_path):
     assert result.returncode == 0, result.stderr
     assert json.loads(result.stdout) == {"layers": [{
         "layer_name": "phase11_points", "crs": "EPSG:4326", "geometry": "Point",
-        "feature_count": 3, "fields": ["id", "group", "value"], "is_2d": True,
+        "feature_count": 3, "fields": ["id", "group", "value"],
+        "field_types": {"id": "Integer", "group": "String", "value": "Integer"}, "is_2d": True,
     }]}
     assert hashlib.sha256(path.read_bytes()).hexdigest() == before
     assert [item.name for item in tmp_path.iterdir()] == [path.name]
@@ -90,9 +91,9 @@ def test_all_geopackage_layers_are_listed_for_explicit_selection(tmp_path):
     assert result.returncode == 0, result.stderr
     assert json.loads(result.stdout) == {"layers": [
         {"layer_name": "control_points", "crs": "EPSG:32650", "geometry": "Point",
-         "feature_count": 1, "fields": ["value"], "is_2d": True},
+         "feature_count": 1, "fields": ["value"], "field_types": {"value": "Integer"}, "is_2d": True},
         {"layer_name": "study_area", "crs": "EPSG:32650", "geometry": "Polygon",
-         "feature_count": 1, "fields": ["value"], "is_2d": True},
+         "feature_count": 1, "fields": ["value"], "field_types": {"value": "Integer"}, "is_2d": True},
     ]}
     assert hashlib.sha256(path.read_bytes()).hexdigest() == before
     assert [item.name for item in tmp_path.iterdir()] == [path.name]

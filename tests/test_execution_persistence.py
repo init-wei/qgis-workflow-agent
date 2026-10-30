@@ -12,11 +12,29 @@ from agent.tools import database, execution_guard
 pytestmark = pytest.mark.database
 
 
+def _connect_project_database():
+    """Keep explicit database checks away from libpq's host/service defaults."""
+    dsn = os.getenv("DATABASE_URL", "").strip()
+    if not dsn:
+        pytest.skip("Set DATABASE_URL for the dedicated project database; do not use libpq defaults.")
+    options = psycopg.conninfo.conninfo_to_dict(dsn)
+    database_name = os.getenv("POSTGRES_DB", "qgis_workflow")
+    if (options.get("host") not in {"127.0.0.1", "localhost"}
+            or options.get("port") != "55433"
+            or options.get("hostaddr") not in {None, "127.0.0.1"}
+            or options.get("dbname") != database_name
+            or options.get("service") or os.getenv("PGSERVICE") or os.getenv("PGSERVICEFILE")):
+        pytest.fail("Persistence tests require an explicit project database on loopback port 55433, without a service override.")
+    # Explicit kwargs override PGHOSTADDR/PGHOST/PGPORT/PGDATABASE as well as DSN
+    # defaults. A hostname must never redirect these tests away from loopback.
+    return psycopg.connect(dsn, host="127.0.0.1", hostaddr="127.0.0.1", port="55433", dbname=database_name)
+
+
 @pytest.fixture
 def task_store(monkeypatch):
     # Temporary tables shadow the application's names and disappear on close.
     # No application task, attempt or checkpoint is modified by these cases.
-    conn = psycopg.connect(os.environ["DATABASE_URL"])
+    conn = _connect_project_database()
     conn.execute("CREATE TEMP TABLE task_executions (LIKE public.task_executions INCLUDING ALL)")
     conn.execute("ALTER TABLE task_executions ADD COLUMN IF NOT EXISTS reconciliation JSONB")
     conn.execute("CREATE TEMP TABLE task_step_attempts (LIKE public.task_step_attempts INCLUDING ALL)")

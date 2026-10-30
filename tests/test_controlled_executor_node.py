@@ -111,7 +111,9 @@ async def _assert_executor_runs_exact_call(monkeypatch):
     state = create_initial_state("session-approved", "Load the selected layer")
     state["task_plan"] = _load_plan("approved")
 
-    result = await executor_node(state)
+    result = await executor_node(state, spatial_inspector=lambda request: {
+        'status': 'passed', 'checks': ['fake_gis'], 'errors': [], 'facts': {},
+    })
 
     assert fake_client.calls == [
         (

@@ -13,7 +13,7 @@ from uuid import uuid4
 
 from langchain_core.messages import AIMessage
 
-from agent.planning.plan_schema import TaskPlan
+from agent.planning.plan_schema import InputSpec, TaskPlan
 from agent.planning.plan_validator import PlanValidator
 from agent.planning.processing_preflight import validate_original_inputs, validate_processing_calls
 from agent.spatial_validation import preflight_spatial_plan, validate_spatial_step
@@ -118,8 +118,20 @@ async def _execute_reviewed_plan(state: AgentState, *, spatial_inspector=None) -
     for call_index, call in enumerate(tool_calls[start_index:], start=start_index):
         logger.info("Controlled executor calling %s for step %s", call.tool_name, call.step_id)
         human_feedback = risk_review_feedback if call_index == start_index else None
+        validate_result = (call.tool_name == 'execute_processing' or
+                           (call.tool_name == 'add_layer' and call.arguments.get('layer_type') == 'vector'))
         try:
             input_paths = await asyncio.to_thread(_verified_inputs, task_plan, trace, call)
+            input_checksums = await asyncio.to_thread(_input_checksums, input_paths) if validate_result else {}
+            if call.arguments.get('algorithm') in {
+                'native:basicstatisticsforfields', 'qgis:statisticsbycategories',
+            }:
+                facts = await asyncio.to_thread(_verified_input_facts, task_plan, trace, call)
+                actual_plan = _statistics_preflight_plan(task_plan, call, input_paths)
+                await preflight_spatial_plan(actual_plan, inspector=spatial_inspector, input_facts=facts)
+                if (await asyncio.to_thread(_verified_inputs, task_plan, trace, call) != input_paths
+                        or await asyncio.to_thread(_input_checksums, input_paths) != input_checksums):
+                    raise ValueError('Statistics inputs changed during preflight.')
         except (OSError, ValueError) as exc:
             response = _failed_trace(trace, f'受控执行停止：无法验证步骤输入。{exc}')
             await _persist_execution_record(task_plan, session_id, trace, 'failed')
@@ -142,19 +154,27 @@ async def _execute_reviewed_plan(state: AgentState, *, spatial_inspector=None) -
                 logger.error('Could not persist interrupted operation outcome for task %s', task_plan.task_id)
             raise
         risk_review_feedback = None
-        if result.status == 'success' and call.tool_name == 'execute_processing':
+        if result.status == 'success' and validate_result:
             attempt = trace.latest_attempt()
             output_paths = {}
             with span("qgis.spatial_validation", run_type="chain", step_id=call.step_id,
                       tool_name=call.tool_name, attempt_id=attempt.attempt_id,
                       algorithm=call.arguments.get("algorithm"), **call_metadata(call)) as run:
                 try:
-                    output_paths = _actual_outputs(task_plan, call, attempt)
+                    if call.tool_name == 'execute_processing':
+                        output_paths = _actual_outputs(task_plan, call, attempt)
                     if await asyncio.to_thread(_verified_inputs, task_plan, trace, call) != input_paths:
                         raise ValueError('Processing inputs changed before spatial validation.')
+                    facts = (await asyncio.to_thread(_verified_input_facts, task_plan, trace, call)
+                             if call.tool_name == 'add_layer' or call.arguments.get('algorithm') in {
+                                 'native:clip', 'native:dissolve', 'qgis:exportaddgeometrycolumns',
+                                 'native:basicstatisticsforfields', 'qgis:statisticsbycategories',
+                             } else None)
                     report = await validate_spatial_step(
                         call, input_paths=input_paths, output_paths=output_paths,
                         inspector=spatial_inspector,
+                        observation=attempt.observation.data if call.tool_name == 'add_layer' else None,
+                        input_facts=facts,
                     )
                     if report.get('status') != 'passed':
                         if not report.get('errors'):
@@ -167,6 +187,8 @@ async def _execute_reviewed_plan(state: AgentState, *, spatial_inspector=None) -
                                 _verify_recorded_file(artifact)
                         if await asyncio.to_thread(_verified_inputs, task_plan, trace, call) != input_paths:
                             raise ValueError('Processing inputs changed during spatial validation.')
+                        if await asyncio.to_thread(_input_checksums, input_paths) != input_checksums:
+                            raise ValueError('Inputs changed during spatial validation.')
                 except Exception as exc:
                     report = {'status': 'failed', 'checks': [],
                               'errors': [f'Spatial result could not be verified: {exc}'], 'facts': {}}
@@ -180,6 +202,14 @@ async def _execute_reviewed_plan(state: AgentState, *, spatial_inspector=None) -
                         (ref for ref, path in output_paths.items() if path == artifact.get('path')),
                         None,
                     )
+            if call.tool_name == 'add_layer':
+                ref = next(iter(input_paths), None)
+                data = attempt.observation.data
+                attempt.artifacts.append({
+                    'kind': 'layer', 'path': input_paths.get(ref), 'source_ref': ref,
+                    'layer_id': data.get('id') if isinstance(data, dict) else None,
+                    'spatial_validation': report, 'deliverable': report.get('status') == 'passed',
+                })
             if report.get('status') != 'passed':
                 trace.status = 'failed'
                 result = result.model_copy(update={
@@ -259,6 +289,63 @@ def _verify_recorded_file(artifact: dict) -> None:
         raise ValueError(f'Produced artifact changed or is unreadable: {exc}') from exc
 
 
+def _input_checksums(input_paths: dict[str, str]) -> dict[str, str]:
+    """Bind readback to the exact input bytes even when an old upload has no digest."""
+    result = {}
+    for ref, source in input_paths.items():
+        path = Path(source.split('|', 1)[0])
+        require_standalone_sqlite(path)
+        with path.open('rb') as stream:
+            result[ref] = hashlib.file_digest(stream, 'sha256').hexdigest()
+        require_standalone_sqlite(path)
+    return result
+
+
+def _verified_input_facts(plan: TaskPlan, trace: ExecutionTrace, call) -> dict:
+    """Only a direct, verified producer may supply facts for the current input."""
+    step = next(item for item in plan.steps if item.step_id == call.step_id)
+    outputs = {item.output_id: item.path for item in plan.expected_outputs}
+    facts = {}
+    for ref in step.input_refs:
+        if ref not in outputs:
+            continue
+        producer = next(item for item in plan.steps if ref in item.output_refs)
+        attempt = _completed_producer(trace, producer.step_id, ref)
+        artifact = next((item for item in attempt.artifacts
+                         if item.get('kind') == 'path' and item.get('path') == outputs[ref]), None)
+        if (artifact is None or artifact.get('output_ref') != ref
+                or artifact.get('producer_step_id') != producer.step_id
+                or artifact.get('deliverable') is not True
+                or (artifact.get('spatial_validation') or {}).get('status') != 'passed'):
+            raise ValueError(f'Producer output {ref} has not passed spatial validation.')
+        _verify_recorded_file(artifact)
+        facts[ref] = artifact['spatial_validation']['facts']
+    return facts
+
+
+def _completed_producer(trace: ExecutionTrace, step_id: int, ref: str):
+    """Risk-pause attempts are not producers; require exactly one completed success."""
+    attempts = [attempt for attempt in trace.attempts
+                if attempt.step_id == step_id and attempt.status == 'success'
+                and attempt.observation.status == 'success'
+                and attempt.observation.outcome == 'completed']
+    if len(attempts) != 1:
+        raise ValueError(f'No completed producer for output reference {ref}.')
+    return attempts[0]
+
+
+def _statistics_preflight_plan(plan: TaskPlan, call, input_paths: dict[str, str]) -> TaskPlan:
+    """Inspect actual source values after the producer exists, before a statistics write."""
+    step = next(item for item in plan.steps if item.step_id == call.step_id)
+    originals = {item.input_id: item for item in plan.required_inputs}
+    inputs = [InputSpec(input_id=ref, description='Verified statistics input', path=path,
+                        layer_name=originals[ref].layer_name if ref in originals else None)
+              for ref, path in input_paths.items()]
+    outputs = [item for item in plan.expected_outputs if item.output_id in step.output_refs]
+    return plan.model_copy(update={'required_inputs': inputs, 'expected_outputs': outputs,
+                                   'steps': [step], 'tool_calls': [call]})
+
+
 def _verified_inputs(plan: TaskPlan, trace: ExecutionTrace, call) -> dict[str, str]:
     """Resolve each reference only from its original or a verified actual producer."""
     validate_original_inputs(plan)
@@ -271,17 +358,12 @@ def _verified_inputs(plan: TaskPlan, trace: ExecutionTrace, call) -> dict[str, s
             result[ref] = originals[ref]
             continue
         producer = next(item for item in plan.steps if ref in item.output_refs)
-        attempts = [attempt for attempt in trace.attempts
-                    if attempt.step_id == producer.step_id and attempt.status == 'success'
-                    and attempt.observation.status == 'success'
-                    and attempt.observation.outcome == 'completed']
-        if len(attempts) != 1:
-            raise ValueError(f'No completed producer for output reference {ref}.')
-        artifact = next((item for item in attempts[0].artifacts
+        attempt = _completed_producer(trace, producer.step_id, ref)
+        artifact = next((item for item in attempt.artifacts
                          if item.get('kind') == 'path' and item.get('path') == outputs[ref]), None)
         if artifact is None:
             raise ValueError(f'Producer did not return the approved output for {ref}.')
-        if attempts[0].tool_call.tool_name == 'execute_processing' and (
+        if attempt.tool_call.tool_name == 'execute_processing' and (
             artifact.get('output_ref') != ref
             or artifact.get('producer_step_id') != producer.step_id
             or artifact.get('deliverable') is not True
@@ -411,7 +493,7 @@ def _success_message(trace: ExecutionTrace, loop_results: list[LoopResult]) -> A
         artifact.get("path")
         for attempt in trace.attempts
         for artifact in attempt.artifacts
-        if artifact.get("path")
+        if artifact.get("kind") == "path" and artifact.get("path")
     ]
     artifact_text = (
         "\n输出文件:\n" + "\n".join(f"- {path}" for path in artifact_paths)

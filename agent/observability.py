@@ -33,7 +33,11 @@ _USAGE_DETAIL_NAMES = {"cache_read", "cache_creation", "cache_read_over_200k", "
                        "ephemeral_1h_input_tokens", "audio", "text", "image", "reasoning"}
 _CHECK_NAMES = {"target_crs", "feature_count", "attributes_and_transformed_vertices", "buffer_crs_and_units",
                 "empty_input_empty_output", "analytic_dissolved_area", "buffer_geometry_and_attributes",
-                "independently_verified_empty_geometry", "analytic_distance_and_area"}
+                "independently_verified_empty_geometry", "analytic_distance_and_area", "buffer_metre_crs",
+                "load_spatial_layer", "spatial_schema", "statistics_fields", "loaded_layer_matches_input",
+                "clip_intersection_and_attributes", "analytic_rectangle_intersection",
+                "dissolve_groups_union_and_member_attributes", "analytic_rectangle_union",
+                "geometry_attributes_planar_measurements", "statistics_recomputed_from_input"}
 _ERROR_CATEGORIES = {"coordinates", "crs", "feature_count", "attributes", "geometry", "distance", "area",
                      "integrity", "inspector_unavailable", "other"}
 _REASON_CODES = {"parameter_error", "missing_file", "qgis_disconnected", "execution_error",

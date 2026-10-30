@@ -27,7 +27,7 @@ def test_installed_capabilities_expose_allowed_algorithm_definitions():
     capabilities = {item['algorithm']: item for item in facts['processing_capabilities']}
     assert set(capabilities) == {
         'native:reprojectlayer', 'native:buffer', 'native:clip', 'native:dissolve',
-        'qgis:statisticsbycategories', 'native:basicstatisticsforfields',
+        'qgis:statisticsbycategories', 'native:basicstatisticsforfields', 'qgis:exportaddgeometrycolumns',
     }
     assert capabilities['native:buffer']['available'] is True
     assert capabilities['native:buffer']['provider'] == 'native'

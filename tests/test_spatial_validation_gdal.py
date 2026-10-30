@@ -205,7 +205,7 @@ def test_line_flat_cap_polygon_mitre_and_dissolve_use_expected_analytic_shapes(t
     assert validate()["status"] == "failed"
 
 
-def test_preflight_accepts_meter_projection_and_rejects_unverifiable_later_algorithm(tmp_path):
+def test_preflight_accepts_meter_projection_and_rejects_clip_without_overlay_reference(tmp_path):
     source = ROOT / "tests/fixtures/gis/phase11_points.geojson"
     plan = chain(source, tmp_path / "projected.gpkg", tmp_path / "buffered.gpkg")
     report = asyncio.run(preflight_spatial_plan(plan))
@@ -213,7 +213,7 @@ def test_preflight_accepts_meter_projection_and_rejects_unverifiable_later_algor
     assert report["facts"]["inputs"][0]["crs"] == "EPSG:4326"
 
     plan.tool_calls[1].arguments["algorithm"] = "native:clip"
-    with pytest.raises(ValueError, match="(?i)(not yet|unavailable|unsupported)"):
+    with pytest.raises(ValueError, match="(?i)(input references|overlay)"):
         asyncio.run(preflight_spatial_plan(plan))
     assert list(tmp_path.iterdir()) == []
 

@@ -53,6 +53,11 @@ def inspect_vector(path: str) -> dict:
                     "geometry": ogr.GeometryTypeToName(ogr.GT_Flatten(geometry_type)),
                     "feature_count": layer.GetFeatureCount(),
                     "fields": [definition.GetFieldDefn(i).GetName() for i in range(definition.GetFieldCount())],
+                    "field_types": {
+                        definition.GetFieldDefn(i).GetName():
+                        definition.GetFieldDefn(i).GetFieldTypeName(definition.GetFieldDefn(i).GetType())
+                        for i in range(definition.GetFieldCount())
+                    },
                     "is_2d": is_2d,
                 })
             return {"layers": layers}

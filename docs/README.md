@@ -1,6 +1,6 @@
 # 项目文档
 
-当前处于 V1 重构的开发前置阶段。已确认方案已迁入本仓库，业务代码仍为原型；环境验证与任务实施分别验收。
+本项目按 V1 规格逐项重构和验收。当前功能、未完成项与实际证据以[正式任务](tickets/README.md)为准；环境验证、真实 GIS 业务与可选 Cloud 接入分别验收。
 
 - [开发交接与自主编排](agents/orchestration.md)
 - [环境与启动](onboarding/README.md)、[实际基线](onboarding/baseline-2026-10-30.md)

@@ -1,0 +1,81 @@
+{
+  "fixture_version": 1,
+  "purpose": "T05 development rectangles; not the T07 holdout set",
+  "coordinate_reference_system": "EPSG:32650",
+  "coordinate_units": "m",
+  "geometry_type": "Polygon",
+  "geometry_dimensions": 2,
+  "bounds_order": ["xmin", "ymin", "xmax", "ymax"],
+  "schemas": {
+    "source": [
+      {"name": "rid", "type": "Integer", "nullable": true},
+      {"name": "grp", "type": "String", "nullable": true},
+      {"name": "value", "type": "Real", "nullable": true}
+    ],
+    "mask": [
+      {"name": "mask_id", "type": "Integer", "nullable": true}
+    ],
+    "collision": [
+      {"name": "rid", "type": "Integer", "nullable": true},
+      {"name": "grp", "type": "String", "nullable": true},
+      {"name": "value", "type": "Real", "nullable": true},
+      {"name": "area", "type": "Real", "nullable": true},
+      {"name": "perimeter", "type": "Real", "nullable": true}
+    ]
+  },
+  "datasets": {
+    "source": {
+      "filename": "t05_source.gpkg",
+      "layer": "source",
+      "schema": "source",
+      "features": [
+        {"bounds": [500000, 0, 500004, 4], "properties": {"rid": 1, "grp": "A", "value": 10.0}},
+        {"bounds": [500002, 0, 500006, 4], "properties": {"rid": 2, "grp": "A", "value": null}},
+        {"bounds": [500006, 0, 500008, 4], "properties": {"rid": 3, "grp": "B", "value": 5.0}}
+      ]
+    },
+    "clip_mask": {
+      "filename": "t05_clip_mask.gpkg",
+      "layer": "clip_mask",
+      "schema": "mask",
+      "features": [
+        {"bounds": [500001, 1, 500007, 3], "properties": {"mask_id": 1}}
+      ]
+    },
+    "far_mask": {
+      "filename": "t05_far_mask.gpkg",
+      "layer": "far_mask",
+      "schema": "mask",
+      "features": [
+        {"bounds": [500020, 1, 500021, 3], "properties": {"mask_id": 1}}
+      ]
+    },
+    "empty_source": {
+      "filename": "t05_empty_source.gpkg",
+      "layer": "empty_source",
+      "schema": "source",
+      "features": []
+    },
+    "all_null_source": {
+      "filename": "t05_all_null_source.gpkg",
+      "layer": "all_null_source",
+      "schema": "source",
+      "features": [
+        {"bounds": [500000, 0, 500004, 4], "properties": {"rid": 1, "grp": "A", "value": null}},
+        {"bounds": [500002, 0, 500006, 4], "properties": {"rid": 2, "grp": "A", "value": null}},
+        {"bounds": [500006, 0, 500008, 4], "properties": {"rid": 3, "grp": "B", "value": null}},
+        {"bounds": [500010, 0, 500012, 4], "properties": {"rid": 4, "grp": "C", "value": null}}
+      ]
+    },
+    "collision_source": {
+      "filename": "t05_collision_source.gpkg",
+      "layer": "collision_source",
+      "schema": "collision",
+      "features": [
+        {"bounds": [500000, 0, 500004, 4], "properties": {"rid": 1, "grp": "A", "value": 10.0, "area": 999.0, "perimeter": 999.0}},
+        {"bounds": [500002, 0, 500006, 4], "properties": {"rid": 2, "grp": "A", "value": null, "area": 999.0, "perimeter": 999.0}},
+        {"bounds": [500006, 0, 500008, 4], "properties": {"rid": 3, "grp": "B", "value": 5.0, "area": 999.0, "perimeter": 999.0}}
+      ]
+    }
+  }
+}

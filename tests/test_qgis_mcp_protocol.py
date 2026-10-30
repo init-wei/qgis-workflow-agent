@@ -29,6 +29,7 @@ ALLOWED_ALGORITHMS = {
     "native:dissolve",
     "qgis:statisticsbycategories",
     "native:basicstatisticsforfields",
+    "qgis:exportaddgeometrycolumns",
 }
 
 
@@ -210,6 +211,14 @@ def test_supported_processing_algorithm_is_forwarded_explicitly(monkeypatch, alg
 
     monkeypatch.setattr(qgis_mcp_server, "get_qgis_connection", lambda: FakeQGIS())
     parameters = {"INPUT": "roads", "OUTPUT": "shared/outputs/protocol-test/r1/result/result.gpkg"}
+    if algorithm == 'native:dissolve':
+        parameters.update(FIELD=[], SEPARATE_DISJOINT=False)
+    elif algorithm == 'native:basicstatisticsforfields':
+        parameters.update(INPUT_LAYER=parameters.pop('INPUT'), FIELD_NAME='value')
+    elif algorithm == 'qgis:statisticsbycategories':
+        parameters.update(CATEGORIES_FIELD_NAME=['group'], VALUES_FIELD_NAME='value')
+    elif algorithm == 'qgis:exportaddgeometrycolumns':
+        parameters['CALC_METHOD'] = 0
 
     qgis_mcp_server.execute_processing(None, algorithm=algorithm, parameters=parameters)
 

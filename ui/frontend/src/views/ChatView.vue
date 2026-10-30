@@ -268,21 +268,70 @@
 
         <!-- 输入区域 -->
         <div class="chat-input p-5 border-t border-dark-border flex-shrink-0 bg-dark-bgDark/80">
-          <div v-if="executionStatus === 'success' || executionStatus === 'failed'" class="mb-3 p-3 border border-dark-border rounded-lg text-sm">
+          <div v-if="executionStatus === 'success' || executionStatus === 'failed'" class="mb-3 max-h-[40vh] overflow-y-auto p-3 border border-dark-border rounded-lg text-sm">
             <p>任务状态：{{ executionStatus === 'success' ? '执行结束' : '执行失败' }}</p>
             <p v-if="executionStatus === 'failed'" class="whitespace-pre-wrap">失败原因：{{ executionSummary }}</p>
             <p>工具执行：{{ toolCompletionSummary }}</p>
             <p>文件完整性：{{ fileEvidenceSummary }}</p>
             <p>空间验证：{{ spatialEvidenceSummary }}</p>
             <p>用户确认：{{ userConfirmationSummary }}</p>
-            <div v-for="detail in spatialArtifactDetails" :key="detail.path" class="mt-2 break-all">
-              <p>{{ detail.path }}：{{ detail.deliverable ? '空间验证通过' : '诊断文件，不可交付' }}</p>
+            <div v-for="(detail, index) in spatialArtifactDetails" :key="`${detail.kind}-${detail.path}-${index}`" class="mt-2 break-all">
+              <p>{{ detail.kind === 'layer' ? '加载图层来源' : detail.kind === 'path' ? '文件产物' : '结果引用' }}：{{ detail.path }} · {{ detail.status === 'passed' ? '空间验证通过' : '空间验证未通过' }} · {{ detail.deliverable ? '可交付' : '不可交付，仅供诊断' }}</p>
               <p v-for="error in detail.errors" :key="error">{{ error }}</p>
               <details v-if="detail.checks.length || detail.facts">
-                <summary>查看空间验证依据</summary>
+                <summary>{{ detail.deliverable ? '查看空间验证依据' : '查看诊断依据（不代表可交付结果）' }}</summary>
                 <pre class="whitespace-pre-wrap break-all">{{ formatJson({ checks: detail.checks, facts: detail.facts }) }}</pre>
               </details>
             </div>
+            <section v-if="statisticsResults.length" class="mt-3 space-y-3" aria-label="统计结果">
+              <div v-for="(stats, index) in statisticsResults" :key="`${stats.kind}-${stats.path}-${index}`" class="rounded-lg border border-dark-border bg-dark-bgLight p-3">
+                <h4 class="font-semibold">统计结果</h4>
+                <p class="mt-1 break-all text-xs text-dark-textSecondary">
+                  {{ stats.sourceKind === 'layer' ? '已加载图层来源' : '统计表' }}：{{ stats.path }}<span v-if="stats.layerId"> · 图层 ID：{{ stats.layerId }}</span>
+                </p>
+                <dl class="mt-2 grid grid-cols-2 gap-x-4 gap-y-2 md:grid-cols-3">
+                  <div v-if="stats.kind !== 'feature_count'"><dt class="text-dark-textSecondary">来源字段</dt><dd class="break-all">{{ stats.field ?? (stats.kind === 'categorical' ? '无（仅分类计数）' : '未提供') }}</dd></div>
+                  <div v-if="stats.groupFields.length"><dt class="text-dark-textSecondary">分类字段</dt><dd class="break-all">{{ stats.groupFields.join('、') }}</dd></div>
+                  <div><dt class="text-dark-textSecondary">总要素数</dt><dd>{{ formatStatisticNumber(stats.featureCount) }}</dd></div>
+                  <template v-if="hasNumericStatistics(stats)">
+                    <div><dt class="text-dark-textSecondary">单位</dt><dd>{{ formatStatisticUnit(stats.unit) }}</dd></div>
+                    <div><dt class="text-dark-textSecondary">有效数值数</dt><dd>{{ formatStatisticNumber(stats.validValueCount) }}</dd></div>
+                    <div><dt class="text-dark-textSecondary">空值数</dt><dd>{{ formatStatisticNumber(stats.nullValueCount) }}</dd></div>
+                    <div><dt class="text-dark-textSecondary">求和</dt><dd>{{ formatStatisticSum(stats) }}</dd></div>
+                    <div><dt class="text-dark-textSecondary">最小值</dt><dd>{{ formatStatisticExtremum(stats.min, stats.noValidValues, stats.unit) }}</dd></div>
+                    <div><dt class="text-dark-textSecondary">最大值</dt><dd>{{ formatStatisticExtremum(stats.max, stats.noValidValues, stats.unit) }}</dd></div>
+                  </template>
+                </dl>
+                <p v-if="stats.empty" class="mt-2 text-dark-textSecondary">源图层为空（0 个要素）。</p>
+                <p v-else-if="hasNumericStatistics(stats) && stats.noValidValues" class="mt-2 text-dark-textSecondary">输入含要素，但该字段无有效数值。</p>
+                <div v-if="stats.kind === 'categorical'" class="mt-3">
+                  <h5 class="font-medium">分类结果</h5>
+                  <div v-if="stats.groups.length" class="overflow-x-auto">
+                    <table class="mt-1 w-full text-left text-xs">
+                      <thead><tr class="border-b border-dark-border">
+                        <th scope="col" class="p-1">类别</th><th scope="col" class="p-1">总要素数</th>
+                        <template v-if="hasNumericStatistics(stats)">
+                          <th scope="col" class="p-1">有效数值数</th><th scope="col" class="p-1">空值数</th><th scope="col" class="p-1">求和</th><th scope="col" class="p-1">最小值</th><th scope="col" class="p-1">最大值</th>
+                        </template>
+                      </tr></thead>
+                      <tbody><tr v-for="(group, groupIndex) in stats.groups" :key="groupIndex" class="border-b border-dark-border">
+                        <td class="p-1 break-all">{{ formatStatisticGroup(group.group) }}</td><td class="p-1">{{ formatStatisticNumber(group.featureCount) }}</td>
+                        <template v-if="hasNumericStatistics(stats)">
+                          <td class="p-1">{{ formatStatisticNumber(group.validValueCount) }}</td><td class="p-1">{{ formatStatisticNumber(group.nullValueCount) }}</td><td class="p-1">{{ formatGroupSum(group, stats.unit) }}</td><td class="p-1">{{ formatStatisticExtremum(group.min, group.validValueCount === 0, stats.unit) }}</td><td class="p-1">{{ formatStatisticExtremum(group.max, group.validValueCount === 0, stats.unit) }}</td>
+                        </template>
+                      </tr></tbody>
+                    </table>
+                  </div>
+                  <p v-else class="mt-1 text-dark-textSecondary">统计表没有类别行。</p>
+                  <div v-if="stats.omittedGroups.length" class="mt-2">
+                    <p>以下类别没有有效数值，未出现在 QGIS 统计表中；来源仍包含这些要素：</p>
+                    <ul class="mt-1 list-inside list-disc">
+                      <li v-for="(group, groupIndex) in stats.omittedGroups" :key="groupIndex" class="break-all">{{ formatStatisticGroup(group.group) }} · 总要素数 {{ formatStatisticNumber(group.featureCount) }} · 有效数值数 {{ formatStatisticNumber(group.validValueCount) }} · 空值数 {{ formatStatisticNumber(group.nullValueCount) }}</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </section>
           </div>
           <div v-if="executionStatus === 'needs_attention'" class="mb-3 p-3 border border-yellow-500 rounded-lg text-sm">
             <p>上次操作结果未知。请在实际 QGIS 中检查工程、图层和产物，确认该操作已结束或原进程已停止；核查不会重放旧操作。</p>
@@ -389,6 +438,27 @@
           </li>
         </ul>
 
+        <section v-if="planPreflightSteps.length" class="mb-4" aria-label="执行前数据条件">
+          <h4 class="font-semibold mb-1">执行前数据条件</h4>
+          <p class="text-xs text-dark-textSecondary mb-2">根据所选输入和前序步骤预检；执行时会再次核验。</p>
+          <div class="space-y-2 max-h-52 overflow-y-auto">
+            <div v-for="(step, index) in planPreflightSteps" :key="`${step.stepId}-${index}`" class="p-2.5 bg-dark-bg rounded-lg border border-dark-border text-sm">
+              <div class="font-medium break-all">步骤 {{ step.stepId }} · {{ step.algorithm || step.tool || '工具调用' }}</div>
+              <dl class="mt-1 space-y-1 text-xs">
+                <div><dt class="inline text-dark-textSecondary">输入 CRS：</dt>
+                  <dd v-if="step.inputCrs.length" class="inline"><span v-for="(input, inputIndex) in step.inputCrs" :key="inputIndex" class="break-all">{{ inputIndex ? '；' : '' }}{{ input.ref }}：{{ input.crs ?? '未指定' }}</span></dd>
+                  <dd v-else class="inline">未指定</dd>
+                </div>
+                <div><dt class="inline text-dark-textSecondary">输出 CRS：</dt><dd class="inline">{{ step.outputCrs ?? (step.outputKind === 'table' ? '无（非空间表）' : '未指定') }}</dd></div>
+                <div v-if="step.geometry"><dt class="inline text-dark-textSecondary">几何类型：</dt><dd class="inline">{{ step.geometry }}</dd></div>
+                <div v-if="step.field !== null"><dt class="inline text-dark-textSecondary">字段：</dt><dd class="inline break-all">{{ step.field }}（{{ step.fieldType ?? '类型未指定' }}）</dd></div>
+                <div v-if="step.groupFields.length"><dt class="inline text-dark-textSecondary">分类字段：</dt><dd class="inline break-all">{{ step.groupFields.join('、') }}</dd></div>
+                <div v-if="step.field !== null"><dt class="inline text-dark-textSecondary">字段单位：</dt><dd class="inline">{{ formatStatisticUnit(step.unit) }}</dd></div>
+              </dl>
+            </div>
+          </div>
+        </section>
+
         <h4 class="font-semibold mb-2">具体工具调用 ({{ currentDraft.tool_calls.length }})</h4>
         <div class="space-y-2 mb-4 max-h-72 overflow-y-auto">
           <div
@@ -447,6 +517,12 @@
         <p class="text-sm">文件完整性：{{ fileEvidenceSummary }}</p>
         <p class="text-sm">空间验证：{{ spatialEvidenceSummary }}</p>
         <p class="text-sm">用户确认：{{ userConfirmationSummary }}</p>
+        <section v-if="statisticsResults.length" class="mt-3 max-h-[40vh] space-y-3 overflow-y-auto" aria-label="统计结果">
+          <div v-for="(stats, index) in statisticsResults" :key="`${stats.kind}-${stats.path}-${index}`" class="rounded border border-dark-border p-2">
+            <strong>统计结果</strong>
+            <pre class="mt-1 whitespace-pre-wrap break-words text-sm">{{ formatStatisticsReview(stats) }}</pre>
+          </div>
+        </section>
       </div>
       <div class="mt-4">
         <label class="block text-sm mb-2">若任务未完成，请补充失败原因（可选）：</label>
@@ -538,6 +614,47 @@ interface RiskReviewData {
   }
 }
 
+interface StatisticValues {
+  featureCount: number | null
+  validValueCount: number | null
+  nullValueCount: number | null
+  sum: number | null
+  min: number | null
+  max: number | null
+}
+
+interface StatisticGroup extends StatisticValues {
+  group: Record<string, unknown>
+}
+
+interface StatisticsResult extends StatisticValues {
+  kind: 'feature_count' | 'numeric' | 'categorical'
+  field: string | null
+  groupFields: string[]
+  unit: 'm2' | 'm' | null
+  empty: boolean
+  noValidValues: boolean
+  groups: StatisticGroup[]
+  omittedGroups: StatisticGroup[]
+  sourceKind: 'path' | 'layer'
+  path: string
+  layerId: string | null
+}
+
+interface PlanPreflightStep {
+  stepId: number | string
+  tool: string | null
+  algorithm: string | null
+  inputCrs: Array<{ ref: string; crs: string | null }>
+  outputCrs: string | null
+  outputKind: string | null
+  geometry: string | null
+  field: string | null
+  fieldType: string | null
+  groupFields: string[]
+  unit: 'm2' | 'm' | null
+}
+
 const router = useRouter()
 const chatStore = useChatStore()
 
@@ -593,6 +710,37 @@ const qgisStatusDetail = computed(() => {
   return '请检查 QGIS MCP 插件'
 })
 
+const planPreflightSteps = computed<PlanPreflightStep[]>(() => {
+  const plan = currentDraft.value
+  const preflight = asRecord(asRecord(plan?.metadata)?.spatial_preflight)
+  if (!plan || preflight?.task_id !== plan.task_id || preflight.revision !== plan.revision
+    || !Array.isArray(preflight.review_steps)) return []
+  return preflight.review_steps.flatMap(value => {
+    const step = asRecord(value)
+    const stepId = step?.step_id
+    if (typeof stepId !== 'string' && (typeof stepId !== 'number' || !Number.isFinite(stepId))) return []
+    const inputCrs = Array.isArray(step?.input_crs) ? step.input_crs.flatMap(value => {
+      const input = asRecord(value)
+      const ref = readString(input, 'ref')
+      return ref ? [{ ref, crs: readString(input, 'crs') ?? null }] : []
+    }) : []
+    return [{
+      stepId,
+      tool: readString(step, 'tool') ?? null,
+      algorithm: readString(step, 'algorithm') ?? null,
+      inputCrs,
+      outputCrs: readString(step, 'output_crs') ?? null,
+      outputKind: readString(step, 'output_kind') ?? null,
+      geometry: readString(step, 'geometry') ?? null,
+      field: readString(step, 'field') ?? null,
+      fieldType: readString(step, 'field_type') ?? null,
+      groupFields: Array.isArray(step?.group_fields)
+        ? step.group_fields.filter((field): field is string => typeof field === 'string') : [],
+      unit: step?.unit === 'm2' || step?.unit === 'm' ? step.unit : null
+    }]
+  })
+})
+
 const executionSummary = computed(() => {
   const result = asRecord(currentExecutionResult.value)
   return readString(result, 'summary')
@@ -636,6 +784,7 @@ const spatialArtifactDetails = computed(() => {
   return artifacts.map(asRecord).flatMap(item => {
     const report = asRecord(item?.spatial_validation)
     const path = readString(item, 'path')
+    const kind = readString(item, 'kind') || ''
     const status = readString(report, 'status')
     if (!path || !status || status === 'not_applicable') return []
     const errors = Array.isArray(report?.errors)
@@ -646,15 +795,22 @@ const spatialArtifactDetails = computed(() => {
     }
     const checks = Array.isArray(report?.checks) ? report.checks : []
     const facts = asRecord(report?.facts)
-    return [{ path, status, errors, checks, facts, deliverable: item?.deliverable === true && status === 'passed' }]
+    const layerId = readString(item, 'layer_id') || null
+    return [{ kind, path, layerId, status, errors, checks, facts, deliverable: item?.deliverable === true && status === 'passed' }]
   })
 })
+const statisticsResults = computed<StatisticsResult[]>(() => spatialArtifactDetails.value.flatMap(detail => {
+  if (!detail.deliverable || (detail.kind !== 'path' && detail.kind !== 'layer')) return []
+  const statistics = parseStatistics(asRecord(detail.facts?.statistics))
+  if (!statistics) return []
+  return [{ ...statistics, sourceKind: detail.kind, path: detail.path, layerId: detail.layerId }]
+}))
 const spatialEvidenceSummary = computed(() => {
   const reports = spatialArtifactDetails.value
   if (!reports.length) return '未提供独立空间验证'
-  const passed = reports.filter(report => report.deliverable).length
+  const passed = reports.filter(report => report.status === 'passed').length
   const failed = reports.length - passed
-  return `${passed} 个产物通过${failed ? `；${failed} 个未通过，仅供诊断` : ''}`
+  return `${passed} 项通过${failed ? `；${failed} 项未通过` : ''}`
 })
 const userConfirmationSummary = computed(() => {
   const confirmed = asRecord(currentExecutionResult.value)?.confirmed
@@ -1132,6 +1288,131 @@ function parseRiskReview(value: unknown): RiskReviewData | null {
       ? { tool_name: readString(toolCall, 'tool_name'), arguments: argumentsValue }
       : undefined
   }
+}
+
+function readStatisticNumber(record: Record<string, unknown> | null, key: string): number | null {
+  const value = record?.[key]
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function readStatisticValues(record: Record<string, unknown> | null): StatisticValues {
+  return {
+    featureCount: readStatisticNumber(record, 'feature_count'),
+    validValueCount: readStatisticNumber(record, 'valid_value_count'),
+    nullValueCount: readStatisticNumber(record, 'null_value_count'),
+    sum: readStatisticNumber(record, 'sum'),
+    min: readStatisticNumber(record, 'min'),
+    max: readStatisticNumber(record, 'max')
+  }
+}
+
+function readStatisticGroups(value: unknown): StatisticGroup[] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap(item => {
+    const record = asRecord(item)
+    if (!record) return []
+    return [{ ...readStatisticValues(record), group: asRecord(record.group) || {} }]
+  })
+}
+
+function parseStatistics(record: Record<string, unknown> | null): Omit<StatisticsResult, 'sourceKind' | 'path' | 'layerId'> | null {
+  const kind = readString(record, 'kind')
+  if (kind !== 'feature_count' && kind !== 'numeric' && kind !== 'categorical') return null
+  return {
+    ...readStatisticValues(record),
+    kind,
+    field: readString(record, 'field') ?? null,
+    groupFields: Array.isArray(record?.group_fields)
+      ? record.group_fields.filter((field): field is string => typeof field === 'string') : [],
+    unit: record?.unit === 'm2' || record?.unit === 'm' ? record.unit : null,
+    empty: record?.empty === true,
+    noValidValues: record?.no_valid_values === true,
+    groups: readStatisticGroups(record?.groups),
+    omittedGroups: readStatisticGroups(record?.omitted_groups)
+  }
+}
+
+function hasNumericStatistics(stats: StatisticsResult): boolean {
+  return stats.kind === 'numeric' || (stats.kind === 'categorical' && stats.field !== null)
+}
+
+function formatStatisticNumber(value: number | null, unit: StatisticsResult['unit'] = null): string {
+  const suffix = unit === 'm2' ? ' m²' : unit === 'm' ? ' m' : ''
+  return value === null ? '无值' : `${value}${suffix}`
+}
+
+function formatStatisticUnit(unit: StatisticsResult['unit']): string {
+  return unit === 'm2' ? 'm²' : unit === 'm' ? 'm' : '未指定'
+}
+
+function formatStatisticSum(stats: StatisticsResult): string {
+  if (stats.noValidValues) {
+    // The basic statistics table contains a QGIS empty sum. A categorical
+    // table has no global row, so its independently computed sum is not a
+    // QGIS scalar and should not be presented as one.
+    if (stats.kind === 'numeric' && stats.sum !== null) {
+      return `无有效数值（QGIS 原始求和：${formatStatisticNumber(stats.sum, stats.unit)}）`
+    }
+    return '无有效数值'
+  }
+  return formatStatisticNumber(stats.sum, stats.unit)
+}
+
+function formatGroupSum(group: StatisticGroup, unit: StatisticsResult['unit']): string {
+  return group.validValueCount === 0 ? '无有效数值' : formatStatisticNumber(group.sum, unit)
+}
+
+function formatStatisticExtremum(value: number | null, noValidValues: boolean, unit: StatisticsResult['unit']): string {
+  return noValidValues ? '无值' : formatStatisticNumber(value, unit)
+}
+
+function formatStatisticGroup(group: Record<string, unknown>): string {
+  const entries = Object.entries(group)
+  if (!entries.length) return '未提供类别'
+  return entries.map(([field, value]) => {
+    let label: string
+    if (value === null) label = '（空值）'
+    else if (value === '') label = '（空字符串）'
+    else if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') label = String(value)
+    else label = JSON.stringify(value) ?? '未提供'
+    return `${field}：${label}`
+  }).join('、')
+}
+
+function formatStatisticsReview(stats: StatisticsResult): string {
+  const lines = [`${stats.sourceKind === 'layer' ? '已加载图层来源' : '统计表'}：${stats.path}`]
+  if (stats.layerId) lines.push(`图层 ID：${stats.layerId}`)
+  if (stats.kind !== 'feature_count') lines.push(`来源字段：${stats.field ?? (stats.kind === 'categorical' ? '无（仅分类计数）' : '未提供')}`)
+  if (stats.groupFields.length) lines.push(`分类字段：${stats.groupFields.join('、')}`)
+  lines.push(`总要素数：${formatStatisticNumber(stats.featureCount)}`)
+  if (hasNumericStatistics(stats)) {
+    lines.push(`单位：${formatStatisticUnit(stats.unit)}`)
+    lines.push(`有效数值数：${formatStatisticNumber(stats.validValueCount)} · 空值数：${formatStatisticNumber(stats.nullValueCount)}`)
+    lines.push(`求和：${formatStatisticSum(stats)}`)
+    lines.push(`最小值：${formatStatisticExtremum(stats.min, stats.noValidValues, stats.unit)} · 最大值：${formatStatisticExtremum(stats.max, stats.noValidValues, stats.unit)}`)
+  }
+  if (stats.empty) lines.push('源图层为空（0 个要素）。')
+  else if (hasNumericStatistics(stats) && stats.noValidValues) lines.push('输入含要素，但该字段无有效数值。')
+  if (stats.kind === 'categorical') {
+    lines.push('分类结果：')
+    if (!stats.groups.length) lines.push('统计表没有类别行。')
+    for (const group of stats.groups) {
+      const values = [`${formatStatisticGroup(group.group)}`, `总要素数 ${formatStatisticNumber(group.featureCount)}`]
+      if (hasNumericStatistics(stats)) {
+        values.push(`有效数值数 ${formatStatisticNumber(group.validValueCount)}`, `空值数 ${formatStatisticNumber(group.nullValueCount)}`,
+          `求和 ${formatGroupSum(group, stats.unit)}`, `最小值 ${formatStatisticExtremum(group.min, group.validValueCount === 0, stats.unit)}`,
+          `最大值 ${formatStatisticExtremum(group.max, group.validValueCount === 0, stats.unit)}`)
+      }
+      lines.push(values.join(' · '))
+    }
+    if (stats.omittedGroups.length) {
+      lines.push('以下类别没有有效数值，未出现在 QGIS 统计表中；来源仍包含这些要素：')
+      for (const group of stats.omittedGroups) {
+        lines.push(`${formatStatisticGroup(group.group)} · 总要素数 ${formatStatisticNumber(group.featureCount)} · 有效数值数 ${formatStatisticNumber(group.validValueCount)} · 空值数 ${formatStatisticNumber(group.nullValueCount)}`)
+      }
+    }
+  }
+  return lines.join('\n')
 }
 
 function formatJson(value: unknown): string {

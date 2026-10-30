@@ -76,3 +76,17 @@ def test_preflight_reports_unavailable_inspector_as_value_error():
 
     with pytest.raises(ValueError, match="inspector"):
         asyncio.run(preflight_spatial_plan(empty_plan(), inspector=unavailable))
+
+
+def test_preflight_passes_direct_producer_facts_only_when_present():
+    requests = []
+
+    def inspector(request):
+        requests.append(request)
+        return {"status": "passed", "checks": [], "errors": [], "facts": {}}
+
+    asyncio.run(preflight_spatial_plan(empty_plan(), inspector=inspector))
+    facts = {"area": {"algorithm": "qgis:exportaddgeometrycolumns", "field_units": {"area": "m2"}}}
+    asyncio.run(preflight_spatial_plan(empty_plan(), inspector=inspector, input_facts=facts))
+    assert "input_facts" not in requests[0]
+    assert requests[1]["input_facts"] == facts

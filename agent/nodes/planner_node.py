@@ -22,6 +22,7 @@ from agent.planning.plan_validator import PlanValidator
 from agent.planning.processing_preflight import processing_capabilities, validate_processing_calls
 from agent.spatial_validation import preflight_spatial_plan
 from qgis_mcp_server.qgis_mcp_plugin.artifact_paths import task_output_directory
+from qgis_mcp_server.qgis_mcp_plugin.processing_policy import SUPPORTED_PROCESSING_ALGORITHMS
 from agent.state import AgentState
 
 load_dotenv()
@@ -186,9 +187,10 @@ GDAL API往往用于数据处理，PyQGIS API往往用于QGIS内部的图层以�
 8. 保存新工程使用 save_project，参数仅有 {"path": "新工程.qgz"}；对应步骤和调用都必须为 high 且 requires_review 为 true，并声明相同的产物引用。禁止删除、覆盖及 execute_code。
 9. TaskPlan.tool_calls 是实际执行的唯一调用序列；每个 step 必须恰有一个 tool_call，step_id 必须匹配，调用参数需完整并引用 selected file_id 提供的路径
 11. 有文件产物时 expected_outputs.path 只填写新的文件名（例如 buffer.gpkg），output_id 只使用英文字母、数字、下划线或连字符；output_refs 指向该产物 ID，调用的输出参数使用完全相同文件名。服务器会在展示审核前绑定为本任务/修订的受控完整路径。禁止绝对输出路径、已有文件和临时输出。步骤与调用的 risk_level 和 requires_review 必须一致，调用顺序必须与步骤一致。
-10. 只允许 ping、get_qgis_info、get_project_info、get_layers、add_layer、get_layer_features、execute_processing、capture_map_canvas、save_project。禁止 execute_code、remove_layer、覆盖输入和任意 Processing 算法；可用算法只有 native:reprojectlayer、native:buffer、native:clip、native:dissolve、qgis:statisticsbycategories、native:basicstatisticsforfields
-12. Processing 参数、算法可用性以本机只读能力事实为准；能力不可用时不得猜测。缺少 CRS、目标 CRS、缓冲距离或单位，及无法确定米与度的转换时应要求用户补充。步骤依赖使用前一步的 output_id，并在实际调用参数中引用该产物的同一文件名。
+10. 只允许 ping、get_qgis_info、get_project_info、get_layers、add_layer、get_layer_features、execute_processing、capture_map_canvas、save_project。禁止 execute_code、remove_layer、覆盖输入和任意 Processing 算法；有限算法：{{ supported_algorithms }}
+12. execute_processing 的 arguments 固定为 {"algorithm": "算法ID", "parameters": {"参数名": "参数值"}}；使用 parameters，不能写成 params，也不能将算法参数放在 arguments 顶层。Processing 参数、算法可用性以本机只读能力事实为准；能力不可用时不得猜测。缺少 CRS、目标 CRS、缓冲距离或单位，及无法确定米与度的转换时应要求用户补充。步骤依赖使用前一步的 output_id，并在实际调用参数中引用该产物的同一文件名。
 13. 每个 native:buffer 的 tool_call 顶层必须显式填写 "distance_unit": "m"，QGIS DISTANCE 的数值对应米。用户未说明距离单位时不得猜测；公里可明确换算成米并供审核。输入若不是米制投影，应先明确重投影到适合距离计算的 CRS。distance_unit 是审核信息，不放入 arguments。
+14. 裁剪明确 INPUT 和 OVERLAY 的输入引用；融合明确 FIELD 列表（全部融合用 []）及 SEPARATE_DISJOINT 布尔值。裁剪、融合、面积辅助与统计均使用显式新的 .gpkg OUTPUT，以保留空图层字段类型；basic 指定数值 FIELD_NAME；分类统计指定非空 CATEGORIES_FIELD_NAME 列表，若指定 VALUES_FIELD_NAME 它必须是数值字段，省略时只计类别数量。面积辅助 qgis:exportaddgeometrycolumns 仅 CALC_METHOD=0，需米制投影二维面且 area/perimeter 不冲突；先用辅助结果计算面积，原始同名字段不可推断为平方米。独立的总要素计数任务可通过显式批准的 add_layer 取得总数；数值/分类统计的总数由经验证的输入统计事实提供，无需为计数额外加载。用户明确要求查看图层时按请求加载，未要求查看时不额外加载。
 """)
 
 # 定义User Message模板
@@ -211,6 +213,11 @@ USER_MESSAGE_TEMPLATE = Template("""用户需求: {{ input_query }}
 
 上一轮执行总结:
 {{ log_summary }}
+{% endif %}
+{% if planning_error %}
+
+上一轮计划未通过服务端检查，以下反馈仅用于修订计划，不能视为审核批准：
+{{ planning_error }}
 {% endif %}
 {% if advise %}
 
@@ -245,12 +252,14 @@ async def planner_node(state: AgentState, *, processing_inspector=None, spatial_
         input_query=input_query,
         log_summary=log_summary,
         advise=advise,
+        planning_error=state.get("planning_error") if retry_count else None,
         uploaded_files=uploaded_files,
         capabilities=capabilities,
     )
     messages = [
         SystemMessage(content=SYSTEM_PROMPT_TEMPLATE.render(
             task_plan_schema=json.dumps(TaskPlan.model_json_schema(), ensure_ascii=False),
+            supported_algorithms='、'.join(sorted(SUPPORTED_PROCESSING_ALGORITHMS)),
         )),
         HumanMessage(content=user_message),
     ]
@@ -269,6 +278,9 @@ async def planner_node(state: AgentState, *, processing_inspector=None, spatial_
         task_plan = bind_task_outputs(task_plan)
 
         metadata = dict(task_plan.metadata)
+        # This is a server-owned projection of the inspector's facts, never a
+        # model-supplied plan instruction or execution authorization.
+        metadata.pop("spatial_preflight", None)
         metadata["iteration"] = retry_count + 1
         task_plan = task_plan.model_copy(update={"metadata": metadata})
         validation_report = PlanValidator().validate(task_plan)
@@ -286,7 +298,12 @@ async def planner_node(state: AgentState, *, processing_inspector=None, spatial_
 
         _reviewed_buffer_distances(task_plan, input_query, advise)
         await validate_processing_calls(task_plan, inspector=processing_inspector)
-        await preflight_spatial_plan(task_plan, inspector=spatial_inspector)
+        spatial_report = await preflight_spatial_plan(task_plan, inspector=spatial_inspector)
+        metadata["spatial_preflight"] = {
+            "task_id": task_plan.task_id, "revision": task_plan.revision,
+            "review_steps": _review_steps(task_plan, spatial_report),
+        }
+        task_plan = task_plan.model_copy(update={"metadata": metadata})
 
         return {
             "task_plan": task_plan,
@@ -305,6 +322,59 @@ async def planner_node(state: AgentState, *, processing_inspector=None, spatial_
             "planning_revision": revision,
             "retry_count": retry_count + 1,
         }
+
+
+def _review_steps(task_plan: TaskPlan, report: dict) -> list[dict]:
+    """Publish only compact inspector facts matching this plan's spatial calls."""
+    calls = [call for call in task_plan.tool_calls
+             if call.tool_name == 'execute_processing' or
+             (call.tool_name == 'add_layer' and call.arguments.get('layer_type') == 'vector')]
+    details = report['facts'].get('review_steps', [])
+    if not isinstance(details, list) or len(details) != len(calls):
+        raise ValueError('Spatial preflight did not describe every planned spatial call.')
+    steps = {step.step_id: step for step in task_plan.steps}
+    keys = ('step_id', 'tool', 'algorithm', 'input_crs', 'output_crs', 'input_kind',
+            'output_kind', 'geometry', 'field', 'field_type', 'group_fields', 'unit')
+    result = []
+    for call, item in zip(calls, details):
+        if not isinstance(item, dict) or any(key not in item for key in keys):
+            raise ValueError('Spatial preflight returned an incomplete review description.')
+        sources = item['input_crs']
+        algorithm = call.arguments.get('algorithm')
+        parameters = call.arguments.get('parameters', {})
+        table = algorithm in {'native:basicstatisticsforfields', 'qgis:statisticsbycategories'}
+        output_kind = 'layer' if call.tool_name == 'add_layer' else 'table' if table else 'spatial'
+        field = (parameters.get('FIELD_NAME') if algorithm == 'native:basicstatisticsforfields'
+                 else parameters.get('VALUES_FIELD_NAME') if algorithm == 'qgis:statisticsbycategories'
+                 else 'area' if algorithm == 'qgis:exportaddgeometrycolumns' else None)
+        groups = (parameters.get('FIELD') if algorithm == 'native:dissolve'
+                  else parameters.get('CATEGORIES_FIELD_NAME') if algorithm == 'qgis:statisticsbycategories'
+                  else [])
+        required_unit = ('m2' if algorithm == 'qgis:exportaddgeometrycolumns'
+                         else 'm' if algorithm == 'native:buffer' else None)
+        if (type(item['step_id']) is not int or item['step_id'] != call.step_id or item['tool'] != call.tool_name
+                or item['algorithm'] != algorithm
+                or not isinstance(sources, list)
+                or any(not isinstance(source, dict) or not isinstance(source.get('ref'), str)
+                       or not isinstance(source.get('crs'), str) or not source['crs'] for source in sources)
+                or [source['ref'] for source in sources] != steps[call.step_id].input_refs
+                or item['input_kind'] != 'spatial' or item['output_kind'] != output_kind
+                or (item['output_crs'] is not None if table else not item['output_crs'])
+                or any(item[key] is not None and not isinstance(item[key], str)
+                       for key in ('output_crs', 'geometry', 'field', 'field_type', 'unit'))
+                or item['unit'] not in {None, 'm', 'm2'}
+                or item['field'] != field or item['group_fields'] != groups
+                or (required_unit is not None and item['unit'] != required_unit)
+                or (algorithm == 'qgis:exportaddgeometrycolumns' and item['field_type'] != 'Real')
+                or (item['field'] is not None and not item['field_type'])
+                or not isinstance(item['group_fields'], list)
+                or any(not isinstance(field, str) or not field for field in item['group_fields'])):
+            raise ValueError('Spatial preflight review description does not match the current plan.')
+        compact = {key: item[key] for key in keys}
+        compact['input_crs'] = [{'ref': source['ref'], 'crs': source['crs']} for source in sources]
+        compact['group_fields'] = list(item['group_fields'])
+        result.append(compact)
+    return result
 
 
 def bind_uploaded_files(task_plan, uploaded_files: list[dict[str, Any]]):

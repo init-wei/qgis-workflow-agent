@@ -1,0 +1,260 @@
+{
+  "oracle_version": 1,
+  "definition_path": "tests/fixtures/gis/t05_workflows.json",
+  "definition_sha256": "7cb0833ffc96554a619f6e503eb14ecfd737e1dfc0be5b7fe5e5de2c1e4ec232",
+  "purpose": "T05 development sample, not the T07 holdout set",
+  "method": "Exact rectangle interval intersection and x-slab union; arithmetic only, no GIS/PROJ/GEOS or production validator",
+  "scope": "These finite 2D axis-aligned rectangles only; not proof of arbitrary polygon topology",
+  "crs": "EPSG:32650",
+  "units": {
+    "coordinates": "m",
+    "area": "m2",
+    "perimeter": "m"
+  },
+  "absolute_tolerances": {
+    "coordinates_m": 1e-08,
+    "area_m2": 1e-07,
+    "perimeter_m": 1e-07
+  },
+  "source": {
+    "feature_count": 3,
+    "feature_area_sum_m2": 40,
+    "union_area_m2": 32,
+    "value_statistics": {
+      "row_count": 3,
+      "valid_value_count": 2,
+      "null_value_count": 1,
+      "qgis_table_sum": 15.0,
+      "business_sum": 15.0,
+      "min": 5.0,
+      "max": 10.0
+    },
+    "group_feature_counts": {
+      "A": 2,
+      "B": 1
+    },
+    "group_valid_value_counts": {
+      "A": 1,
+      "B": 1
+    }
+  },
+  "clip": {
+    "feature_count": 3,
+    "features": [
+      {
+        "properties": {
+          "rid": 1,
+          "grp": "A",
+          "value": 10.0
+        },
+        "bounds": [
+          500001,
+          1,
+          500004,
+          3
+        ],
+        "area_m2": 6,
+        "perimeter_m": 10
+      },
+      {
+        "properties": {
+          "rid": 2,
+          "grp": "A",
+          "value": null
+        },
+        "bounds": [
+          500002,
+          1,
+          500006,
+          3
+        ],
+        "area_m2": 8,
+        "perimeter_m": 12
+      },
+      {
+        "properties": {
+          "rid": 3,
+          "grp": "B",
+          "value": 5.0
+        },
+        "bounds": [
+          500006,
+          1,
+          500007,
+          3
+        ],
+        "area_m2": 2,
+        "perimeter_m": 6
+      }
+    ],
+    "feature_area_sum_m2": 16,
+    "union_area_m2": 12,
+    "value_statistics": {
+      "row_count": 3,
+      "valid_value_count": 2,
+      "null_value_count": 1,
+      "qgis_table_sum": 15.0,
+      "business_sum": 15.0,
+      "min": 5.0,
+      "max": 10.0
+    }
+  },
+  "clip_dissolve_by_grp": {
+    "feature_count": 2,
+    "groups": {
+      "A": {
+        "geometry": {
+          "bounds": [
+            500001,
+            1,
+            500006,
+            3
+          ],
+          "area_m2": 10,
+          "perimeter_m": 14
+        },
+        "allowed_source_attributes": [
+          {
+            "rid": 1,
+            "grp": "A",
+            "value": 10.0
+          },
+          {
+            "rid": 2,
+            "grp": "A",
+            "value": null
+          }
+        ]
+      },
+      "B": {
+        "geometry": {
+          "bounds": [
+            500006,
+            1,
+            500007,
+            3
+          ],
+          "area_m2": 2,
+          "perimeter_m": 6
+        },
+        "allowed_source_attributes": [
+          {
+            "rid": 3,
+            "grp": "B",
+            "value": 5.0
+          }
+        ]
+      }
+    },
+    "attribute_rule": "Non-group attributes must come together from one member, not from a sum; do not depend on FID, row order or ring orientation."
+  },
+  "clip_dissolve_all": {
+    "feature_count": 1,
+    "geometry": {
+      "bounds": [
+        500001,
+        1,
+        500007,
+        3
+      ],
+      "area_m2": 12,
+      "perimeter_m": 16
+    },
+    "allowed_source_attributes": [
+      {
+        "rid": 1,
+        "grp": "A",
+        "value": 10.0
+      },
+      {
+        "rid": 2,
+        "grp": "A",
+        "value": null
+      },
+      {
+        "rid": 3,
+        "grp": "B",
+        "value": 5.0
+      }
+    ],
+    "geometry_rule": "Compare equivalent polygonal coverage, not FID, component order, ring orientation or Polygon versus equivalent MultiPolygon."
+  },
+  "far_clip": {
+    "feature_count": 0,
+    "schema": [
+      {
+        "name": "rid",
+        "type": "Integer",
+        "nullable": true
+      },
+      {
+        "name": "grp",
+        "type": "String",
+        "nullable": true
+      },
+      {
+        "name": "value",
+        "type": "Real",
+        "nullable": true
+      }
+    ],
+    "value_statistics": {
+      "row_count": 0,
+      "valid_value_count": 0,
+      "null_value_count": 0,
+      "qgis_table_sum": 0,
+      "business_sum": null,
+      "min": null,
+      "max": null
+    },
+    "empty_result_is_valid": true
+  },
+  "empty_source": {
+    "value_statistics": {
+      "row_count": 0,
+      "valid_value_count": 0,
+      "null_value_count": 0,
+      "qgis_table_sum": 0,
+      "business_sum": null,
+      "min": null,
+      "max": null
+    },
+    "group_feature_counts": {},
+    "group_valid_value_counts": {}
+  },
+  "all_null_source": {
+    "value_statistics": {
+      "row_count": 4,
+      "valid_value_count": 0,
+      "null_value_count": 4,
+      "qgis_table_sum": 0,
+      "business_sum": null,
+      "min": null,
+      "max": null
+    },
+    "group_feature_counts": {
+      "A": 2,
+      "B": 1,
+      "C": 1
+    },
+    "group_valid_value_counts": {},
+    "numeric_category_note": "QGIS numeric-category results omit groups with no valid values; an empty result does not mean the input has no groups."
+  },
+  "provider_observations": {
+    "qgis_version": "3.40.15-Bratislava",
+    "statistics": "Numeric categories omit groups with no non-NULL values. For zero valid values QGIS table SUM is 0 and MIN/MAX are NULL; scalar MIN/MAX may be NaN. A zero SUM does not imply an observed zero.",
+    "empty_source_dissolve_grouped": {
+      "feature_count": 0,
+      "is_valid_empty": true
+    },
+    "empty_source_dissolve_all": {
+      "feature_count": 1,
+      "geometry": "empty placeholder",
+      "source_attributes": "NULL (a provider-generated FID can be populated)",
+      "expected_spatial_validation": "failed",
+      "deliverable": false,
+      "note": "Observed with SEPARATE_DISJOINT false and true; preserve the completed provider output for diagnosis, do not rewrite it into a zero-row success."
+    },
+    "geometry_field_collision": "With existing area and perimeter fields, QGIS 3.40.15 retained the original 999 values and added area_2/perimeter_2 in the separate probe. Reject collisions or verify an explicit new-field mapping; never assume area names the computed value."
+  }
+}

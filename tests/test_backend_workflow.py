@@ -8,6 +8,7 @@ from langgraph.checkpoint.memory import MemorySaver
 
 from agent.graph import build_graph
 from agent.nodes import planner_node as planner_module
+from conftest import fake_spatial_inspector
 import ui.backend.main as backend
 
 
@@ -35,10 +36,13 @@ class FakeModel:
 
 
 @pytest.fixture(autouse=True)
-def isolate_process_ownership():
+def isolate_process_ownership(monkeypatch):
     # Each test represents a separate application lifetime. Unknown operations
     # intentionally quarantine the process until explicit reconciliation.
     from agent.tools import execution_guard
+    # These tests exercise HTTP/review/ownership with synthetic file contents.
+    # Replace only the GIS readback seam; independent GIS checks have their own tests.
+    monkeypatch.setattr('agent.spatial_validation._system_inspector', fake_spatial_inspector)
     execution_guard._unknown_tasks.clear()
     yield
     execution_guard._unknown_tasks.clear()

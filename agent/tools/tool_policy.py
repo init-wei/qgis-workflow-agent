@@ -20,6 +20,9 @@ PATH_ARGUMENT_KEYS = {
     "output_file",
     "output_files",
     "filename",
+    "input",
+    "input_layer",
+    "overlay",
 }
 
 
@@ -47,8 +50,18 @@ class PathPolicy:
         return PolicyDecision(allowed=True)
 
     def evaluate_path(self, raw_path: str) -> PolicyDecision:
-        candidate = Path(raw_path)
-        if self.is_absolute_path_string(raw_path) and not candidate.is_absolute():
+        # Only a single local GeoPackage layer selector is supported.  Check
+        # the underlying file, never the URI suffix, against the workspace.
+        parts = raw_path.split("|")
+        if (not parts[0] or "://" in parts[0] or len(parts) > 2
+                or (len(parts) == 2 and (not parts[1].startswith("layername=")
+                                          or not parts[1][len("layername="):].strip()
+                                          or Path(parts[0]).suffix.lower() != ".gpkg"))):
+            return PolicyDecision(allowed=False, reason="path_outside_workspace",
+                                  message=f"Unsupported local path: {raw_path}")
+        file_path = parts[0]
+        candidate = Path(file_path)
+        if self.is_absolute_path_string(file_path) and not candidate.is_absolute():
             return PolicyDecision(
                 allowed=False,
                 reason="path_outside_workspace",

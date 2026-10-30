@@ -8,6 +8,7 @@ SUPPORTED_PROCESSING_ALGORITHMS = frozenset(
         "native:dissolve",
         "qgis:statisticsbycategories",
         "native:basicstatisticsforfields",
+        "qgis:exportaddgeometrycolumns",
     }
 )
 
@@ -18,6 +19,39 @@ def validate_processing_request(algorithm, parameters):
         raise ValueError(f"Processing algorithm is not supported: {algorithm!r}")
     if not isinstance(parameters, dict) or not parameters:
         raise ValueError("Processing parameters must be a non-empty object")
+    if algorithm in {"native:clip", "native:dissolve", "qgis:exportaddgeometrycolumns",
+                     "native:basicstatisticsforfields", "qgis:statisticsbycategories"}:
+        output = parameters.get("OUTPUT")
+        if not isinstance(output, str) or not output.lower().endswith(".gpkg"):
+            raise ValueError("This operation requires an explicit GeoPackage OUTPUT")
+    if algorithm == "native:dissolve":
+        fields = parameters.get("FIELD")
+        if (not isinstance(fields, list)
+                or any(not isinstance(field, str) or not field.strip() for field in fields)
+                or len(set(fields)) != len(fields)):
+            raise ValueError("Dissolve requires explicit FIELD list (empty means all features)")
+        if type(parameters.get("SEPARATE_DISJOINT")) is not bool:
+            raise ValueError("Dissolve requires explicit SEPARATE_DISJOINT boolean")
+    elif algorithm == "qgis:exportaddgeometrycolumns":
+        if type(parameters.get("CALC_METHOD")) is not int or parameters["CALC_METHOD"] != 0:
+            raise ValueError("Geometry columns require CALC_METHOD=0")
+    elif algorithm in {"native:basicstatisticsforfields", "qgis:statisticsbycategories"}:
+        if algorithm == "native:basicstatisticsforfields":
+            if not isinstance(parameters.get("FIELD_NAME"), str) or not parameters["FIELD_NAME"].strip():
+                raise ValueError("Basic statistics require a numeric FIELD_NAME")
+            if "OUTPUT_HTML_FILE" in parameters:
+                raise ValueError("Statistics HTML output is not supported")
+        else:
+            fields = parameters.get("CATEGORIES_FIELD_NAME")
+            if (not isinstance(fields, list) or not fields
+                    or any(not isinstance(field, str) or not field.strip() for field in fields)
+                    or len(set(fields)) != len(fields)):
+                raise ValueError("Categorical statistics require non-empty CATEGORIES_FIELD_NAME list")
+            value_field = parameters.get("VALUES_FIELD_NAME")
+            if "VALUES_FIELD_NAME" in parameters and (
+                not isinstance(value_field, str) or not value_field.strip()
+            ):
+                raise ValueError("VALUES_FIELD_NAME must be a non-empty numeric field when provided")
 
 
 def missing_required_parameters(parameters, definitions):

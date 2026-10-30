@@ -10,6 +10,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from agent.graph import build_graph
 from agent.nodes import planner_node as planner_module
 from agent.planning.plan_schema import TaskPlan
+from conftest import fake_spatial_inspector
 import ui.backend.main as backend
 
 
@@ -181,9 +182,14 @@ def test_processing_chain_requires_independently_validated_results(monkeypatch, 
         if request["mode"] == "preflight":
             if mode == 'preflight_unavailable' and len(inspections) == 2:
                 raise OSError('inspector disappeared after approval')
-            return {"status": "passed", "checks": [], "errors": [], "facts": {}}
+            return fake_spatial_inspector(request)
         if mode == 'unavailable':
             raise OSError('External inspector unavailable')
+        if request['call']['tool_name'] == 'add_layer':
+            assert request['observation']['feature_count'] == 1
+            assert request['observation']['source'] == next(iter(request['input_paths'].values()))
+            return {'status': 'passed', 'checks': ['loaded_feature_count'], 'errors': [],
+                    'facts': {'statistics': {'kind': 'feature_count', 'feature_count': 1}}}
         output = Path(next(iter(request["output_paths"].values())))
         if mode == 'validation_wal':
             Path(str(output) + '-wal').write_bytes(b'active transaction')
@@ -269,7 +275,9 @@ def test_processing_chain_requires_independently_validated_results(monkeypatch, 
                 with ZipFile(path, 'w') as archive:
                     archive.writestr('project.qgs', '<qgis/>')
                 return {'status': 'success', 'result': {'success': True, 'path': str(path), 'layer_count': 1}}
-            return {"status": "success", "result": {"id": "buffer-layer", "source": args['path']}}
+            return {"status": "success", "result": {"id": "buffer-layer", "source": args['path'],
+                                                        "feature_count": 1, "crs": "EPSG:32650",
+                                                        "geometry": "Polygon", "fields": ["id"]}}
 
     if mode in {'project', 'project_sidecar'}:
         original_invoke = Model.ainvoke
@@ -501,9 +509,10 @@ def test_processing_chain_requires_independently_validated_results(monkeypatch, 
         assert calls[2][1]['path'] == calls[1][1]['parameters']['OUTPUT']
         load = next(item for item in result['attempts'] if item['tool_call']['tool_name'] == 'add_layer')
         assert load['observation']['data']['source'] == calls[1][1]['parameters']['OUTPUT']
-        assert load['artifacts'] == []
-        assert len(result['artifacts']) == (3 if mode == 'project' else 2)
-        expected_modes = ['preflight', 'preflight', 'validate', 'validate']
+        assert load['artifacts'][0]['kind'] == 'layer'
+        assert load['artifacts'][0]['spatial_validation']['status'] == 'passed'
+        assert len(result['artifacts']) == (4 if mode == 'project' else 3)
+        expected_modes = ['preflight', 'preflight', 'validate', 'validate', 'validate']
         assert [item['mode'] for item in inspections] == expected_modes + (['preflight'] if mode == 'project' else [])
     if mode == 'coordinate':
         assert client.get('/api/state/wrong-coordinate').json()['can_start_task'] is True

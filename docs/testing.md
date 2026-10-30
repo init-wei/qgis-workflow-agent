@@ -11,9 +11,12 @@
 | `uv run --locked pytest -o addopts= -q tests/test_vector_inspection.py` | 系统 Python/GDAL 只读输入检查；需发行版 GDAL，属于 external，不是任务产物正确性验收 |
 | `uv run --locked pytest -o addopts= -q tests/test_processing_inspection.py tests/test_artifact_integrity.py` | 隔离系统 QGIS 的参数预检和基本产物完整性；属于 external，不能代替独立空间数值验证 |
 | `uv run --locked pytest -o addopts= -q tests/test_spatial_validation.py tests/test_spatial_validation_gdal.py tests/test_spatial_oracle.py` | 空间验证接口、系统 GDAL 读回反例及固定数学预期；不代替真实 MCP 任务 |
+| `DATABASE_URL='' PYTHON_DOTENV_DISABLED=1 uv run --locked pytest -o addopts= -q tests/test_t05_fixtures.py tests/test_spatial_validation_t05.py` | 固定矩形数学、输入物化与系统 GIS 的裁剪/融合/统计反例；不读取项目凭据，不代替公开用户路径 |
 | `./scripts/dev.sh health --llm-live` | 配置/数据库/桌面桥接/MCP/真实模型连通；不能证明 GIS 任务正确 |
 
 T00 的类型错误与 advisory 是历史基线，见[当次记录](onboarding/baseline-2026-10-30.md)，不能作为当前门禁豁免。不要删除断言、扩大忽略或将失败悄悄标成通过。原型测试通过也不代表新的审核语义满足 AC。
+
+运行离线全库并覆盖 `addopts` 时，必须显式保留 `-m 'not external and not database'`；空 `DATABASE_URL` 不能代替测试筛选。外部检查逐文件选择并说明所需服务。持久化 SQL 的测试 fixture 另行拒绝 libpq 默认连接与非项目端口，避免缺配置时落到其他本地 PostgreSQL。
 
 空间预期来自独立合成数据、已知数值或人工标注，不以同一个算法重跑作唯一 oracle。原始输入 checksum 不变；失败、空结果、结果不明和成功分别验证。审核要覆盖多次拒绝、上限、过期版本、重复恢复和三类暂停点的刷新/重启。
 
@@ -38,6 +41,16 @@ GeoPackage 只接受可独立读取的文件。原始输入、产物取证及消
 批准后从业务记录取得两个实际产物。缓冲的 INPUT 必须等于重投影步骤的已验证实际输出；读回两个文件，与固定数学预期核对坐标、CRS、三条属性及缓冲半径、边数、面积和周长。每项 Processing 保留工具完成事实、文件大小及 SHA-256、空间报告；通过空间检查的产物才可交付，用户确认单独保留。QGIS 最终图层来源应指向缓冲产物，原始文件 checksum 保持不变。
 
 在公开工作流接口用 GIS seam 注入“调用完成但坐标、CRS 或半径错误”的文件，验证任务失败、产物仅作诊断、后续加载不发生且用户确认仍为空。检查器不可用或前序产物被修改也必须停止。没有明确单位、度作为米或计划距离偏离用户数值时，应在首次 GIS 写入前要求修正；这些受控反例不能报告为真实 QGIS 执行证据。
+
+## 裁剪、融合与统计复验
+
+按[开发样例](../tests/fixtures/gis/README.md)创建并上传独立 GeoPackage 来源和裁剪面。T05 的裁剪、融合、几何属性及统计输出限定 GPKG，以保留空图层与全 NULL 字段类型；输入仍按首期支持格式选择。
+
+审核并执行裁剪→按字段融合→查看，逐项读回固定交集、分组及完整属性来源。面积统计使用受限的几何属性辅助算法，明确图层 CRS 平面计算与可信单位；逐要素面积和与全部融合后的并集面积分别核对。原有 `area`/`perimeter` 字段碰撞、不同 CRS、未知或非数值字段、错误计算方式应在首次写入前要求修正，不能静默选择旧字段或退化成计数。
+
+统计表是无几何、无 CRS 的合法表；空间源的 CRS 要求不随之放宽。核对总要素数、非空数值数、NULL、sum/min/max、分类与被 QGIS 省略的全 NULL 类别。空和原始值 0 同时标明无有效数值，MIN/MAX 为无值。总数若由加载步骤取得，计划须明确展示其加载行为，并以独立文件读回复核真实回显，不冒充新文件产物。
+
+远离裁剪面及空来源应产生可读的合法零行；当前 QGIS 对空来源的全部融合可能生成一条空几何占位，验证不能通过时保留工具完成与诊断，停止后续消费。按字段空融合、空统计及全 NULL 统计分别复验。错误分组、几何、数值或被修改的前序产物不能进入成功结果。页面与业务查询中的值必须来自通过验证的实际产物，用户确认仍单独记录。
 
 ## 审核恢复与新工程副本复验
 

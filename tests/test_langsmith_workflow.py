@@ -9,12 +9,15 @@ from langgraph.checkpoint.memory import MemorySaver
 
 from agent.graph import build_graph
 from agent.nodes import planner_node as planner_module
+from conftest import fake_spatial_inspector
 import ui.backend.main as backend
 from test_backend_workflow import execution_app, selected_file
 
 
 @pytest.fixture(autouse=True)
-def close_trace_client():
+def close_trace_client(monkeypatch):
+    # Workflow-only fakes use synthetic inputs; real spatial checks have separate tests.
+    monkeypatch.setattr('agent.spatial_validation._system_inspector', fake_spatial_inspector)
     yield
     import asyncio
     from agent.observability import close_langsmith
@@ -292,7 +295,7 @@ def test_processing_spans_describe_completed_calls_and_validation_without_geomet
 
     starts = [run for run in captured if run.get("name") == "qgis.mcp_call" and not run.get("end_time")]
     validations = [run for run in captured if run.get("name") == "qgis.spatial_validation" and not run.get("end_time")]
-    assert len(starts) == 3 and len(validations) == 2
+    assert len(starts) == 3 and len(validations) == 3
     assert all(run.get("parent_run_id") and run.get("trace_id") for run in starts + validations)
     metadata = [run["extra"]["metadata"] for run in starts]
     reproject = next(item for item in metadata if item.get("algorithm") == "native:reprojectlayer")
