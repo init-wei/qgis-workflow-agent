@@ -9,6 +9,7 @@ import os
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+from uuid import uuid4
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
@@ -16,8 +17,11 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from agent.adapters.geotool_schema_adapter import qgis_task_plan_to_geotool_dict
 from agent.nodes.executor_node import controlled_executor_node
-from agent.planning.plan_schema import InputSpec, OutputSpec, PlanStep, TaskPlan
+from agent.planning.plan_schema import InputSpec, OutputSpec, PlanStep, TaskPlan, ToolCallPlan
 from agent.state import create_initial_state
+from agent.nodes.planner_node import bind_task_outputs
+from agent.planning.plan_validator import PlanValidator
+from agent.tools.database import save_task_execution_record
 from agent.tools.export_geotool_trace import (
     build_geotool_trace_seed,
     export_geotool_trace_jsonl,
@@ -25,9 +29,9 @@ from agent.tools.export_geotool_trace import (
 from agent.tools.mcp_client import QGIS_MCP_SERVER_URL, QGISMCPClient
 
 DEFAULT_SMOKE_TRACE_PATH = Path(".target/demo/controlled_smoke_v0_1.jsonl")
-DEFAULT_SMOKE_SCREENSHOT_PATH = Path(".target/demo/smoke_points.png")
+DEFAULT_SMOKE_SCREENSHOT_PATH = Path("smoke_points.png")
 DEMO_TRACE_PATH = Path("exports/geotool_traces/controlled_smoke_v0_1.jsonl")
-DEMO_SCREENSHOT_PATH = Path("exports/geotool_traces/smoke_points.png")
+DEMO_SCREENSHOT_PATH = DEFAULT_SMOKE_SCREENSHOT_PATH
 
 
 @dataclass(frozen=True)
@@ -60,10 +64,11 @@ def skip_reason_for_preflight(result: MCPPreflightResult) -> str:
     )
 
 
-def build_smoke_task_plan(screenshot_path: str | Path = DEFAULT_SMOKE_SCREENSHOT_PATH) -> TaskPlan:
+def build_smoke_task_plan(screenshot_path: str | Path = DEFAULT_SMOKE_SCREENSHOT_PATH,
+                          task_id: str = "smoke-load-layer-capture") -> TaskPlan:
     screenshot_path_text = str(screenshot_path)
-    return TaskPlan(
-        task_id="smoke-load-layer-capture",
+    return bind_task_outputs(TaskPlan(
+        task_id=task_id,
         task_summary="Load one vector layer and capture a screenshot",
         risk_level="low",
         review_status="approved",
@@ -71,14 +76,12 @@ def build_smoke_task_plan(screenshot_path: str | Path = DEFAULT_SMOKE_SCREENSHOT
             InputSpec(
                 input_id="input_points",
                 description="Smoke vector layer",
+                file_id="smoke-phase11-points",
+                layer_name="phase11_points",
                 path="shared/uploads/phase11_points.geojson",
             )
         ],
         expected_outputs=[
-            OutputSpec(
-                output_id="loaded_points",
-                description="Loaded smoke layer",
-            ),
             OutputSpec(
                 output_id="map_screenshot",
                 description="Smoke screenshot",
@@ -93,7 +96,7 @@ def build_smoke_task_plan(screenshot_path: str | Path = DEFAULT_SMOKE_SCREENSHOT
                 candidate_pyqgis_apis=["QgsVectorLayer"],
                 allowed_tools=["add_layer"],
                 input_refs=["input_points"],
-                output_refs=["loaded_points"],
+                output_refs=[],
                 risk_level="low",
                 requires_review=False,
             ),
@@ -103,41 +106,32 @@ def build_smoke_task_plan(screenshot_path: str | Path = DEFAULT_SMOKE_SCREENSHOT
                 candidate_gdal_apis=[],
                 candidate_pyqgis_apis=["QgsMapCanvas"],
                 allowed_tools=["capture_map_canvas"],
-                input_refs=["loaded_points"],
+                input_refs=[],
                 output_refs=["map_screenshot"],
                 risk_level="low",
                 requires_review=False,
             ),
         ],
-        metadata={
-            "tool_calls": [
-                {
-                    "step_id": 1,
-                    "tool_name": "add_layer",
-                    "arguments": {
-                        "path": "shared/uploads/phase11_points.geojson",
-                        "layer_type": "vector",
-                    },
-                    "metadata": {
-                        "call_id": "smoke-call-001",
-                        "output_ref": "loaded_points",
-                    },
+        tool_calls=[
+            ToolCallPlan(
+                step_id=1,
+                tool_name="add_layer",
+                arguments={
+                    "path": "shared/uploads/phase11_points.geojson",
+                    "layer_type": "vector",
+                    "name": "phase11_points",
                 },
-                {
-                    "step_id": 2,
-                    "tool_name": "capture_map_canvas",
-                    "arguments": {
-                        "path": screenshot_path_text,
-                    },
-                    "metadata": {
-                        "call_id": "smoke-call-002",
-                        "depends_on": ["smoke-call-001"],
-                        "output_ref": "map_screenshot",
-                    },
-                },
-            ]
-        },
-    )
+                metadata={"call_id": "smoke-call-001"},
+            ),
+            ToolCallPlan(
+                step_id=2,
+                tool_name="capture_map_canvas",
+                arguments={"path": screenshot_path_text, "width": 1200, "height": 800},
+                metadata={"call_id": "smoke-call-002"},
+            ),
+        ],
+        metadata={},
+    ))
 
 
 def resolve_smoke_outputs(
@@ -165,12 +159,15 @@ async def run_smoke(
 ) -> Path:
     os.environ["QGIS_AGENT_EXECUTION_MODE"] = "tool_call_plan"
     user_query = "Load one vector layer and capture a screenshot."
-    task_plan = build_smoke_task_plan(screenshot_path)
+    task_plan = build_smoke_task_plan(screenshot_path, task_id=f"smoke-{uuid4().hex}")
     state = create_initial_state("controlled-smoke", user_query)
     state["task_plan"] = task_plan
-    state["status"] = True
-    state["tool_selection"] = ["add_layer", "capture_map_canvas"]
-
+    report = PlanValidator().validate(task_plan)
+    if not report.is_valid:
+        raise ValueError(report.summary)
+    await asyncio.to_thread(save_task_execution_record, task_id=task_plan.task_id,
+                            session_id=state["session_id"], plan_revision=task_plan.revision,
+                            status="approved", plan=task_plan.model_dump(mode="json"), attempts=[])
     result = await controlled_executor_node(state)
     trace = result.get("execution_trace")
     if trace is None:
@@ -194,12 +191,12 @@ def main() -> None:
     parser.add_argument(
         "--screenshot-output",
         default=None,
-        help="Path to write the captured QGIS map canvas screenshot.",
+        help="New screenshot filename, bound to this smoke task controlled output directory.",
     )
     parser.add_argument(
         "--update-demo-artifacts",
         action="store_true",
-        help="Write tracked demo artifacts under exports/geotool_traces.",
+        help="Write the trace under exports/geotool_traces; screenshots remain task-controlled.",
     )
     args = parser.parse_args()
     trace_path, screenshot_path = resolve_smoke_outputs(

@@ -50,6 +50,7 @@ case "${1:-help}" in
     uv run --locked ruff check .
     uv run --locked python scripts/check_docs.py
     uv run --locked pytest
+    node_run run typecheck
     node_run run build
     ;;
   health)

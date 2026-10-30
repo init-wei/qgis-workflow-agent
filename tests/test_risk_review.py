@@ -91,7 +91,7 @@ def test_approved_feedback_resumes_high_risk_call(tmp_path):
     assert trace.latest_attempt().metadata["risk_review"]["reviewer"] == "tester"
 
 
-def test_modified_feedback_runs_modified_arguments_and_records_change(tmp_path):
+def test_modified_feedback_requires_a_new_plan_review_without_calling_mcp(tmp_path):
     client = SequenceMCPClient([{"status": "success", "result": {"ok": True}}])
     loop = ExecutionLoop(
         mcp_client=client,
@@ -122,12 +122,9 @@ def test_modified_feedback_runs_modified_arguments_and_records_change(tmp_path):
         )
     )
 
-    assert result.status == "success"
-    assert client.calls == [("save_project", {"path": "shared/projects/reviewed.qgz"})]
-    risk_review = trace.latest_attempt().metadata["risk_review"]
-    assert risk_review["status"] == "modified"
-    assert risk_review["original_arguments"] == {"path": "shared/projects/original.qgz"}
-    assert risk_review["modified_arguments"] == {"path": "shared/projects/reviewed.qgz"}
+    assert result.status == "failed"
+    assert result.decision.reason == "modified_call_requires_new_plan_review"
+    assert client.calls == []
 
 
 def test_rejected_feedback_aborts_without_calling_mcp(tmp_path):

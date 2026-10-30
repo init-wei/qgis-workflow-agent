@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { Session, Message, UploadedFile, Plan } from '../types'
+import type { Session, Message, UploadedFile, TaskPlan } from '../types'
 
 export const useChatStore = defineStore('chat', () => {
   // 状态
@@ -8,9 +8,10 @@ export const useChatStore = defineStore('chat', () => {
   const sessions = ref<Session[]>([])
   const messages = ref<Message[]>([])
   const uploadedFiles = ref<UploadedFile[]>([])
+  const selectedFileIds = ref<string[]>([])
   const isExecuting = ref(false)
-  const currentDraft = ref<Plan | null>(null)
-  const currentExecutionResult = ref<any>(null)
+  const currentDraft = ref<TaskPlan | null>(null)
+  const currentExecutionResult = ref<unknown>(null)
   const qgisStatus = ref<'running' | 'error' | 'unknown'>('unknown')
   const qgisToolsCount = ref(0)
   const screenshotPath = ref<string | null>(null)
@@ -144,24 +145,47 @@ export const useChatStore = defineStore('chat', () => {
     isExecuting.value = value
   }
 
-  function setCurrentDraft(draft: Plan | null) {
+  function setCurrentDraft(draft: TaskPlan | null) {
     currentDraft.value = draft
   }
 
-  function setExecutionResult(result: any) {
+  function setExecutionResult(result: unknown) {
     currentExecutionResult.value = result
   }
 
+  function setUploadedFiles(files: UploadedFile[]) {
+    uploadedFiles.value = files
+    const knownIds = new Set(files.map(file => file.file_id))
+    selectedFileIds.value = selectedFileIds.value.filter(fileId => knownIds.has(fileId))
+  }
+
   function addUploadedFile(file: UploadedFile) {
-    uploadedFiles.value.push(file)
+    const existingIndex = uploadedFiles.value.findIndex(item => item.file_id === file.file_id)
+    if (existingIndex === -1) {
+      uploadedFiles.value.push(file)
+    } else {
+      uploadedFiles.value[existingIndex] = file
+    }
+  }
+
+  function setFileSelected(fileId: string, selected: boolean) {
+    if (selected && !selectedFileIds.value.includes(fileId)) {
+      selectedFileIds.value.push(fileId)
+    } else if (!selected) {
+      selectedFileIds.value = selectedFileIds.value.filter(id => id !== fileId)
+    }
   }
 
   function removeUploadedFile(index: number) {
-    uploadedFiles.value.splice(index, 1)
+    const [removed] = uploadedFiles.value.splice(index, 1)
+    if (removed) {
+      setFileSelected(removed.file_id, false)
+    }
   }
 
   function clearUploadedFiles() {
     uploadedFiles.value = []
+    selectedFileIds.value = []
   }
 
   function setQGISStatus(status: 'running' | 'error' | 'unknown') {
@@ -182,6 +206,7 @@ export const useChatStore = defineStore('chat', () => {
     sessions,
     messages,
     uploadedFiles,
+    selectedFileIds,
     isExecuting,
     currentDraft,
     currentExecutionResult,
@@ -208,7 +233,9 @@ export const useChatStore = defineStore('chat', () => {
     setExecuting,
     setCurrentDraft,
     setExecutionResult,
+    setUploadedFiles,
     addUploadedFile,
+    setFileSelected,
     removeUploadedFile,
     clearUploadedFiles,
     setQGISStatus,

@@ -1,4 +1,5 @@
 import asyncio
+from pathlib import Path
 
 from agent.tools.execution_loop import ExecutionLoop
 from agent.tools.retrieval import ApiDocRecord, RetrievalContext
@@ -39,7 +40,17 @@ def _registry(*tool_names: str) -> ToolRegistry:
 
 
 def test_execution_loop_records_retrieval_context_on_success(tmp_path):
-    client = SequenceMCPClient([{"status": "success", "result": {"ok": True}}])
+    output = tmp_path / "shared/outputs/task-rag/r1/buffer/result.geojson"
+
+    class ProcessingGIS:
+        async def call_tool(self, tool_name, arguments):
+            output.parent.mkdir(parents=True)
+            output.write_bytes((Path(__file__).parent / "fixtures/gis/phase11_points.geojson").read_bytes())
+            return {"status": "success", "result": {
+                "algorithm": "native:buffer", "result": {"OUTPUT": str(output)},
+            }}
+
+    client = ProcessingGIS()
     retriever = FakeRetriever()
     loop = ExecutionLoop(
         mcp_client=client,
@@ -51,8 +62,12 @@ def test_execution_loop_records_retrieval_context_on_success(tmp_path):
     call = ToolCallPlan(
         step_id=1,
         tool_name="execute_processing",
-        arguments={"algorithm": "gdal:warpreproject"},
-        metadata={"candidate_gdal_apis": ["osgeo.gdal.Warp"]},
+        arguments={"algorithm": "native:buffer", "parameters": {
+            "INPUT": "shared/uploads/source.geojson", "OUTPUT": str(output), "DISTANCE": 10,
+            "SEGMENTS": 8, "END_CAP_STYLE": 0, "JOIN_STYLE": 0, "MITER_LIMIT": 2,
+            "DISSOLVE": False, "SEPARATE_DISJOINT": False,
+        }},
+        metadata={"candidate_pyqgis_apis": ["processing.run"]},
     )
 
     result = asyncio.run(loop.run(call, trace, allowed_tools=["execute_processing"]))
@@ -61,13 +76,13 @@ def test_execution_loop_records_retrieval_context_on_success(tmp_path):
     assert len(retriever.contexts) == 1
     retrieval_context = trace.latest_attempt().metadata["retrieval_context"]
     assert retrieval_context["query_source"] == "initial"
-    assert retrieval_context["records"][0]["api_name"] == "osgeo.gdal.Warp"
+    assert retrieval_context["records"][0]["api_name"] == "processing.run"
 
 
-def test_parameter_error_triggers_error_driven_retrieval_before_retry(tmp_path):
+def test_parameter_error_retrieval_does_not_retry_modified_arguments(tmp_path):
     client = SequenceMCPClient(
         [
-            {"status": "error", "message": "Missing required parameter: path"},
+            {"status": "error", "message": "Missing required parameter: path", "outcome": "not_started"},
             {"status": "success", "result": {"ok": True}},
         ]
     )
@@ -92,25 +107,13 @@ def test_parameter_error_triggers_error_driven_retrieval_before_retry(tmp_path):
 
     result = asyncio.run(loop.run(call, trace, allowed_tools=["add_layer"]))
 
-    assert result.status == "success"
-    assert [context.query_source for context in retriever.contexts] == [
-        "initial",
-        "error",
-        "initial",
-    ]
+    assert result.status == "needs_review"
+    assert [context.query_source for context in retriever.contexts] == ["initial", "error"]
+    assert len(client.calls) == 1
     first_attempt = trace.attempts[0]
-    second_attempt = trace.attempts[1]
-    assert first_attempt.metadata["repair_retrieval_context"]["query_source"] == (
-        "error"
-    )
-    assert (
-        "parameter_error" in first_attempt.metadata["repair_retrieval_context"]["query"]
-    )
-    assert second_attempt.metadata["retrieval_context"]["query_source"] == "initial"
-    assert (
-        second_attempt.tool_call.metadata["retrieval_context"]["records"][0]["api_name"]
-        == "QgsVectorLayer"
-    )
+    assert first_attempt.metadata["repair_retrieval_context"]["query_source"] == "error"
+    assert "parameter_error" in first_attempt.metadata["repair_retrieval_context"]["query"]
+
 
 
 def test_qgis_disconnect_does_not_trigger_error_driven_retrieval(tmp_path):

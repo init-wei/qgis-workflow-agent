@@ -2,7 +2,7 @@
 
 一个将自然语言需求转为可审核 GIS 工作流、由独立 QGIS 执行的本地 Agent 项目。技术栈为 Vue 3/TypeScript、FastAPI、LangGraph/LangChain、MCP、PostgreSQL 与 QGIS。
 
-当前分支 `codex/v1-refactor` 已配置开发基线，业务重构待按 GitHub 切片实施。目标是六类真实 GIS 任务、明确的人工审核、暂停点恢复及独立空间校验；本页不声明这些目标已完成。
+当前分支 `codex/v1-refactor` 按 GitHub 切片推进，具体实现与验收证据以[正式任务](docs/tickets/README.md)为准。目标是六类真实 GIS 任务、明确的人工审核、暂停点恢复及独立空间校验。
 
 - [Agent 开发入口](AGENTS.md)与[自主编排交接](docs/agents/orchestration.md)
 - [环境安装与运行](docs/onboarding/README.md)

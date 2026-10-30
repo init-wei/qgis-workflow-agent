@@ -3,7 +3,7 @@
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, StrictBool
+from pydantic import BaseModel, ConfigDict, Field, StrictBool
 
 
 RiskLevel = Literal["low", "medium", "high"]
@@ -14,14 +14,21 @@ IssueSeverity = Literal["warning", "error"]
 class InputSpec(BaseModel):
     """Input required before the task can run."""
 
+    model_config = ConfigDict(extra="forbid")
+
     input_id: str = Field(description="Stable input reference ID")
     description: str = Field(description="Human readable input description")
     path: str | None = Field(default=None, description="File path or URI when known")
     source: str | None = Field(default=None, description="Source description when path is not known")
+    file_id: str | None = Field(default=None, description="Server-issued uploaded file ID")
+    sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$", description="Server-bound checksum of the original input")
+    layer_name: str | None = Field(default=None, description="Selected source layer when a container has multiple layers")
 
 
 class OutputSpec(BaseModel):
     """Expected artifact produced by the task."""
+
+    model_config = ConfigDict(extra="forbid")
 
     output_id: str = Field(description="Stable output reference ID")
     description: str = Field(description="Human readable output description")
@@ -30,6 +37,8 @@ class OutputSpec(BaseModel):
 
 class PlanStep(BaseModel):
     """One planned GIS operation."""
+
+    model_config = ConfigDict(extra="forbid")
 
     step_id: int = Field(description="Step ID")
     description: str = Field(description="Step description")
@@ -43,8 +52,23 @@ class PlanStep(BaseModel):
     requires_review: StrictBool = Field(description="Whether the step requires human review")
 
 
+class ToolCallPlan(BaseModel):
+    """A concrete MCP invocation included in the reviewable TaskPlan."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    step_id: int = Field(description="TaskPlan step ID")
+    tool_name: str = Field(description="MCP tool name")
+    arguments: dict[str, Any] = Field(description="Exact arguments sent to the MCP tool")
+    risk_level: RiskLevel = Field(default="low", description="Call risk level")
+    requires_review: StrictBool = Field(default=False, description="Whether this call has an additional risk gate")
+    metadata: dict[str, Any] = Field(default_factory=dict, description="Non-executable call annotations")
+
+
 class TaskPlan(BaseModel):
     """Strict task-level planning contract."""
+
+    model_config = ConfigDict(extra="forbid")
 
     task_id: str = Field(description="Stable task plan ID")
     task_summary: str = Field(description="Task summary")
@@ -53,6 +77,8 @@ class TaskPlan(BaseModel):
     review_status: ReviewStatus = Field(description="Human review status")
     required_inputs: list[InputSpec] = Field(default_factory=list, description="Required task inputs")
     expected_outputs: list[OutputSpec] = Field(default_factory=list, description="Expected task outputs")
+    tool_calls: list[ToolCallPlan] = Field(default_factory=list, description="Exact calls reviewed and executed for the steps")
+    revision: int = Field(default=1, ge=1, description="Reviewable version within a task")
     metadata: dict[str, Any] = Field(default_factory=dict, description="Planning metadata")
 
 

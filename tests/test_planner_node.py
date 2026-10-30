@@ -16,14 +16,15 @@ from dotenv import load_dotenv
 # 加载.env环境变量
 load_dotenv()
 
-from agent.state import create_initial_state, Plan, Step
+from agent.state import create_initial_state
 from agent.nodes.planner_node import planner_node
 
 
 pytestmark = pytest.mark.external
 
 
-def test_planner_node():
+@pytest.mark.anyio
+async def test_planner_node():
     """测试Planner Node"""
     print("测试Planner Node...")
     print("-" * 60)
@@ -35,24 +36,19 @@ def test_planner_node():
     )
     
     # 调用Planner Node
-    result = planner_node(state)
+    result = await planner_node(state)
     
     print("\nPlanner结果:")
-    print(f"- draft存在: {result.get('draft') is not None}")
-    print(f"- status: {result.get('status')}")
+    print(f"- TaskPlan存在: {result.get('task_plan') is not None}")
     print(f"- retry_count: {result.get('retry_count')}")
     
-    if result.get('draft'):
-        draft = result['draft']
-        print(f"- 任务: {draft.task}")
-        print(f"- 步骤数: {len(draft.steps)}")
-        
-        for step in draft.steps:
-            print(f"  步骤 {step.step_id}: {step.description}")
-            print(f"    GDAL APIs: {step.gdal_api}")
-            print(f"    PyQGIS APIs: {step.pyqgis_api}")
+    if result.get("task_plan"):
+        task_plan = result["task_plan"]
+        print(f"- 任务: {task_plan.task_summary}")
+        print(f"- 步骤数: {len(task_plan.steps)}")
+        print(f"- 工具调用数: {len(task_plan.tool_calls)}")
     
-    assert result.get('draft') is not None or result.get('retry_count') > 0
+    assert result.get("task_plan") is not None or result.get("retry_count") > 0
     print("\n✅ Planner Node测试通过")
 
 

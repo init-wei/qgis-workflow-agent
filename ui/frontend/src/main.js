@@ -7,6 +7,9 @@ import App from './App.vue'
 import router from './router'
 import './style.css'
 
+// API credentials belong to the backend environment; remove keys left by older UI versions.
+localStorage.removeItem('apiKey')
+
 const app = createApp(App)
 
 // 注册 Pinia

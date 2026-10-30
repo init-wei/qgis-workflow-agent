@@ -1,18 +1,18 @@
 # 开发环境
 
-当前实测和限制见[基线报告](baseline-2026-10-30.md)。先完成环境，再从[任务交接](../agents/orchestration.md)领取 T01。现有原型尚未通过 V1 业务验收。
+环境建立时的实测和限制见[基线报告](baseline-2026-10-30.md)。完成环境后从[任务交接](../agents/orchestration.md)查询正式任务前沿；业务验收证据由 GitHub issue 拥有。
 
 ## 干净环境
 
-前提：Linux/WSL、Git、uv、Docker+Compose、Node 24.20.0（可用 mise 或 nvm）、发行版 QGIS Desktop 及其 PyQGIS。不要向 uv 环境安装 QGIS。
+前提：Linux/WSL、Git、uv、Docker+Compose、Node 24.20.0（可用 mise 或 nvm）、发行版 QGIS Desktop 及其 PyQGIS、系统 Python 的 GDAL/OGR 绑定。不要向 uv 环境安装 QGIS。
 
 1. checkout `codex/v1-refactor`。
 2. 复制 `.env.example` 为 `.env`，填入临时模型配置和随机数据库密码；DATABASE_URL 与 POSTGRES_* 一致，密码可用随机 hex 避免 URL 转义。`chmod 600 .env`。本机已经完成，不覆盖现有值。
 3. 如使用 mise，先审阅 `mise.toml`，执行 `mise trust` 和 `mise install`。不改变全局 Node。
 4. `./scripts/dev.sh install` 安装锁定依赖。
 5. `./scripts/dev.sh prepare` 创建运行目录、合成输入和独立 QGIS plugin 链接。
-6. `./scripts/dev.sh db` 启动独立数据库，初始化原型 schema；不覆盖现有 5432 服务。
-7. `./scripts/dev.sh check`，另跑 `./scripts/dev.sh typecheck` 核对基线失败/后续修复。
+6. `./scripts/dev.sh db` 启动独立数据库，初始化项目 schema，保留既有表和数据；不覆盖其他 5432 服务。
+7. `./scripts/dev.sh check` 运行本地门禁，包含前端类型检查和生产构建；外部服务验收见[测试规范](../testing.md)。
 
 ## 开发时启动
 
@@ -31,7 +31,7 @@
 
 `./scripts/dev.sh health --llm-live` 会实际使用 `.env` 的临时 key 调用模型。LangSmith 默认关闭；缺 LangSmith key 不阻塞 T01–T03。`./scripts/dev.sh db-stop` 停止本项目数据库，保留卷；不要为日常清理执行 `down -v`。
 
-前端当前产物在 ui/frontend/dist，而旧后端静态路径指向另一目录；本轮使用 Vite 入口。单地址生产构建和深链接由 T01/T08 验收，不把构建成功当成已可生产部署。
+生产构建使用 `./scripts/dev.sh build`，产物在 ui/frontend/dist，后端从同一目录提供页面和静态资源。构建后访问 `http://127.0.0.1:9000/` 或 `/settings`；此入口无需 Vite 进程。开发热更新继续使用 5173。
 
 ## 可选测试素材
 

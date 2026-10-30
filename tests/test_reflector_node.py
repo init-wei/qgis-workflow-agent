@@ -17,7 +17,8 @@ from dotenv import load_dotenv
 # 加载.env环境变量
 load_dotenv()
 
-from agent.state import create_initial_state, Plan, Step
+from agent.planning.plan_schema import PlanStep, TaskPlan
+from agent.state import create_initial_state
 from langchain_core.messages import AIMessage
 from agent.nodes.reflector_node import reflector_node
 
@@ -37,16 +38,18 @@ async def test_reflector_node():
     )
     
     # 创建测试计划
-    plan = Plan(
-        task="加载矢量图层",
+    task_plan = TaskPlan(
+        task_id=state["task_id"],
+        task_summary="加载矢量图层",
+        risk_level="low",
+        review_status="pending_review",
         steps=[
-            Step(step_id=1, description="加载shapefile", gdal_api=[], pyqgis_api=[]),
-            Step(step_id=2, description="显示图层", gdal_api=[], pyqgis_api=[])
+            PlanStep(step_id=1, description="加载图层", risk_level="low", requires_review=False),
+            PlanStep(step_id=2, description="查看图层", risk_level="low", requires_review=False),
         ],
-        metadata={"estimated_complexity": "low"}
     )
     
-    state["plan"] = plan
+    state["task_plan"] = task_plan
     state["messages"] = [
         AIMessage(content="步骤1: 使用QgsRasterLayer加载数据源 D:/data/sample.tif，图层命名为 sample_raster"),
         AIMessage(content="步骤2: 将图层添加到QgsProject并刷新地图画布，检查坐标系为 EPSG:4326"),
@@ -65,9 +68,7 @@ async def test_reflector_node():
     
     # 检查状态是否清理
     print(f"\n状态清理检查:")
-    print(f"- draft: {result.get('draft')}")
-    print(f"- plan: {result.get('plan')}")
-    print(f"- execution_logs: {len(result.get('execution_logs', []))}")
+    print(f"- task_plan: {result.get('task_plan')}")
     print(f"- messages: {len(result.get('messages', []))}")
     
     print("\n✅ Reflector Node测试通过")

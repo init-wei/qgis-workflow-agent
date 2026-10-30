@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 
 from qgis_mcp_server import qgis_mcp_server
 from qgis_mcp_server.qgis_mcp_server import _resolve_local_path
@@ -17,88 +18,34 @@ def test_resolve_local_path_leaves_urls_unchanged():
     assert _resolve_local_path(url) == url
 
 
-def test_capture_map_canvas_falls_back_to_render_map_base64(monkeypatch, tmp_path):
+def test_capture_map_canvas_reports_unsupported_command_without_fallback(monkeypatch, tmp_path):
     calls = []
-    png_b64 = (
-        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8"
-        "/x8AAwMCAO+/p9sAAAAASUVORK5CYII="
-    )
 
     class FakeQGIS:
         def send_command(self, command_type, params=None):
             calls.append((command_type, params))
-            if command_type == "capture_map_canvas":
-                return {
-                    "status": "error",
-                    "message": "Unknown command type: capture_map_canvas",
-                }
-            if command_type == "render_map_base64":
-                return {
-                    "status": "success",
-                    "result": {
-                        "base64_data": png_b64,
-                        "mime_type": "image/png",
-                        "width": 321,
-                        "height": 123,
-                    },
-                }
-            raise AssertionError(command_type)
+            return {"status": "error", "message": f"Unknown command type: {command_type}"}
 
     monkeypatch.setattr(qgis_mcp_server, "get_qgis_connection", lambda: FakeQGIS())
+    target = Path(__file__).resolve().parents[1] / "shared/outputs/protocol-test/r1/result/result.png"
+    response = qgis_mcp_server.capture_map_canvas(None, path=str(target), width=321, height=123)
 
-    response = qgis_mcp_server.capture_map_canvas(
-        None,
-        path=str(tmp_path / "fallback.png"),
-        width=321,
-        height=123,
-    )
-
-    assert calls[0][0] == "capture_map_canvas"
-    assert calls[1] == (
-        "render_map_base64",
-        {"path": str(tmp_path / "fallback.png"), "width": 321, "height": 123},
-    )
-    assert (tmp_path / "fallback.png").exists()
-    assert "base64_data" not in response
-    assert '"fallback_tool": "render_map_base64"' in response
+    assert calls == [("capture_map_canvas", {"path": str(target), "width": 321, "height": 123})]
+    assert json.loads(response)["status"] == "error"
+    assert not target.exists()
 
 
-def test_capture_map_canvas_falls_back_to_canvas_screenshot(monkeypatch, tmp_path):
+def test_capture_map_canvas_forwards_one_successful_request(monkeypatch, tmp_path):
     calls = []
-    png_b64 = (
-        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8"
-        "/x8AAwMCAO+/p9sAAAAASUVORK5CYII="
-    )
 
     class FakeQGIS:
         def send_command(self, command_type, params=None):
             calls.append((command_type, params))
-            if command_type in {"capture_map_canvas", "render_map_base64"}:
-                return {"status": "error", "message": f"Unknown command type: {command_type}"}
-            if command_type == "get_canvas_screenshot":
-                return {
-                    "status": "success",
-                    "result": {
-                        "base64_data": png_b64,
-                        "mime_type": "image/png",
-                        "width": 640,
-                        "height": 480,
-                    },
-                }
-            raise AssertionError(command_type)
+            return {"status": "success", "result": {"path": params["path"], "width": params["width"]}}
 
     monkeypatch.setattr(qgis_mcp_server, "get_qgis_connection", lambda: FakeQGIS())
+    target = Path(__file__).resolve().parents[1] / "shared/outputs/protocol-test/r1/screenshot/screenshot.png"
+    response = qgis_mcp_server.capture_map_canvas(None, path=str(target))
 
-    response = qgis_mcp_server.capture_map_canvas(
-        None,
-        path=str(tmp_path / "screenshot.png"),
-    )
-
-    assert [call[0] for call in calls] == [
-        "capture_map_canvas",
-        "render_map_base64",
-        "get_canvas_screenshot",
-    ]
-    assert (tmp_path / "screenshot.png").exists()
-    assert "base64_data" not in response
-    assert '"fallback_tool": "get_canvas_screenshot"' in response
+    assert calls == [("capture_map_canvas", {"path": str(target), "width": 800, "height": 600})]
+    assert json.loads(response)["result"]["path"] == str(target)

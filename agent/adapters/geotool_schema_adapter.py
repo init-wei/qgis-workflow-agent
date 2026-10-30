@@ -12,7 +12,6 @@ import json
 from typing import Any
 
 from agent.planning.plan_schema import TaskPlan
-from agent.state import Plan, Step
 from agent.tools.tool_contracts import ExecutionTrace, StepAttempt, ToolCallPlan
 
 
@@ -38,6 +37,7 @@ def qgis_task_plan_to_geotool_dict(task_plan: TaskPlan, user_query: str) -> dict
             for output_spec in task_plan.expected_outputs
         ],
         "steps": [_step_to_geotool_dict(step) for step in task_plan.steps],
+        "tool_calls": [call.model_dump(mode="json") for call in task_plan.tool_calls],
         "risk_level": task_plan.risk_level,
         "metadata": {
             "schema_version": SCHEMA_VERSION,
@@ -45,26 +45,6 @@ def qgis_task_plan_to_geotool_dict(task_plan: TaskPlan, user_query: str) -> dict
             **dict(task_plan.metadata),
         },
     }
-
-
-def geotool_task_plan_to_qgis_legacy_plan(payload: dict) -> Plan:
-    """Convert a GeoTool task payload into the legacy Plan used by the UI."""
-
-    if not isinstance(payload, dict):
-        raise ValueError("GeoTool task plan payload must be a dict.")
-    steps = payload.get("steps")
-    if not isinstance(steps, list) or not steps:
-        raise ValueError("GeoTool task plan payload must include non-empty steps.")
-
-    return Plan(
-        task=str(payload.get("goal") or payload.get("task_summary") or ""),
-        steps=[_legacy_step_from_geotool(step) for step in steps],
-        metadata={
-            "source_schema": "geotool",
-            "task_id": payload.get("task_id"),
-            "risk_level": payload.get("risk_level"),
-        },
-    )
 
 
 def geotool_tool_call_plan_to_qgis_calls(payload: dict) -> list[ToolCallPlan]:
@@ -207,18 +187,6 @@ def _step_to_geotool_dict(step) -> dict[str, Any]:
             "qgis_step_type": step.step_type,
         },
     }
-
-
-def _legacy_step_from_geotool(raw_step: dict) -> Step:
-    if not isinstance(raw_step, dict):
-        raise ValueError("GeoTool step must be a dict.")
-    metadata = raw_step.get("metadata") if isinstance(raw_step.get("metadata"), dict) else {}
-    return Step(
-        step_id=int(raw_step.get("step_id")),
-        description=str(raw_step.get("description") or ""),
-        gdal_api=list(metadata.get("candidate_gdal_apis") or []),
-        pyqgis_api=list(metadata.get("candidate_pyqgis_apis") or []),
-    )
 
 
 def _coerce_step_id(value: Any) -> int:

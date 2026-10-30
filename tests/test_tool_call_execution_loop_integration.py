@@ -1,24 +1,31 @@
 import asyncio
 
 from agent.nodes.tool_call_execution_node import execute_tool_call_plan_sequence
-from agent.planning.plan_schema import InputSpec, OutputSpec, PlanStep, TaskPlan
-from agent.tools.tool_call_planner import ToolCallPlannerInput, plan_tool_calls
+from agent.planning.plan_schema import InputSpec, OutputSpec, PlanStep, TaskPlan, ToolCallPlan
+from agent.tools.tool_call_planner import compile_task_plan_to_tool_calls
 from agent.tools.tool_contracts import ToolSpec
 from agent.tools.tool_registry import ToolRegistry
 
 
 class MockMCPClient:
-    def __init__(self):
+    def __init__(self, workspace_root):
         self.calls = []
+        self.workspace_root = workspace_root
 
     async def call_tool(self, tool_name, arguments):
         self.calls.append((tool_name, arguments))
+        if tool_name == "capture_map_canvas":
+            target = self.workspace_root / arguments["path"]
+            target.parent.mkdir(parents=True)
+            target.write_bytes(b"GIS boundary fake image")
         return {
             "status": "success",
             "result": {
-                "path": arguments.get("path"),
+                "path": arguments.get("path") if tool_name != "add_layer" else None,
+                "id": "points" if tool_name == "add_layer" else None,
                 "loaded": tool_name == "add_layer",
                 "rendered": tool_name == "capture_map_canvas",
+                "success": True,
             },
         }
 
@@ -33,6 +40,7 @@ def _task_plan() -> TaskPlan:
             InputSpec(
                 input_id="points",
                 description="点图层",
+                file_id="file-points",
                 path="shared/uploads/points.geojson",
             )
         ],
@@ -40,7 +48,7 @@ def _task_plan() -> TaskPlan:
             OutputSpec(
                 output_id="screenshot",
                 description="截图",
-                path="shared/outputs/points.png",
+                path="shared/outputs/task-load-and-screenshot/r1/screenshot/points.png",
             )
         ],
         steps=[
@@ -67,6 +75,26 @@ def _task_plan() -> TaskPlan:
                 requires_review=False,
             ),
         ],
+        tool_calls=[
+            ToolCallPlan(
+                step_id=1,
+                tool_name="add_layer",
+                arguments={
+                    "path": "shared/uploads/points.geojson",
+                    "layer_type": "vector",
+                    "name": "points",
+                },
+            ),
+            ToolCallPlan(
+                step_id=2,
+                tool_name="capture_map_canvas",
+                arguments={
+                    "path": "shared/outputs/task-load-and-screenshot/r1/screenshot/points.png",
+                    "width": 1200,
+                    "height": 800,
+                },
+            ),
+        ],
         metadata={},
     )
 
@@ -74,21 +102,8 @@ def _task_plan() -> TaskPlan:
 def test_task_plan_to_tool_call_plan_to_execution_loop_minimal_closed_loop(tmp_path):
     task_plan = _task_plan()
     available_tools = ["add_layer", "capture_map_canvas"]
-    tool_calls = [
-        call
-        for step in task_plan.steps
-        for call in plan_tool_calls(
-            ToolCallPlannerInput(
-                task_plan=task_plan,
-                step_id=step.step_id,
-                available_tools=available_tools,
-                api_context=[],
-                workspace_state={},
-                previous_observation=None,
-            )
-        )
-    ]
-    client = MockMCPClient()
+    tool_calls = compile_task_plan_to_tool_calls(task_plan)
+    client = MockMCPClient(tmp_path)
     registry = ToolRegistry.from_tool_specs(
         [ToolSpec(name="add_layer"), ToolSpec(name="capture_map_canvas")]
     )
@@ -111,9 +126,16 @@ def test_task_plan_to_tool_call_plan_to_execution_loop_minimal_closed_loop(tmp_p
     assert result.status == "success"
     assert len(result.trace.attempts) == 2
     assert client.calls == [
-        ("add_layer", {"path": "shared/uploads/points.geojson", "layer_type": "vector"}),
+        (
+            "add_layer",
+            {
+                "path": "shared/uploads/points.geojson",
+                "layer_type": "vector",
+                "name": "points",
+            },
+        ),
         (
             "capture_map_canvas",
-            {"path": "shared/outputs/points.png", "width": 1200, "height": 800},
+            {"path": "shared/outputs/task-load-and-screenshot/r1/screenshot/points.png", "width": 1200, "height": 800},
         ),
     ]

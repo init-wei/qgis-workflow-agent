@@ -8,6 +8,7 @@ import asyncio
 import os
 import sys
 from pathlib import Path
+from uuid import uuid4
 from typing import Any
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -18,6 +19,9 @@ from agent.adapters.geotool_schema_adapter import qgis_task_plan_to_geotool_dict
 from agent.nodes.executor_node import controlled_executor_node
 from agent.planning.plan_schema import InputSpec, OutputSpec, PlanStep, TaskPlan
 from agent.state import create_initial_state
+from agent.nodes.planner_node import bind_task_outputs
+from agent.planning.plan_validator import PlanValidator
+from agent.tools.database import save_task_execution_record
 from agent.tools.demo_cases import DemoReplayResult, load_demo_case, replay_demo_case
 from agent.tools.export_geotool_trace import (
     build_geotool_trace_seed,
@@ -25,7 +29,7 @@ from agent.tools.export_geotool_trace import (
 )
 
 DEFAULT_SKILL_REUSE_TRACE_PATH = Path(".target/demo/skill_reuse_smoke_v0_1.jsonl")
-DEFAULT_SKILL_REUSE_SCREENSHOT_PATH = Path(".target/demo/skill_reuse_smoke.png")
+DEFAULT_SKILL_REUSE_SCREENSHOT_PATH = Path("skill_reuse_smoke.png")
 SKILL_REUSE_CASE_ID = "skill_reuse_live_smoke"
 
 
@@ -48,6 +52,7 @@ def resolve_skill_reuse_outputs(
 
 def build_skill_reuse_task_plan(
     screenshot_path: str | Path = DEFAULT_SKILL_REUSE_SCREENSHOT_PATH,
+    task_id: str = "skill-reuse-live-smoke",
 ) -> tuple[TaskPlan, DemoReplayResult]:
     """Build a reviewed TaskPlan from the registered Skill reuse fixture."""
 
@@ -63,8 +68,8 @@ def build_skill_reuse_task_plan(
 
     calls = replay.skill_execution_plan["calls"]
     return (
-        TaskPlan(
-            task_id="skill-reuse-live-smoke",
+        bind_task_outputs(TaskPlan(
+            task_id=task_id,
             task_summary="Run a registered Skill reuse smoke in QGIS",
             risk_level="low",
             review_status="approved",
@@ -72,14 +77,11 @@ def build_skill_reuse_task_plan(
                 InputSpec(
                     input_id="input_points",
                     description="Reusable smoke vector layer",
+                    file_id="skill-reuse-smoke-input",
                     path=_first_call_argument(calls, "add_layer", "path"),
                 )
             ],
             expected_outputs=[
-                OutputSpec(
-                    output_id="loaded_points",
-                    description="Loaded reusable smoke layer",
-                ),
                 OutputSpec(
                     output_id="map_screenshot",
                     description="Skill reuse smoke screenshot",
@@ -94,7 +96,7 @@ def build_skill_reuse_task_plan(
                     candidate_pyqgis_apis=["QgsVectorLayer"],
                     allowed_tools=["add_layer"],
                     input_refs=["input_points"],
-                    output_refs=["loaded_points"],
+                    output_refs=[],
                     risk_level="low",
                     requires_review=False,
                 ),
@@ -104,19 +106,19 @@ def build_skill_reuse_task_plan(
                     candidate_gdal_apis=[],
                     candidate_pyqgis_apis=["QgsMapCanvas"],
                     allowed_tools=["capture_map_canvas"],
-                    input_refs=["loaded_points"],
+                    input_refs=[],
                     output_refs=["map_screenshot"],
                     risk_level="low",
                     requires_review=False,
                 ),
             ],
+            tool_calls=[_task_plan_tool_call(call) for call in calls],
             metadata={
                 "registered_skill_id": replay.registered_skill["skill_id"],
                 "source_draft_id": replay.registered_skill["source_draft_id"],
                 "skill_execution_status": replay.skill_execution_plan["status"],
-                "tool_calls": [_task_plan_tool_call(call) for call in calls],
             },
-        ),
+        )),
         replay,
     )
 
@@ -129,12 +131,15 @@ async def run_skill_reuse_smoke(
 
     os.environ["QGIS_AGENT_EXECUTION_MODE"] = "tool_call_plan"
     user_query = "Run the registered add-layer screenshot skill reuse smoke."
-    task_plan, _replay = build_skill_reuse_task_plan(screenshot_path)
+    task_plan, _replay = build_skill_reuse_task_plan(screenshot_path, task_id=f"skill-smoke-{uuid4().hex}")
     state = create_initial_state("skill-reuse-smoke", user_query)
     state["task_plan"] = task_plan
-    state["status"] = True
-    state["tool_selection"] = ["add_layer", "capture_map_canvas"]
-
+    report = PlanValidator().validate(task_plan)
+    if not report.is_valid:
+        raise ValueError(report.summary)
+    await asyncio.to_thread(save_task_execution_record, task_id=task_plan.task_id,
+                            session_id=state["session_id"], plan_revision=task_plan.revision,
+                            status="approved", plan=task_plan.model_dump(mode="json"), attempts=[])
     result = await controlled_executor_node(state)
     trace = result.get("execution_trace")
     if trace is None:
@@ -188,7 +193,7 @@ def main() -> None:
     parser.add_argument(
         "--screenshot-output",
         default=None,
-        help="Path to write the captured QGIS map canvas screenshot.",
+        help="New screenshot filename, bound to this smoke task controlled output directory.",
     )
     args = parser.parse_args()
     trace_path, screenshot_path = resolve_skill_reuse_outputs(

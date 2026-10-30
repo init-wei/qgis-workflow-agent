@@ -14,23 +14,6 @@ from agent.planning.plan_schema import PlanValidationReport, TaskPlan
 from agent.tools.tool_contracts import ExecutionTrace, HumanFeedback
 
 
-class Step(BaseModel):
-    """执行步骤"""
-    
-    step_id: int = Field(description="步骤ID")
-    description: str = Field(description="步骤描述")
-    gdal_api: List[str] = Field(default_factory=list, description="涉及的GDAL API")
-    pyqgis_api: List[str] = Field(default_factory=list, description="涉及的PyQGIS API")
-
-
-class Plan(BaseModel):
-    """执行计划"""
-    
-    task: str = Field(description="任务简述")
-    steps: List[Step] = Field(default_factory=list, description="执行步骤列表")
-    metadata: Dict[str, Any] = Field(default_factory=dict, description="元数据")
-
-
 class RelevantDoc(BaseModel):
     """相关API文档"""
     
@@ -56,20 +39,17 @@ class AgentState(TypedDict):
     # ========== 基础输入 ==========
     input_query: str  # 用户的原始地理处理需求
     session_id: str   # 会话ID（用于数据隔离）
-    llm_config: Optional[Dict[str, Any]]  # LLM配置（可由前端覆盖）
+    task_id: str
+    uploaded_files: List[Dict[str, Any]]
+    llm_config: Optional[Dict[str, Any]]  # 非敏感运行选项；密钥与入口仅由服务端环境决定
     
     # ========== Planner Node 字段 ==========
     log_summary: Optional[str]        # 之前轮次的任务执行总结
     advise: Optional[str]             # 用户在审核阶段提出的修改意见
-    example: Optional[Dict[str, Any]] # 从Cookbook检索到的相似案例
-    draft: Optional[Plan]             # 模型当前生成的草稿方案
-    plan: Optional[Plan]              # 最终确认执行的方案
-    task_plan_draft: Optional[TaskPlan]  # 严格TaskPlan草稿方案
-    task_plan: Optional[TaskPlan]        # 最终确认的严格TaskPlan
+    task_plan: Optional[TaskPlan]        # 唯一权威计划及当前审核版本
     plan_validation: Optional[PlanValidationReport]  # TaskPlan验证报告
-    status: bool                      # 方案审核状态（False=待审核，True=已批准）
+    planning_error: Optional[str]
     retry_count: int                  # 人工审查/修改的循环次数
-    tool_selection: Optional[List[str]]  # Executor允许使用的MCP工具名称列表
     
     # ========== API RAG Node 字段 ==========
     gdal_doc: List[Dict[str, Any]]   # 检索到的GDAL API文档
@@ -99,7 +79,13 @@ class AgentState(TypedDict):
 
 
 # State初始化函数
-def create_initial_state(session_id: str, input_query: str, llm_config: Optional[Dict[str, Any]] = None) -> AgentState:
+def create_initial_state(
+    session_id: str,
+    input_query: str,
+    llm_config: Optional[Dict[str, Any]] = None,
+    task_id: str | None = None,
+    uploaded_files: List[Dict[str, Any]] | None = None,
+) -> AgentState:
     """
     创建初始状态
     
@@ -114,6 +100,8 @@ def create_initial_state(session_id: str, input_query: str, llm_config: Optional
         # 基础输入
         input_query=input_query,
         session_id=session_id if session_id else str(uuid.uuid4()),
+        task_id=task_id or str(uuid.uuid4()),
+        uploaded_files=uploaded_files or [],
         
         # LLM配置
         llm_config=llm_config,
@@ -121,15 +109,10 @@ def create_initial_state(session_id: str, input_query: str, llm_config: Optional
         # Planner字段
         log_summary=None,
         advise=None,
-        example=None,
-        draft=None,
-        plan=None,
-        task_plan_draft=None,
         task_plan=None,
         plan_validation=None,
-        status=False,
+        planning_error=None,
         retry_count=0,
-        tool_selection=None,
         
         # API RAG字段
         gdal_doc=[],

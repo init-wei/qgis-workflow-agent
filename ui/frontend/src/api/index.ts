@@ -2,8 +2,11 @@ import axios from 'axios'
 import type {
   Session,
   Message,
-  Plan,
   UploadedFile,
+  ChatRequest,
+  ReviewRequest,
+  ExecutionResponse,
+  CurrentStateResponse,
   SessionHistory,
   QGISStatus,
   DemoCaseDetail,
@@ -13,6 +16,7 @@ import type {
 
 // 配置基础URL - 开发环境使用代理，生产环境使用真实地址
 const DEFAULT_API_BASE = import.meta.env.VITE_API_BASE_URL || '/api'
+const apiUrl = (path: string) => `${DEFAULT_API_BASE.replace(/\/$/, '')}${path}`
 
 // 创建 axios 实例
 const api = axios.create({
@@ -64,8 +68,8 @@ export const healthCheck = () => {
  * 获取 QGIS 插件状态
  */
 export const getQGISStatus = async (): Promise<QGISStatus> => {
-  const response = await api.get('/qgis/status')
-  return response
+  const response = await axios.get<QGISStatus>(apiUrl('/qgis/status'))
+  return response.data
 }
 
 /**
@@ -99,17 +103,14 @@ export const deleteSession = (thread_id: string): Promise<any> => {
 /**
  * 流式聊天 - 返回 Response 对象以便处理 SSE
  */
-export const chatStream = async (message: string, thread_id?: string, files?: string[]): Promise<Response> => {
-  const response = await fetch(`${API_BASE}/chat/stream`, {
+export const chatStream = async (request: ChatRequest, signal?: AbortSignal): Promise<Response> => {
+  const response = await fetch(apiUrl('/chat/stream'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify({
-      message,
-      thread_id,
-      files: files || []
-    })
+    body: JSON.stringify(request),
+    signal
   })
   return response
 }
@@ -117,9 +118,13 @@ export const chatStream = async (message: string, thread_id?: string, files?: st
 /**
  * 恢复执行 - 返回 Response 对象以便处理 SSE
  */
-export const resumeExecution = async (thread_id: string): Promise<Response> => {
-  const response = await fetch(`${API_BASE}/resume/${thread_id}`, {
-    method: 'POST'
+export const resumeExecution = async (thread_id: string, signal?: AbortSignal): Promise<Response> => {
+  const response = await fetch(apiUrl(`/resume/${encodeURIComponent(thread_id)}`), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    signal
   })
   return response
 }
@@ -127,12 +132,18 @@ export const resumeExecution = async (thread_id: string): Promise<Response> => {
 /**
  * 人工审核
  */
-export const reviewPlan = (thread_id: string, approved: boolean, advise?: string): Promise<any> => {
+export const reviewPlan = (request: ReviewRequest): Promise<unknown> => {
   return api.post('/review', {
-    thread_id,
-    approved,
-    advise
+    thread_id: request.thread_id,
+    task_id: request.task_id,
+    revision: request.revision,
+    approved: request.approved,
+    advise: request.advise
   })
+}
+
+export const getExecution = (task_id: string): Promise<ExecutionResponse> => {
+  return api.get(`/executions/${encodeURIComponent(task_id)}`)
 }
 
 /**
@@ -142,7 +153,7 @@ export const confirmResult = (
   thread_id: string,
   is_completed: boolean,
   user_feedback?: string
-): Promise<any> => {
+): Promise<unknown> => {
   return api.post('/confirm-result', {
     thread_id,
     is_completed,
@@ -175,11 +186,14 @@ export const uploadFile = async (file: File): Promise<UploadedFile> => {
   const formData = new FormData()
   formData.append('file', file)
 
-  const response = await fetch(`${DEFAULT_API_BASE}/upload`, {
+  const response = await fetch(apiUrl('/upload'), {
     method: 'POST',
     body: formData
   })
-  return response.json()
+  if (!response.ok) {
+    throw new Error(`文件上传失败（HTTP ${response.status}）`)
+  }
+  return response.json() as Promise<UploadedFile>
 }
 
 /**
@@ -192,8 +206,8 @@ export const getFiles = (): Promise<{ files: UploadedFile[] }> => {
 /**
  * 获取当前状态
  */
-export const getCurrentState = async (thread_id: string): Promise<any> => {
-  return api.get(`/state/${thread_id}`)
+export const getCurrentState = async (thread_id: string): Promise<CurrentStateResponse> => {
+  return api.get(`/state/${encodeURIComponent(thread_id)}`)
 }
 
 export const getDemoCases = (): Promise<DemoCaseListResponse> => {

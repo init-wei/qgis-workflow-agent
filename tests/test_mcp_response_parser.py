@@ -1,8 +1,33 @@
 import json
 
 from langchain_core.messages import ToolMessage
+import pytest
 
 from agent.tools.mcp_response_parser import MCPResponseParser
+
+
+@pytest.mark.parametrize('tool,reply', [
+    ('capture_map_canvas', {}),
+    ('capture_map_canvas', {'status': 'success', 'result': {}}),
+    ('capture_map_canvas', {'status': 'success', 'result': {'success': True}}),
+    ('execute_processing', {}),
+    ('execute_processing', {'status': 'success', 'result': {}}),
+    ('execute_processing', {'status': 'success', 'result': {'algorithm': 'native:buffer', 'result': {}}}),
+])
+def test_write_reply_without_required_result_is_unknown(tool, reply):
+    observation = MCPResponseParser().parse(tool, reply)
+    assert observation.status == 'malformed'
+    assert observation.outcome == 'unknown'
+    assert observation.retryable is False
+
+
+def test_processing_statistic_ending_in_file_extension_is_not_an_artifact():
+    observation = MCPResponseParser().parse('execute_processing', {
+        'status': 'success', 'result': {'algorithm': 'native:basicstatisticsforfields',
+                                        'result': {'COUNT': '1', 'MINORITY': 'sample.gpkg'}},
+    })
+    assert observation.status == 'success'
+    assert observation.artifacts == []
 
 
 def test_parser_normalizes_socket_success_and_extracts_artifact():
@@ -10,13 +35,15 @@ def test_parser_normalizes_socket_success_and_extracts_artifact():
         "capture_map_canvas",
         {
             "status": "success",
-            "result": {"success": True, "path": "shared/screenshots/map.png"},
+            "result": {"success": True, "path": "shared/screenshots/map.png",
+                       "message": "Screenshot saved to shared/screenshots/map.png"},
         },
     )
 
     assert observation.status == "success"
     assert observation.error_type is None
-    assert observation.data == {"success": True, "path": "shared/screenshots/map.png"}
+    assert observation.data == {"success": True, "path": "shared/screenshots/map.png",
+                                "message": "Screenshot saved to shared/screenshots/map.png"}
     assert observation.artifacts == [
         {"kind": "path", "path": "shared/screenshots/map.png"}
     ]

@@ -7,16 +7,36 @@ from typing import Any
 from langchain_core.messages import ToolMessage
 
 from agent.tools.tool_contracts import ToolObservation
+from qgis_mcp_server.qgis_mcp_plugin.artifact_paths import call_output_paths
 
 
 class MCPResponseParser:
     """Parser for current QGIS MCP socket and HTTP wrapper response shapes."""
 
     def parse(self, tool_name: str, raw_response: Any) -> ToolObservation:
+        observation = self._parse(tool_name, raw_response)
+        if tool_name in {"add_layer", "execute_processing", "capture_map_canvas"}:
+            payload = self._coerce_payload(raw_response)
+            outcome = "completed" if observation.status == "success" else "unknown"
+            if isinstance(payload, dict) and observation.status == "error" and payload.get("outcome") == "not_started":
+                outcome = "not_started"
+            observation = observation.model_copy(update={"outcome": outcome})
+        return observation
+
+    def _parse(self, tool_name: str, raw_response: Any) -> ToolObservation:
         if isinstance(raw_response, BaseException):
             return self._parse_exception(tool_name, raw_response)
 
         parsed = self._coerce_payload(raw_response)
+        if parsed is None:
+            return ToolObservation(
+                tool_name=tool_name,
+                status="disconnected",
+                error_type="qgis_disconnected",
+                message="No QGIS response was received; the operation outcome is unknown.",
+                raw_response=raw_response,
+                retryable=False,
+            )
         if parsed is _MALFORMED:
             return ToolObservation(
                 tool_name=tool_name,
@@ -32,8 +52,9 @@ class MCPResponseParser:
 
         return ToolObservation(
             tool_name=tool_name,
-            status="success",
-            data=parsed,
+            status="malformed",
+            error_type="malformed_response",
+            message="QGIS response must be a structured result.",
             raw_response=raw_response,
             retryable=False,
         )
@@ -81,11 +102,59 @@ class MCPResponseParser:
                 retryable=False,
             )
 
+        valid_write_result = True
+        if tool_name == "add_layer":
+            valid_write_result = (
+                payload.get("status") == "success"
+                and isinstance(data, dict)
+                and isinstance(data.get("id"), str)
+                and bool(data["id"].strip())
+            )
+        elif tool_name == "capture_map_canvas":
+            valid_write_result = (
+                payload.get("status") == "success"
+                and isinstance(data, dict)
+                and data.get("success") is True
+                and isinstance(data.get("path"), str)
+                and bool(data["path"].strip())
+            )
+        elif tool_name == "execute_processing":
+            valid_write_result = (
+                payload.get("status") == "success"
+                and isinstance(data, dict)
+                and isinstance(data.get("algorithm"), str)
+                and bool(data["algorithm"].strip())
+                and isinstance(data.get("result"), dict)
+                and bool(data["result"])
+                and all(isinstance(key, str) and isinstance(value, str)
+                        for key, value in data["result"].items())
+            )
+        if not valid_write_result:
+            return ToolObservation(
+                tool_name=tool_name,
+                status="malformed",
+                error_type="malformed_response",
+                message="QGIS did not return the required write result; verify the operation outcome.",
+                data=data,
+                raw_response=raw_response,
+                retryable=False,
+            )
+
+        if tool_name == "capture_map_canvas":
+            artifacts = [{"kind": "path", "path": data["path"]}]
+        elif tool_name == "execute_processing":
+            artifacts = [
+                {"kind": "path", "path": path}
+                for path in call_output_paths(tool_name, {"parameters": data["result"]})
+            ]
+        else:
+            artifacts = self._extract_artifacts(data)
+
         return ToolObservation(
             tool_name=tool_name,
             status="success",
             data=data,
-            artifacts=self._extract_artifacts(data),
+            artifacts=artifacts,
             raw_response=raw_response,
             retryable=False,
         )
@@ -205,6 +274,8 @@ class MCPResponseParser:
                 "disconnected",
                 "socket",
                 "qgis plugin",
+                "timeout",
+                "timed out",
             )
         )
 

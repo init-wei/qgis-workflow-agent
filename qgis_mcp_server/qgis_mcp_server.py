@@ -5,29 +5,22 @@ QGIS MCP Client - Simple client to connect to the QGIS MCP server
 
 import logging
 import os
-import base64
 from contextlib import asynccontextmanager
+from functools import lru_cache
 from pathlib import Path
 import socket
 import json
-import struct
 import uvicorn
 from urllib.parse import urlparse
-from typing import AsyncIterator, Dict, Any
+from typing import AsyncIterator, Dict, Any, Literal
 from threading import Lock
 from dotenv import load_dotenv
 try:
-    from .rag_mcp import (
-        search_pyqgis_api as rag_search_pyqgis_api,
-        search_gdal_api as rag_search_gdal_api,
-        search_qgis_cookbook as rag_search_qgis_cookbook,
-    )
-except ImportError:
-    from rag_mcp import (
-        search_pyqgis_api as rag_search_pyqgis_api,
-        search_gdal_api as rag_search_gdal_api,
-        search_qgis_cookbook as rag_search_qgis_cookbook,
-    )
+    from .qgis_mcp_plugin.processing_policy import validate_processing_request
+    from .qgis_mcp_plugin.artifact_paths import call_output_paths, new_output_path
+except ImportError:  # Support the documented `python qgis_mcp_server/qgis_mcp_server.py` entry.
+    from qgis_mcp_plugin.processing_policy import validate_processing_request
+    from qgis_mcp_plugin.artifact_paths import call_output_paths, new_output_path
 from mcp.server.fastmcp import FastMCP, Context
 
 
@@ -37,7 +30,6 @@ logger = logging.getLogger("QgisMCPServer")
 
 load_dotenv()
 
-_HEADER_STRUCT = struct.Struct(">I")
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -62,50 +54,6 @@ def _resolve_local_path(path: str | None) -> str | None:
         return str(local_path)
     return str((_PROJECT_ROOT / local_path).resolve())
 
-
-def _is_unknown_command(result: dict[str, Any] | None, command_type: str) -> bool:
-    if not isinstance(result, dict) or result.get("status") != "error":
-        return False
-    message = str(result.get("message", ""))
-    return f"Unknown command type: {command_type}" in message
-
-
-def _payload_from_result(result: dict[str, Any] | None) -> dict[str, Any]:
-    if not isinstance(result, dict):
-        return {}
-    payload = result.get("result", {})
-    return payload if isinstance(payload, dict) else {}
-
-
-def _save_base64_png(payload: dict[str, Any], path: str) -> None:
-    image_data = payload.get("base64_data")
-    if not image_data:
-        return
-    output_path = Path(path)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_bytes(base64.b64decode(image_data))
-
-
-def _normalize_canvas_capture_result(
-    result: dict[str, Any] | None,
-    path: str,
-    width: int,
-    height: int,
-    fallback_tool: str,
-) -> dict[str, Any]:
-    payload = _payload_from_result(result)
-    _save_base64_png(payload, path)
-    return {
-        "status": "success",
-        "result": {
-            "success": True,
-            "path": path,
-            "width": payload.get("width", width),
-            "height": payload.get("height", height),
-            "mime_type": payload.get("mime_type", "image/png"),
-            "fallback_tool": fallback_tool,
-        },
-    }
 
 class QgisMCPServer:
     def __init__(self, host='localhost', port=9876, timeout: float = 10.0, max_response_bytes: int = 5 * 1024 * 1024):
@@ -142,54 +90,29 @@ class QgisMCPServer:
         return self.connect()
     
     def send_command(self, command_type, params=None):
-        """Send a command to the server and get the response"""
-        # Create command
+        """Exchange one raw JSON request and response with the QGIS plugin."""
         command = {
             "type": command_type,
             "params": params or {}
         }
 
         with self._lock:
-            return self._send_with_framing_fallback(command)
-
-    def _send_with_framing_fallback(self, command):
-        """Try the current QGIS-MCP framing, then fall back to legacy raw JSON."""
-        for framed in (True, False):
             if not self._ensure_connected():
                 print("Not connected to server")
                 return None
 
             try:
                 request = json.dumps(command).encode("utf-8")
-                if framed:
-                    self.socket.sendall(_HEADER_STRUCT.pack(len(request)) + request)
-                    return self._receive_framed_response()
-
                 self.socket.sendall(request)
                 return self._receive_raw_json_response()
-
-            except (socket.timeout, ValueError, json.JSONDecodeError) as e:
-                logger.debug(
-                    "QGIS socket %s protocol failed: %s",
-                    "framed" if framed else "raw",
-                    e,
-                )
+            except (socket.timeout, ValueError) as e:
+                logger.debug("QGIS raw JSON exchange failed: %s", e)
                 self.disconnect()
-                continue
+                return None
             except Exception as e:
                 print(f"Error sending command: {str(e)}")
                 self.disconnect()
                 return None
-
-        return None
-
-    def _receive_framed_response(self):
-        header = self._recv_exact(_HEADER_STRUCT.size)
-        size = _HEADER_STRUCT.unpack(header)[0]
-        if size > self.max_response_bytes:
-            raise ValueError("Response too large")
-        response_data = self._recv_exact(size)
-        return json.loads(response_data.decode("utf-8"))
 
     def _receive_raw_json_response(self):
         response_data = b''
@@ -206,21 +129,10 @@ class QgisMCPServer:
             try:
                 json.loads(response_data.decode('utf-8'))
                 break  # Valid JSON, we have the full message
-            except json.JSONDecodeError:
+            except (UnicodeDecodeError, json.JSONDecodeError):
                 continue  # Keep receiving
 
         return json.loads(response_data.decode('utf-8'))
-
-    def _recv_exact(self, size):
-        chunks = []
-        remaining = size
-        while remaining:
-            chunk = self.socket.recv(remaining)
-            if not chunk:
-                raise ValueError("Socket closed before full response was received")
-            chunks.append(chunk)
-            remaining -= len(chunk)
-        return b"".join(chunks)
 
 _qgis_connection = None
 
@@ -303,44 +215,14 @@ def ping(ctx: Context) -> str:
     return json.dumps(result, indent=2)
 
 @mcp.tool()
-def get_qgis_info(ctx: Context) -> str:
+def get_qgis_info(ctx: Context, processing_requests: list[dict] | None = None) -> str:
     """Retrieve QGIS runtime information.
 
     Returns details such as QGIS version, build info, and environment metadata
     provided by the QGIS plugin.
     """
     qgis = get_qgis_connection()
-    result = qgis.send_command("get_qgis_info")
-    return json.dumps(result, indent=2)
-
-@mcp.tool()
-def load_project(ctx: Context, path: str) -> str:
-    """Load a QGIS project from disk.
-
-    Args:
-        path: Full path to a .qgs/.qgz project file.
-
-    Returns:
-        JSON string indicating success/failure and any message from QGIS.
-    """
-    qgis = get_qgis_connection()
-    path = _resolve_local_path(path)
-    result = qgis.send_command("load_project", {"path": path})
-    return json.dumps(result, indent=2)
-
-@mcp.tool()
-def create_new_project(ctx: Context, path: str) -> str:
-    """Create a new empty project and save it to disk.
-
-    Args:
-        path: Target file path for the new project (.qgs/.qgz).
-
-    Returns:
-        JSON string with operation result.
-    """
-    qgis = get_qgis_connection()
-    path = _resolve_local_path(path)
-    result = qgis.send_command("create_new_project", {"path": path})
+    result = qgis.send_command("get_qgis_info", {"processing_requests": processing_requests} if processing_requests is not None else None)
     return json.dumps(result, indent=2)
 
 @mcp.tool()
@@ -358,47 +240,29 @@ def get_project_info(ctx: Context) -> str:
 def add_layer(
     ctx: Context,
     path: str,
+    layer_type: Literal["raster", "vector"],
     provider: str | None = None,
     name: str | None = None,
-    layer_type: str | None = None
 ) -> str:
     """Add a data layer to the current project.
 
-    The layer type is inferred from the file extension unless `layer_type` is
-    explicitly provided.
+    The caller must select the layer type explicitly. Provider and display name
+    are optional; QGIS uses its standard provider for the selected layer type.
 
     Args:
         path: Data source path (file, database, or service URL).
         provider: Optional provider override (e.g., "gdal" for raster, "ogr" for vector).
         name: Optional layer name to display in the legend.
-        layer_type: Explicit type: "raster" or "vector".
+        layer_type: Required explicit type: "raster" or "vector".
 
     Returns:
         JSON string with the added layer ID and status.
     """
+    if not path:
+        raise ValueError("path is required")
+    if layer_type not in {"raster", "vector"}:
+        raise ValueError("layer_type must be 'raster' or 'vector'")
     path = _resolve_local_path(path)
-    raster_exts = {
-        ".tif", ".tiff", ".img", ".vrt", ".asc", ".bil", ".hdr", ".nc",
-        ".grd", ".adf", ".jp2"
-    }
-    vector_exts = {
-        ".shp", ".geojson", ".json", ".gpkg", ".kml", ".kmz", ".gpx",
-        ".csv", ".dxf", ".tab", ".mif", ".mid"
-    }
-
-    ext = path.lower().rsplit(".", 1)
-    ext = f".{ext[1]}" if len(ext) == 2 else ""
-
-    if layer_type is None:
-        if ext in raster_exts:
-            layer_type = "raster"
-        elif ext in vector_exts:
-            layer_type = "vector"
-        else:
-            return json.dumps(
-                {"error": "Unknown layer type. Please specify layer_type as 'raster' or 'vector'."},
-                indent=2
-            )
 
     qgis = get_qgis_connection()
     if layer_type == "raster":
@@ -419,39 +283,11 @@ def add_layer(
 
     return json.dumps(result, indent=2)
 
-# @mcp.tool()
-# def get_layers(ctx: Context) -> str:
-#     """Retrieve all layers in the current project."""
-#     qgis = get_qgis_connection()
-#     result = qgis.send_command("get_layers")
-#     return json.dumps(result, indent=2)
-
 @mcp.tool()
-def remove_layer(ctx: Context, layer_id: str) -> str:
-    """Remove a layer by its QGIS layer ID.
-
-    Args:
-        layer_id: The unique layer ID as returned by QGIS.
-
-    Returns:
-        JSON string indicating whether the layer was removed.
-    """
+def get_layers(ctx: Context) -> str:
+    """List layers in the currently loaded QGIS project."""
     qgis = get_qgis_connection()
-    result = qgis.send_command("remove_layer", {"layer_id": layer_id})
-    return json.dumps(result, indent=2)
-
-@mcp.tool()
-def zoom_to_layer(ctx: Context, layer_id: str) -> str:
-    """Zoom the map canvas to a layer's extent.
-
-    Args:
-        layer_id: The target layer ID.
-
-    Returns:
-        JSON string with the operation result.
-    """
-    qgis = get_qgis_connection()
-    result = qgis.send_command("zoom_to_layer", {"layer_id": layer_id})
+    result = qgis.send_command("get_layers")
     return json.dumps(result, indent=2)
 
 @mcp.tool()
@@ -470,55 +306,16 @@ def get_layer_features(ctx: Context, layer_id: str, limit: int = 10) -> str:
 
 @mcp.tool()
 def execute_processing(ctx: Context, algorithm: str, parameters: dict) -> str:
-    """Run a PyQGIS or GDAL Processing algorithm.
+    """Run one explicitly supported QGIS Processing algorithm.
 
     Returns:
         JSON string with outputs and execution status.
     """
+    validate_processing_request(algorithm, parameters)
+    for destination in call_output_paths("execute_processing", {"parameters": parameters}):
+        new_output_path(destination)
     qgis = get_qgis_connection()
     result = qgis.send_command("execute_processing", {"algorithm": algorithm, "parameters": parameters})
-    return json.dumps(result, indent=2)
-
-
-@mcp.tool()
-def save_project(ctx: Context, path: str = None) -> str:
-    """Save the current project.
-
-    Args:
-        path: Optional new path to save as. If omitted, saves to the current project path.
-
-    Returns:
-        JSON string indicating success/failure.
-    """
-    qgis = get_qgis_connection()
-    params = {}
-    if path:
-        path = _resolve_local_path(path)
-        params["path"] = path
-    result = qgis.send_command("save_project", params)
-    return json.dumps(result, indent=2)
-
-
-# @mcp.tool()
-# def render_map(ctx: Context, path: str, width: int = 800, height: int = 600) -> str:
-#     """Render the current map view to an image file with the specified dimensions."""
-#     qgis = get_qgis_connection()
-#     result = qgis.send_command("render_map", {"path": path, "width": width, "height": height})
-#     return json.dumps(result, indent=2)
-
-
-@mcp.tool()
-def execute_code(ctx: Context, code: str) -> str:
-    """Execute PyQGIS code on the QGIS side.
-
-    Args:
-        code: Python code string to run within the QGIS environment.
-
-    Returns:
-        JSON string with execution result or error details.
-    """
-    qgis = get_qgis_connection()
-    result = qgis.send_command("execute_code", {"code": code})
     return json.dumps(result, indent=2)
 
 
@@ -536,91 +333,33 @@ def capture_map_canvas(ctx: Context, path: str, width: int = 800, height: int = 
         JSON string with success status and the saved file path.
     """
     qgis = get_qgis_connection()
-    path = _resolve_local_path(path)
+    path = str(new_output_path(path))
     result = qgis.send_command("capture_map_canvas", {
         "path": path,
         "width": width,
         "height": height
     })
-    if _is_unknown_command(result, "capture_map_canvas"):
-        result = qgis.send_command(
-            "render_map_base64",
-            {"path": path, "width": width, "height": height},
-        )
-        if result and result.get("status") == "success":
-            return json.dumps(
-                _normalize_canvas_capture_result(
-                    result,
-                    path,
-                    width,
-                    height,
-                    "render_map_base64",
-                ),
-                indent=2,
-            )
-
-        if _is_unknown_command(result, "render_map_base64"):
-            result = qgis.send_command("get_canvas_screenshot")
-            if result and result.get("status") == "success":
-                return json.dumps(
-                    _normalize_canvas_capture_result(
-                        result,
-                        path,
-                        width,
-                        height,
-                        "get_canvas_screenshot",
-                    ),
-                    indent=2,
-                )
-
     return json.dumps(result, indent=2)
 
 
-@mcp.tool()
-def search_pyqgis_api(ctx: Context, api_names: list[str], output_file: str | None = None) -> str:
-    """Retrieve PyQGIS API documentation snippets for multiple symbols.
+@lru_cache(maxsize=8)
+def tool_argument_model(tool_name: str):
+    """Return the same SDK argument contract used by the paired MCP server."""
+    from mcp.server.fastmcp.utilities.func_metadata import func_metadata
 
-    Args:
-        api_names: List of API symbols, e.g.,
-            ["QgsRasterBlock.noDataValue", "QgsProject"].
-        output_file: Optional JSON output file path for saving results.
-
-    Returns:
-        JSON string with matched documentation entries.
-    """
-    return rag_search_pyqgis_api(ctx, api_names, output_file=output_file)
-
-
-@mcp.tool()
-def search_gdal_api(ctx: Context, api_names: list[str]) -> str:
-    """Search GDAL API documentation by symbol names.
-
-    Args:
-        api_names: List of GDAL symbols, e.g.,
-            ["osgeo.gdal.Warp", "osgeo.ogr.Layer.CreateField"].
-
-    Returns:
-        JSON string with matched GDAL documentation entries.
-    """
-    return rag_search_gdal_api(ctx, api_names)
+    functions = {fn.__name__: fn for fn in (
+        ping, get_qgis_info, get_project_info, get_layers, add_layer,
+        get_layer_features, execute_processing, capture_map_canvas,
+    )}
+    function = functions.get(tool_name)
+    if function is None:
+        raise ValueError(f"Unsupported MCP tool: {tool_name}")
+    return func_metadata(function, skip_names=("ctx",)).arg_model
 
 
-@mcp.tool()
-def search_qgis_cookbook(ctx: Context, user_intent: str, similarity_threshold: float = 0.8, top_k: int = 3) -> str:
-    """Find similar examples in the QGIS Cookbook.
-
-    Args:
-        user_intent: Natural-language description of the task you want to achieve.
-        similarity_threshold: Similarity threshold (0.0–1.0), default 0.8.
-        top_k: Maximum number of results to return (default 3).
-
-    Returns:
-        JSON string with the most similar cookbook examples.
-    """
-    return rag_search_qgis_cookbook(ctx, user_intent, similarity_threshold, top_k)
-
-
-
+def validate_tool_arguments(tool_name: str, arguments: dict) -> None:
+    """Validate every argument, including extra keys, before any plan call runs."""
+    tool_argument_model(tool_name).model_validate(arguments, strict=True, extra="forbid")
 
 
 def main():

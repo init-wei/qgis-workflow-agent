@@ -17,7 +17,8 @@ from agent.graph import (
     should_continue_after_executor,
     should_continue_planning,
 )
-from agent.state import AgentState, create_initial_state, Plan, Step
+from agent.planning.plan_schema import PlanStep, TaskPlan
+from agent.state import AgentState, create_initial_state
 from agent.tools.tool_contracts import HumanFeedback, ToolCallPlan
 
 
@@ -76,19 +77,58 @@ class TestConditionalEdges:
     
     def test_should_continue_planning_approved(self):
         """测试规划批准后的路由"""
-        state = make_state(status=True, plan=Plan(task="测试任务", steps=[], metadata={}))
+        state = make_state(
+            task_plan=TaskPlan(
+                task_id="task-approved",
+                task_summary="测试任务",
+                steps=[
+                    PlanStep(
+                        step_id=1,
+                        description="load",
+                        risk_level="low",
+                        requires_review=False,
+                    )
+                ],
+                risk_level="low",
+                review_status="approved",
+            ),
+            plan_validation={"is_valid": True, "issues": [], "requires_review": False, "summary": "valid"},
+        )
         
         result = should_continue_planning(state)
         assert result == "executor_node"
         print("✅ 规划批准后正确路由到executor_node")
     
-    def test_should_continue_planning_force_exit(self):
-        """测试强制退出机制"""
-        state = make_state(status=False, retry_count=5)
+    def test_unapproved_plan_never_executes_after_retry_limit(self):
+        """重试上限不能把未批准计划转成执行许可"""
+        state = make_state(
+            retry_count=5,
+            task_plan=TaskPlan(
+                task_id="task-pending",
+                task_summary="测试任务",
+                steps=[
+                    PlanStep(
+                        step_id=1,
+                        description="load",
+                        risk_level="low",
+                        requires_review=False,
+                    )
+                ],
+                risk_level="low",
+                review_status="pending_review",
+            ),
+            plan_validation={"is_valid": True, "issues": [], "requires_review": False, "summary": "valid"},
+        )
         
         result = should_continue_planning(state)
-        assert result == "executor_node"
-        print("✅ 强制退出机制正确路由到executor_node")
+        assert result == "human_review_node"
+
+    def test_invalid_planning_attempts_stop_without_execution(self):
+        state = make_state(retry_count=2, task_plan=None)
+
+        result = should_continue_planning(state)
+
+        assert result == "planning_failed"
     
     def test_should_continue_planning_need_revision(self):
         """测试需要修改规划的路由"""

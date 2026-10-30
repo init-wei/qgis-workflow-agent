@@ -6,6 +6,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, StrictBool
 
+from agent.planning.plan_schema import ToolCallPlan
+
 RiskLevel = Literal["low", "medium", "high"]
 ObservationStatus = Literal["success", "error", "malformed", "disconnected"]
 AttemptStatus = Literal["success", "failed", "blocked"]
@@ -24,23 +26,6 @@ ErrorType = Literal[
 ]
 
 
-class ToolCallPlan(BaseModel):
-    """A planned MCP tool call for a task step."""
-
-    step_id: int = Field(description="TaskPlan step ID")
-    tool_name: str = Field(description="MCP tool name")
-    arguments: dict[str, Any] = Field(
-        default_factory=dict, description="Tool arguments"
-    )
-    risk_level: RiskLevel = Field(default="low", description="Tool call risk level")
-    requires_review: StrictBool = Field(
-        default=False, description="Whether this call requires human review"
-    )
-    metadata: dict[str, Any] = Field(
-        default_factory=dict, description="Additional planning metadata"
-    )
-
-
 class ToolObservation(BaseModel):
     """Normalized result from a raw MCP tool response."""
 
@@ -57,6 +42,9 @@ class ToolObservation(BaseModel):
     )
     artifacts: list[dict[str, Any]] = Field(
         default_factory=list, description="Output artifacts discovered in response"
+    )
+    outcome: Literal["completed", "not_started", "unknown"] | None = Field(
+        default=None, description="Evidence about external side effects"
     )
     raw_response: Any = Field(default=None, description="Original raw MCP response")
     retryable: bool = Field(default=False, description="Whether a retry may help")

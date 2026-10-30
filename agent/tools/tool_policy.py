@@ -6,6 +6,7 @@ from typing import Any, Iterable, Iterator
 
 from agent.tools.tool_contracts import PolicyDecision, ToolCallPlan
 from agent.tools.tool_registry import ToolRegistry
+from qgis_mcp_server.qgis_mcp_plugin.artifact_paths import call_output_paths, new_output_path
 
 PATH_ARGUMENT_KEYS = {
     "path",
@@ -31,6 +32,11 @@ class PathPolicy:
             decision = self.evaluate_path(path)
             if not decision.allowed:
                 return decision
+        for path in call_output_paths(call.tool_name, call.arguments):
+            try:
+                new_output_path(path, self.workspace_root)
+            except ValueError as exc:
+                return PolicyDecision(allowed=False, reason="unsafe_output_path", message=str(exc))
         return PolicyDecision(allowed=True)
 
     def evaluate_path(self, raw_path: str) -> PolicyDecision:

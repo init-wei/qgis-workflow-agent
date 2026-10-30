@@ -31,7 +31,7 @@ def test_skill_reuse_real_mcp_smoke_exports_geotool_trace(tmp_path):
     output_path = asyncio.run(
         run_skill_reuse_smoke(
             output_path=tmp_path / "skill_reuse_smoke.jsonl",
-            screenshot_path=tmp_path / "skill_reuse_smoke.png",
+            screenshot_path="skill_reuse_smoke.png",
         )
     )
 
@@ -48,19 +48,19 @@ def test_skill_reuse_smoke_defaults_to_ignored_run_artifacts():
     assert trace_path == DEFAULT_SKILL_REUSE_TRACE_PATH
     assert screenshot_path == DEFAULT_SKILL_REUSE_SCREENSHOT_PATH
     assert trace_path.parts[:2] == (".target", "demo")
-    assert screenshot_path.parts[:2] == (".target", "demo")
+    assert screenshot_path == Path("skill_reuse_smoke.png")
 
 
 def test_skill_reuse_task_plan_uses_registered_skill_metadata():
-    task_plan, replay = build_skill_reuse_task_plan(".target/demo/reuse.png")
+    task_plan, replay = build_skill_reuse_task_plan("reuse.png")
 
     assert replay.registered_skill
     assert replay.skill_execution_plan
     assert task_plan.task_id == "skill-reuse-live-smoke"
     assert task_plan.metadata["registered_skill_id"] == replay.registered_skill["skill_id"]
-    assert task_plan.metadata["tool_calls"][0]["tool_name"] == "add_layer"
-    assert task_plan.metadata["tool_calls"][1]["tool_name"] == "capture_map_canvas"
-    assert task_plan.metadata["tool_calls"][1]["arguments"]["path"] == ".target/demo/reuse.png"
+    assert task_plan.tool_calls[0].tool_name == "add_layer"
+    assert task_plan.tool_calls[1].tool_name == "capture_map_canvas"
+    assert task_plan.tool_calls[1].arguments["path"] == str(Path.cwd() / "shared/outputs/skill-reuse-live-smoke/r1/map_screenshot/reuse.png")
 
 
 def test_skill_reuse_smoke_script_help_imports_from_repo_root():

@@ -54,6 +54,8 @@ class QGISMCPClient:
             {
                 "name": tool.name,
                 "description": getattr(tool, "description", "") or "",
+                "input_schema": tool.args_schema if isinstance(tool.args_schema, dict)
+                else tool.get_input_schema().model_json_schema(),
             }
             for tool in tools
         ]

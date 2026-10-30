@@ -2,7 +2,10 @@
 """Minimal controlled executor for one planned MCP tool call."""
 
 from datetime import UTC, datetime
+import hashlib
+import os
 from pathlib import Path
+import stat
 from time import perf_counter
 from typing import Iterable
 from uuid import uuid4
@@ -16,6 +19,11 @@ from agent.tools.tool_contracts import (
 )
 from agent.tools.tool_policy import ToolPolicy
 from agent.tools.tool_registry import ToolRegistry
+from qgis_mcp_server.qgis_mcp_plugin.artifact_paths import (
+    artifact_component_paths,
+    call_output_paths,
+    resolve_owned_output_path,
+)
 
 
 class StepExecutor:
@@ -31,6 +39,7 @@ class StepExecutor:
     ):
         self.mcp_client = mcp_client
         self.registry = registry
+        self.workspace_root = Path(workspace_root).resolve()
         self.parser = parser or MCPResponseParser()
         self.policy = policy or ToolPolicy(
             registry=registry, workspace_root=workspace_root
@@ -57,6 +66,7 @@ class StepExecutor:
                 message=policy_decision.message or policy_decision.reason,
                 raw_response=policy_decision.model_dump(),
                 retryable=False,
+                outcome="not_started",
             )
             attempt = self._build_attempt(
                 call=call,
@@ -85,6 +95,17 @@ class StepExecutor:
             )
         else:
             observation = self.parser.parse(call.tool_name, raw_response)
+            if observation.status == "success" and call.tool_name in {
+                "capture_map_canvas", "execute_processing"
+            }:
+                try:
+                    self._verify_output_files(call, observation)
+                except (ValueError, OSError) as exc:
+                    observation = observation.model_copy(update={
+                        "status": "error", "error_type": "execution_error",
+                        "message": f"Cannot verify the write result: {exc}",
+                        "outcome": "unknown", "retryable": False,
+                    })
 
         status = "success" if observation.status == "success" else "failed"
         attempt = self._build_attempt(
@@ -96,6 +117,46 @@ class StepExecutor:
         )
         trace.append_attempt(attempt)
         return attempt
+
+    def _verify_output_files(self, call: ToolCallPlan, observation: ToolObservation) -> None:
+        if (call.tool_name == "execute_processing"
+                and observation.data.get("algorithm") != call.arguments.get("algorithm")):
+            raise ValueError("Processing response names a different algorithm")
+        expected = {
+            resolve_owned_output_path(path, self.workspace_root)
+            for path in call_output_paths(call.tool_name, call.arguments)
+        }
+        actual = {
+            resolve_owned_output_path(item["path"], self.workspace_root)
+            for item in observation.artifacts if item.get("kind") == "path"
+        }
+        if actual != expected or (call.tool_name == "capture_map_canvas" and len(expected) != 1):
+            raise ValueError("returned artifact paths differ from the requested outputs")
+        for path in expected:
+            components = [self._read_file_evidence(
+                resolve_owned_output_path(str(component), self.workspace_root)
+            ) for component in artifact_component_paths(path)]
+            for item in observation.artifacts:
+                if (item.get("kind") == "path"
+                        and resolve_owned_output_path(item["path"], self.workspace_root) == path):
+                    item.update(size_bytes=components[0]["size_bytes"], sha256=components[0]["sha256"])
+                    if len(components) > 1:
+                        item["components"] = components[1:]
+
+    def _read_file_evidence(self, path: Path) -> dict:
+        digest = hashlib.sha256()
+        with path.open("rb") as stream:
+            info = os.fstat(stream.fileno())
+            if not stat.S_ISREG(info.st_mode) or not info.st_mode & 0o444:
+                raise ValueError(f"artifact is not a readable file: {path}")
+            while chunk := stream.read(1024 * 1024):
+                digest.update(chunk)
+            after = os.fstat(stream.fileno())
+        if not info.st_size:
+            raise ValueError(f"artifact is empty: {path}")
+        if (info.st_size, info.st_mtime_ns) != (after.st_size, after.st_mtime_ns):
+            raise ValueError(f"artifact changed while being read: {path}")
+        return {"path": str(path), "size_bytes": info.st_size, "sha256": digest.hexdigest()}
 
     def _build_attempt(
         self,

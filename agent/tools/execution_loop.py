@@ -24,6 +24,7 @@ from agent.tools.tool_contracts import (
 from agent.tools.tool_registry import ToolRegistry
 
 REPAIRABLE_ERROR_TYPES = {"parameter_error", "missing_file", "qgis_disconnected"}
+READ_ONLY_TOOLS = {"ping", "get_qgis_info", "get_project_info", "get_layers", "get_layer_features"}
 
 
 class ErrorClassifier:
@@ -66,8 +67,8 @@ class StepEvaluator:
 
         if error_type == "parameter_error":
             return EvaluationDecision(
-                outcome="retry",
-                reason="parameter_error_retry",
+                outcome="ask_human",
+                reason="parameter_change_requires_new_plan_review",
                 error_type=error_type,
                 message=observation.message,
             )
@@ -103,16 +104,9 @@ class Repairer:
 
     def repair(self, call: ToolCallPlan, decision: EvaluationDecision) -> RepairAction:
         if decision.error_type == "parameter_error":
-            repair_arguments = call.metadata.get("repair_arguments")
-            if isinstance(repair_arguments, dict) and repair_arguments:
-                return RepairAction(
-                    action_type="update_arguments",
-                    reason="parameter_repair_arguments_available",
-                    updated_arguments={**call.arguments, **repair_arguments},
-                )
             return RepairAction(
                 action_type="ask_human",
-                reason="missing_parameter_repair_arguments",
+                reason="parameter_change_requires_new_plan_review",
             )
 
         if decision.error_type == "qgis_disconnected" and decision.outcome == "retry":
@@ -197,7 +191,14 @@ class ExecutionLoop:
                     status="needs_review",
                     outcome="ask_human",
                 )
-            if human_feedback.status in {"approved", "modified"}:
+            if human_feedback.status == "modified":
+                return self._record_review_block(
+                    call=call,
+                    trace=trace,
+                    feedback=human_feedback,
+                    reason="modified_call_requires_new_plan_review",
+                )
+            if human_feedback.status == "approved":
                 current_call = self.risk_review_manager.apply_feedback(
                     call, human_feedback
                 )
@@ -247,8 +248,28 @@ class ExecutionLoop:
                 )
             if risk_review_metadata is not None:
                 attempt.metadata["risk_review"] = risk_review_metadata
+            observation = attempt.observation
+            raw = observation.raw_response
+            if current_call.tool_name not in READ_ONLY_TOOLS and (
+                observation.outcome == "unknown"
+                or observation.status in {"disconnected", "malformed"}
+                or (isinstance(raw, dict) and "exception_type" in raw)
+            ):
+                decision = EvaluationDecision(
+                    outcome="abort",
+                    reason="unknown_write_outcome",
+                    error_type=observation.error_type,
+                    message=observation.message,
+                )
+                attempt.metadata["evaluation"] = decision.model_dump()
+                return LoopResult(
+                    status="failed",
+                    trace=trace,
+                    attempts_used=len(trace.attempts),
+                    decision=decision,
+                )
             decision = self.evaluator.evaluate(
-                attempt.observation,
+                observation,
                 attempt_number=attempt_number,
                 max_attempts=self.max_attempts,
             )

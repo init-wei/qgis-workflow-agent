@@ -51,62 +51,48 @@ async def risk_review_node(state: AgentState) -> dict:
     return {}
 
 
-def should_continue_planning(state: AgentState) -> Literal["human_review_node", "planner_node", "executor_node"]:
-    """
-    判断规划是否完成，是否需要人工审核或继续规划
-    
-    逻辑:
-    - 如果plan已存在且已批准(status=True)，直接进入受控执行
-    - 如果达到重试上限(retry_count>=3)，强制进入受控执行
-    - 如果已有draft且未审核(status=False)，进入人工审核节点
-    - 其他情况继续规划
-    
-    Args:
-        state: 当前状态
-        
-    Returns:
-        下一个节点名称
-    """
-    # 优先检查：如果plan已批准，直接执行
-    if state.get("plan") and state.get("status", False):
+def should_continue_planning(
+    state: AgentState,
+) -> Literal["human_review_node", "planner_node", "executor_node", "planning_failed"]:
+    """Route a valid TaskPlan to review or execution; stop on planning exhaustion."""
+    task_plan = state.get("task_plan")
+    review_status = (
+        task_plan.get("review_status")
+        if isinstance(task_plan, dict)
+        else getattr(task_plan, "review_status", None)
+    )
+    validation = state.get("plan_validation")
+    is_valid = (
+        validation.get("is_valid", False)
+        if isinstance(validation, dict)
+        else getattr(validation, "is_valid", False)
+    )
+
+    if task_plan and review_status == "approved" and is_valid:
         return "executor_node"
-    
-    # 检查重试上限（强制退出）
-    if state.get("retry_count", 0) >= 5:
-        return "executor_node"
-    
-    # 如果生成了draft但未审核，进入人工审核
-    if state.get("draft") and not state.get("status", False):
+    if task_plan and review_status == "pending_review" and is_valid:
         return "human_review_node"
-    
-    # 其他情况继续规划（首次规划或有修改意见）
+    if state.get("retry_count", 0) >= 2:
+        return "planning_failed"
     return "planner_node"
 
 
 def should_continue_after_review(state: AgentState) -> Literal["executor_node", "planner_node"]:
-    """
-    人工审核后的路由决策
-    
-    逻辑:
-    - 如果已批准(status=True)，进入API RAG
-    - 如果有修改意见(advise)或未批准，返回planner重新规划
-    - 如果达到重试上限，强制进入API RAG
-    
-    Args:
-        state: 当前状态
-        
-    Returns:
-        下一个节点名称
-    """
-    # 优先检查：是否批准
-    if state.get("status", False):
+    """Execute only an approved valid plan; otherwise return to planning."""
+    task_plan = state.get("task_plan")
+    review_status = (
+        task_plan.get("review_status")
+        if isinstance(task_plan, dict)
+        else getattr(task_plan, "review_status", None)
+    )
+    validation = state.get("plan_validation")
+    is_valid = (
+        validation.get("is_valid", False)
+        if isinstance(validation, dict)
+        else getattr(validation, "is_valid", False)
+    )
+    if task_plan and review_status == "approved" and is_valid:
         return "executor_node"
-    
-    # 检查重试上限（强制退出）
-    if state.get("retry_count", 0) >= 3:
-        return "executor_node"
-    
-    # 有修改意见或未批准，返回planner
     return "planner_node"
 
 
@@ -163,9 +149,10 @@ def build_graph(
         "planner_node",
         should_continue_planning,
         {
-            "human_review_node": "human_review_node",  # 生成draft后进入审核
+            "human_review_node": "human_review_node",  # 生成待审 TaskPlan 后进入审核
             "planner_node": "planner_node",  # 继续规划（有修改意见时）
-            "executor_node": "executor_node"  # plan已批准，直接执行
+            "executor_node": "executor_node",  # 已批准的有效 TaskPlan
+            "planning_failed": END,
         }
     )
     
@@ -223,7 +210,9 @@ async def create_checkpointer() -> AsyncPostgresSaver:
     Returns:
         PostgresSaver实例
     """
-    db_url = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@127.0.0.1:5432/qgis_db")
+    db_url = os.getenv("DATABASE_URL")
+    if not db_url:
+        raise RuntimeError("DATABASE_URL must point to this project's PostgreSQL database.")
     
     pool = AsyncConnectionPool(
         conninfo=db_url,

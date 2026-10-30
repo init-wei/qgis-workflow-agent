@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 PostgreSQL数据库初始化脚本
-创建rag_docs、cookbook、execution_logs三张核心表
+创建既有资料表以及文件、任务、步骤尝试业务记录表；不删除旧表或旧记录。
 """
 
 import psycopg
@@ -19,7 +19,9 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 # 数据库连接配置
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@127.0.0.1:5432/qgis_db")
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    raise RuntimeError("DATABASE_URL must point to this project's PostgreSQL database.")
 
 # 创建连接池
 pool = ConnectionPool(conninfo=DATABASE_URL, min_size=1, max_size=10)
@@ -160,7 +162,60 @@ def create_tables():
             """)
             
             logger.info("✅ execution_logs 表创建成功")
+
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS uploaded_files (
+                    file_id TEXT PRIMARY KEY,
+                    filename TEXT NOT NULL,
+                    storage_path TEXT NOT NULL UNIQUE,
+                    size_bytes BIGINT NOT NULL,
+                    sha256 CHAR(64) NOT NULL,
+                    layers JSONB NOT NULL DEFAULT '[]'::jsonb,
+                    uploaded_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
+            """)
+
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS task_executions (
+                    task_id TEXT PRIMARY KEY,
+                    session_id TEXT NOT NULL,
+                    plan_revision INTEGER NOT NULL,
+                    status VARCHAR(32) NOT NULL,
+                    plan JSONB NOT NULL,
+                    confirmed BOOLEAN,
+                    summary TEXT,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
+            """)
+            cur.execute("""
+                CREATE INDEX IF NOT EXISTS idx_task_executions_session_created
+                ON task_executions(session_id, created_at);
+            """)
+
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS task_step_attempts (
+                    attempt_id TEXT PRIMARY KEY,
+                    task_id TEXT NOT NULL REFERENCES task_executions(task_id) ON DELETE CASCADE,
+                    step_id INTEGER NOT NULL,
+                    tool_name TEXT NOT NULL,
+                    tool_arguments JSONB NOT NULL,
+                    status VARCHAR(32) NOT NULL,
+                    observation JSONB NOT NULL,
+                    artifacts JSONB NOT NULL DEFAULT '[]'::jsonb,
+                    started_at TIMESTAMPTZ NOT NULL,
+                    finished_at TIMESTAMPTZ NOT NULL,
+                    duration_ms INTEGER NOT NULL
+                );
+            """)
+            cur.execute("""
+                CREATE INDEX IF NOT EXISTS idx_task_step_attempts_task_step
+                ON task_step_attempts(task_id, step_id, started_at);
+            """)
             
+            cur.execute("ALTER TABLE task_executions ADD COLUMN IF NOT EXISTS inflight_call JSONB")
+            cur.execute("ALTER TABLE task_executions ADD COLUMN IF NOT EXISTS resume_state JSONB")
+
             # 提交事务
             conn.commit()
             logger.info("✅ 所有表创建成功并提交")

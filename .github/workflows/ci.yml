@@ -42,9 +42,8 @@ jobs:
       - run: npm ci --no-audit --no-fund
       - run: npm run build
   frontend-types:
-    name: Frontend types (known baseline, T01)
+    name: Frontend types
     runs-on: ubuntu-latest
-    continue-on-error: true
     defaults:
       run:
         working-directory: ui/frontend

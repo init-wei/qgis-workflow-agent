@@ -2,14 +2,31 @@ import os
 import io
 import sys
 import json
+import stat
 import socket
 import traceback
 from qgis.core import *
 from qgis.gui import *
 from qgis.PyQt.QtCore import QObject, pyqtSignal, QTimer, Qt, QSize
 from qgis.PyQt.QtWidgets import QAction, QDockWidget, QVBoxLayout, QLabel, QPushButton, QSpinBox, QWidget
-from qgis.PyQt.QtGui import QIcon, QColor
+from qgis.PyQt.QtGui import QIcon, QColor, QImageReader
 from qgis.utils import active_plugins
+from .processing_policy import validate_processing_request, validate_parameter_values
+from .artifact_paths import (artifact_component_paths, call_output_paths, new_output_path,
+                             replace_processing_output_paths, reserve_output_path,
+                             resolve_owned_output_path)
+
+
+def _require_readable_output(path):
+    """Reject missing, empty, non-file, linked or unreadable write results."""
+    if os.path.islink(path):
+        raise ValueError(f"Output is a symbolic link: {path}")
+    info = os.stat(path)
+    if not stat.S_ISREG(info.st_mode) or not info.st_mode & 0o444:
+        raise ValueError(f"Output is not a readable file: {path}")
+    with open(path, 'rb') as stream:
+        if not stream.read(1):
+            raise ValueError(f"Output is empty: {path}")
 
 class QgisMCPServer(QObject):
     """Server class to handle socket connections and execute QGIS commands"""
@@ -66,7 +83,7 @@ class QgisMCPServer(QObject):
         QgsMessageLog.logMessage("QGIS MCP server stopped", "QGIS MCP")
     
     def process_server(self):
-        """Process server operations (called by timer)"""
+        """Read and reply to one unframed JSON message (called by timer)."""
         if not self.running:
             return
             
@@ -127,27 +144,25 @@ class QgisMCPServer(QObject):
             QgsMessageLog.logMessage(f"Server error: {str(e)}", "QGIS MCP", Qgis.Critical)
 
     def execute_command(self, command):
-        """Execute a command"""
+        """Dispatch the small command set used by the MCP wrapper."""
+        self._write_started = False
         try:
+            if not isinstance(command, dict):
+                raise ValueError("Request must be a JSON object")
             cmd_type = command.get("type")
             params = command.get("params", {})
+            if not isinstance(params, dict):
+                raise ValueError("Request params must be a JSON object")
             
             handlers = {
                 "ping": self.ping,
                 "get_qgis_info": self.get_qgis_info,
-                "load_project": self.load_project,
                 "get_project_info": self.get_project_info,
-                "execute_code": self.execute_code,
                 "add_vector_layer": self.add_vector_layer,
                 "add_raster_layer": self.add_raster_layer,
                 "get_layers": self.get_layers,
-                "remove_layer": self.remove_layer,
-                "zoom_to_layer": self.zoom_to_layer,
                 "get_layer_features": self.get_layer_features,
                 "execute_processing": self.execute_processing,
-                "save_project": self.save_project,
-                "render_map": self.render_map,
-                "create_new_project": self.create_new_project,
                 "capture_map_canvas": self.capture_map_canvas,
             }
             
@@ -161,28 +176,48 @@ class QgisMCPServer(QObject):
                 except Exception as e:
                     QgsMessageLog.logMessage(f"Error in handler: {str(e)}", "QGIS MCP", Qgis.Critical)
                     traceback.print_exc()
-                    return {"status": "error", "message": str(e)}
+                    return {"status": "error", "message": str(e),
+                            "outcome": "unknown" if self._write_started else "not_started"}
             else:
                 return {"status": "error", "message": f"Unknown command type: {cmd_type}"}
                 
         except Exception as e:
             QgsMessageLog.logMessage(f"Error executing command: {str(e)}", "QGIS MCP", Qgis.Critical)
             traceback.print_exc()
-            return {"status": "error", "message": str(e)}
+            return {"status": "error", "message": str(e),
+                            "outcome": "unknown" if self._write_started else "not_started"}
     
     # Command handlers
     def ping(self, **kwargs):
         """Simple ping command"""
         return {"pong": True}
     
-    def get_qgis_info(self, **kwargs):
-        """Get basic QGIS information"""
-        return {
+    def get_qgis_info(self, processing_requests=None, **kwargs):
+        """Read current capability facts and validate planned parameters without running them."""
+        info = {
             "qgis_version": Qgis.version(),
             "profile_folder": QgsApplication.qgisSettingsDirPath(),
-            "plugins_count": len(active_plugins)
+            "plugins_count": len(active_plugins),
         }
-    
+        if processing_requests is not None:
+            if not isinstance(processing_requests, list):
+                raise ValueError("Processing preflight requests must be a list")
+            results = []
+            for request in processing_requests:
+                if not isinstance(request, dict) or set(request) != {"step_id", "algorithm", "parameters"}:
+                    raise ValueError("Invalid Processing preflight request")
+                algorithm, parameters = request["algorithm"], request["parameters"]
+                validate_processing_request(algorithm, parameters)
+                definition = QgsApplication.processingRegistry().algorithmById(algorithm)
+                if definition is None:
+                    raise ValueError(f"Processing algorithm is unavailable: {algorithm}")
+                context = QgsProcessingContext()
+                context.setProject(QgsProject.instance())
+                paths = validate_parameter_values(parameters, definition.parameterDefinitions(), context)
+                results.append({"step_id": request["step_id"], "valid": True, **paths})
+            info["processing_validation"] = results
+        return info
+
     def get_project_info(self, **kwargs):
         """Get information about the current QGIS project"""
         project = QgsProject.instance()
@@ -287,14 +322,24 @@ class QgisMCPServer(QObject):
         if not layer.isValid():
             raise Exception(f"Layer is not valid: {path}")
         
-        # Add to project
-        QgsProject.instance().addMapLayer(layer)
-        
-        return {
+        details = {
             "id": layer.id(),
             "name": layer.name(),
             "type": self._get_layer_type(layer),
-            "feature_count": layer.featureCount()
+            **self._vector_layer_details(layer),
+        }
+        self._write_started = True
+        QgsProject.instance().addMapLayer(layer)
+        return details
+
+    def _vector_layer_details(self, layer):
+        """Return facts read from the actual loaded QGIS vector layer."""
+        return {
+            "source": layer.source(),
+            "crs": layer.crs().authid(),
+            "geometry": QgsWkbTypes.displayString(layer.wkbType()),
+            "feature_count": layer.featureCount(),
+            "fields": [field.name() for field in layer.fields()],
         }
     
     def add_raster_layer(self, path, name=None, provider="gdal", **kwargs):
@@ -308,16 +353,16 @@ class QgisMCPServer(QObject):
         if not layer.isValid():
             raise Exception(f"Layer is not valid: {path}")
         
-        # Add to project
-        QgsProject.instance().addMapLayer(layer)
-        
-        return {
+        details = {
             "id": layer.id(),
             "name": layer.name(),
             "type": "raster",
             "width": layer.width(),
             "height": layer.height()
         }
+        self._write_started = True
+        QgsProject.instance().addMapLayer(layer)
+        return details
     
     def get_layers(self, **kwargs):
         """Get all layers in the project"""
@@ -334,10 +379,8 @@ class QgisMCPServer(QObject):
             
             # Add type-specific information
             if layer.type() == QgsMapLayer.VectorLayer:
-                layer_info.update({
-                    "feature_count": layer.featureCount(),
-                    "geometry_type": layer.geometryType()
-                })
+                layer_info.update(self._vector_layer_details(layer))
+                layer_info["geometry_type"] = layer.geometryType()
             elif layer.type() == QgsMapLayer.RasterLayer:
                 layer_info.update({
                     "width": layer.width(),
@@ -414,13 +457,42 @@ class QgisMCPServer(QObject):
             raise Exception(f"Layer not found: {layer_id}")
     
     def execute_processing(self, algorithm, parameters, **kwargs):
-        """Execute a processing algorithm"""
+        """Execute one explicitly supported processing algorithm."""
         try:
             import processing
+
+            validate_processing_request(algorithm, parameters)
+            algorithm_definition = QgsApplication.processingRegistry().algorithmById(algorithm)
+            if algorithm_definition is None:
+                raise ValueError(f"Processing algorithm is unavailable: {algorithm}")
+            context = QgsProcessingContext()
+            context.setProject(QgsProject.instance())
+            validate_parameter_values(parameters, algorithm_definition.parameterDefinitions(), context)
+
+            destinations = list(call_output_paths("execute_processing", {"parameters": parameters}))
+            resolved = {path: new_output_path(path) for path in destinations}
+            if len({str(path.parent) for path in resolved.values()}) != len(destinations):
+                raise ValueError("Each output must have its own artifact directory")
+            for destination in destinations:
+                reserve_output_path(destination)
+            parameters = replace_processing_output_paths(
+                parameters, {path: str(target) for path, target in resolved.items()}
+            )
+            self._write_started = True
             result = processing.run(algorithm, parameters)
+            result = {k: str(v) for k, v in result.items()}
+            if not result:
+                raise ValueError("Processing returned an empty result")
+            returned = list(call_output_paths("execute_processing", {"parameters": result}))
+            expected = set(resolved.values())
+            if {resolve_owned_output_path(path) for path in returned} != expected:
+                raise ValueError("Processing returned unexpected output paths")
+            for target in expected:
+                for component in artifact_component_paths(target):
+                    _require_readable_output(resolve_owned_output_path(str(component)))
             return {
                 "algorithm": algorithm,
-                "result": {k: str(v) for k, v in result.items()}  # Convert values to strings for JSON
+                "result": result
             }
         except Exception as e:
             raise Exception(f"Processing error: {str(e)}")
@@ -528,26 +600,28 @@ class QgisMCPServer(QObject):
             dict: Result with success status and file path
         """
         try:
+            path = str(new_output_path(path))
             # 获取当前画布
             canvas = self.iface.mapCanvas()
             
             # 保存当前尺寸以便恢复
             original_size = canvas.size()
             
+            path = str(reserve_output_path(path))
+            self._write_started = True
             # 设置尺寸
             if width > 0 and height > 0:
                 canvas.resize(width, height)
             
-            # 确保目录存在
-            directory = os.path.dirname(path)
-            if directory and not os.path.exists(directory):
-                os.makedirs(directory, exist_ok=True)
-            
             # 保存截图
-            canvas.saveAsImage(path)
-            
-            # 恢复原始尺寸
-            canvas.resize(original_size)
+            try:
+                canvas.saveAsImage(path)
+            finally:
+                canvas.resize(original_size)
+            _require_readable_output(path)
+            reader = QImageReader(path)
+            if bytes(reader.format()).lower() != b'png' or reader.read().isNull():
+                raise ValueError("Screenshot is not a readable PNG image")
             
             return {
                 "success": True,
@@ -558,11 +632,7 @@ class QgisMCPServer(QObject):
             }
             
         except Exception as e:
-            return {
-                "success": False,
-                "error": str(e),
-                "traceback": traceback.format_exc()
-            }
+            raise RuntimeError(f"Screenshot error: {e}") from e
 
 
 class QgisMCPDockWidget(QDockWidget):

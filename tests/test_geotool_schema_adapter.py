@@ -1,7 +1,6 @@
 import pytest
 
 from agent.adapters.geotool_schema_adapter import (
-    geotool_task_plan_to_qgis_legacy_plan,
     geotool_tool_call_plan_to_qgis_calls,
     qgis_execution_trace_to_geotool_dict,
     qgis_task_plan_to_geotool_dict,
@@ -21,6 +20,7 @@ def _task_plan() -> TaskPlan:
             InputSpec(
                 input_id="input_layer",
                 description="输入点图层",
+                file_id="file-points",
                 path="shared/uploads/points.geojson",
             )
         ],
@@ -42,7 +42,34 @@ def _task_plan() -> TaskPlan:
                 output_refs=[],
                 risk_level="low",
                 requires_review=False,
+            ),
+            PlanStep(
+                step_id=2,
+                description="截图当前地图",
+                candidate_gdal_apis=[],
+                candidate_pyqgis_apis=[],
+                allowed_tools=["capture_map_canvas"],
+                input_refs=[],
+                output_refs=["screenshot"],
+                risk_level="low",
+                requires_review=False,
             )
+        ],
+        tool_calls=[
+            ToolCallPlan(
+                step_id=1,
+                tool_name="add_layer",
+                arguments={
+                    "path": "shared/uploads/points.geojson",
+                    "layer_type": "vector",
+                    "name": "points",
+                },
+            ),
+            ToolCallPlan(
+                step_id=2,
+                tool_name="capture_map_canvas",
+                arguments={"path": "shared/outputs/points.png", "width": 1200, "height": 800},
+            ),
         ],
         metadata={},
     )
@@ -63,6 +90,8 @@ def test_qgis_task_plan_exports_geotool_compatible_dict():
     assert payload["steps"][0]["metadata"]["candidate_pyqgis_apis"] == [
         "QgsVectorLayer"
     ]
+    assert payload["tool_calls"][0]["tool_name"] == "add_layer"
+    assert payload["tool_calls"][0]["arguments"]["path"] == "shared/uploads/points.geojson"
 
 
 def test_qgis_task_plan_export_rejects_empty_steps():
@@ -70,28 +99,6 @@ def test_qgis_task_plan_export_rejects_empty_steps():
 
     with pytest.raises(ValueError, match="steps"):
         qgis_task_plan_to_geotool_dict(task_plan, user_query="加载图层")
-
-
-def test_geotool_task_plan_imports_legacy_plan():
-    legacy = geotool_task_plan_to_qgis_legacy_plan(
-        {
-            "goal": "加载图层",
-            "steps": [
-                {
-                    "step_id": 1,
-                    "description": "加载点图层",
-                    "metadata": {
-                        "candidate_gdal_apis": [],
-                        "candidate_pyqgis_apis": ["QgsVectorLayer"],
-                    },
-                }
-            ],
-        }
-    )
-
-    assert legacy.task == "加载图层"
-    assert legacy.steps[0].step_id == 1
-    assert legacy.steps[0].pyqgis_api == ["QgsVectorLayer"]
 
 
 def test_geotool_tool_call_plan_imports_canonical_calls():

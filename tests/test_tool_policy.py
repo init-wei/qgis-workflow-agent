@@ -120,7 +120,7 @@ def test_tool_policy_rejects_tool_not_in_allowed_scope(tmp_path):
 
 def test_tool_policy_allows_low_risk_registered_tool_with_safe_path(tmp_path):
     registry = ToolRegistry.from_mcp_tools([{"name": "capture_map_canvas"}])
-    path = Path(tmp_path) / "shared" / "screenshots" / "map.png"
+    path = Path(tmp_path) / "shared" / "outputs" / "task-1" / "r1" / "image" / "map.png"
     call = ToolCallPlan(
         step_id=1,
         tool_name="capture_map_canvas",
@@ -134,6 +134,7 @@ def test_tool_policy_allows_low_risk_registered_tool_with_safe_path(tmp_path):
     )
 
     assert decision.allowed is True
+    assert not path.parent.exists()
 
 
 def test_tool_call_plan_requires_review_is_strict_bool():
@@ -144,3 +145,30 @@ def test_tool_call_plan_requires_review_is_strict_bool():
             arguments={"path": "shared/uploads/points.geojson"},
             requires_review="False",
         )
+
+
+@pytest.mark.parametrize('kind', ['existing', 'symlink_escape', 'symlink_inside', 'unowned', 'selector'])
+def test_runtime_refuses_unsafe_artifact_destinations(tmp_path, kind):
+    destination = tmp_path / 'shared/outputs/task-1/r1/image/result.png'
+    destination.parent.parent.mkdir(parents=True)
+    raw = str(destination)
+    if kind == 'existing':
+        destination.parent.mkdir()
+        destination.write_bytes(b'original')
+    elif kind == 'symlink_escape':
+        outside = tmp_path / 'outside'
+        outside.mkdir()
+        destination.parent.symlink_to(outside, target_is_directory=True)
+    elif kind == 'symlink_inside':
+        inside = destination.parent.parent / 'other'
+        inside.mkdir()
+        destination.parent.symlink_to(inside, target_is_directory=True)
+    elif kind == 'unowned':
+        raw = str(tmp_path / 'data/new.png')
+    elif kind == 'selector':
+        raw += '|layername=overwrite'
+    call = ToolCallPlan(step_id=1, tool_name='execute_processing', arguments={
+        'algorithm': 'native:buffer', 'parameters': {'nested': [{'OUTPUT': raw}]}})
+    assert not PathPolicy(tmp_path).evaluate_call(call).allowed
+    if kind == 'existing':
+        assert destination.read_bytes() == b'original'

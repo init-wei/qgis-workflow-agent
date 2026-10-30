@@ -22,10 +22,10 @@ def _registry(*tool_names: str) -> ToolRegistry:
     return ToolRegistry.from_tool_specs([ToolSpec(name=name) for name in tool_names])
 
 
-def test_execution_loop_repairs_parameter_error_and_succeeds(tmp_path):
+def test_parameter_error_does_not_execute_unreviewed_repair_arguments(tmp_path):
     client = SequenceMCPClient(
         [
-            {"status": "error", "message": "Missing required parameter: path"},
+            {"status": "error", "message": "Missing required parameter: path", "outcome": "not_started"},
             {
                 "status": "success",
                 "result": {"path": "shared/output/layer.gpkg"},
@@ -48,24 +48,17 @@ def test_execution_loop_repairs_parameter_error_and_succeeds(tmp_path):
 
     result = asyncio.run(loop.run(call, trace, allowed_tools=["add_layer"]))
 
-    assert result.status == "success"
-    assert result.attempts_used == 2
-    assert result.decision.outcome == "success"
-    assert client.calls == [
-        ("add_layer", {}),
-        ("add_layer", {"path": "shared/output/layer.gpkg"}),
-    ]
-    assert trace.status == "success"
-    assert trace.attempts[0].metadata["evaluation"]["outcome"] == "retry"
-    assert trace.attempts[0].metadata["repair_action"]["action_type"] == (
-        "update_arguments"
-    )
-    assert trace.latest_attempt().status == "success"
+    assert result.status == "needs_review"
+    assert result.attempts_used == 1
+    assert result.decision.outcome == "ask_human"
+    assert client.calls == [("add_layer", {})]
+    assert trace.attempts[0].metadata["repair_action"]["action_type"] == "ask_human"
+
 
 
 def test_execution_loop_file_not_found_needs_review_without_retry(tmp_path):
     client = SequenceMCPClient(
-        [{"status": "error", "message": "Layer is not valid: data/missing.gpkg"}]
+        [{"status": "error", "message": "Layer is not valid: data/missing.gpkg", "outcome": "not_started"}]
     )
     loop = ExecutionLoop(
         mcp_client=client,
@@ -147,3 +140,21 @@ def test_execution_loop_max_attempts_exhausted_fails(tmp_path):
     assert trace.latest_attempt().metadata["evaluation"]["reason"] == (
         "max_attempts_exhausted"
     )
+
+
+def test_write_call_with_unknown_outcome_is_not_replayed(tmp_path):
+    client = SequenceMCPClient([
+        ConnectionError("QGIS socket disconnected after request"),
+        {"status": "success", "result": {"id": "layer-1"}},
+    ])
+    loop = ExecutionLoop(mcp_client=client, registry=_registry("add_layer"),
+                         workspace_root=tmp_path, max_attempts=2)
+    trace = ExecutionTrace(trace_id="trace-unknown")
+    call = ToolCallPlan(step_id=1, tool_name="add_layer",
+                        arguments={"path": "shared/uploads/points.geojson", "layer_type": "vector"})
+
+    result = asyncio.run(loop.run(call, trace, allowed_tools=["add_layer"]))
+
+    assert result.status != "success"
+    assert len(client.calls) == 1
+    assert trace.attempts[0].observation.status == "disconnected"

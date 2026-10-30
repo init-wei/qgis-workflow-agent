@@ -1,42 +1,17 @@
 import { ref, onUnmounted } from 'vue'
-import type { Plan } from '../types'
+import { chatStream, resumeExecution } from '../api'
+import type { ChatRequest } from '../types'
 
-/**
- * SSE 事件类型
- */
-export type SSEEventType =
-  | 'start'
-  | 'node_start'
-  | 'node_end'
-  | 'thinking'
-  | 'output'
-  | 'message_delta'
-  | 'human_review_required'
-  | 'risk_review_required'
-  | 'result_review_required'
-  | 'complete'
-  | 'error'
-  | 'paused'
+export type SSEEventHandler = (event: string, data: unknown) => void
 
-/**
- * SSE 事件回调函数类型
- */
-export type SSEEventHandler = (event: string, data: any) => void
-
-/**
- * SSE Hook 返回值
- */
 interface UseSSEReturn {
   isStreaming: ReturnType<typeof ref<boolean>>
-  startStreaming: (message: string, threadId?: string, files?: string[]) => Promise<void>
+  startStreaming: (request: ChatRequest) => Promise<void>
   resumeStreaming: (threadId: string) => Promise<void>
   stopStreaming: () => void
   error: ReturnType<typeof ref<Error | null>>
 }
 
-/**
- * SSE Composable - 处理服务器推送事件
- */
 export function useSSE(
   onEvent: SSEEventHandler,
   onComplete?: () => void,
@@ -44,170 +19,133 @@ export function useSSE(
 ): UseSSEReturn {
   const isStreaming = ref(false)
   const error = ref<Error | null>(null)
-  let reader: ReadableStreamDefaultReader | null = null
+  let reader: ReadableStreamDefaultReader<Uint8Array> | null = null
   let controller: AbortController | null = null
 
-  /**
-   * 处理 SSE 流
-   */
   const processSSEStream = async (response: Response) => {
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`)
     }
+    if (!response.body) {
+      throw new Error('SSE 响应没有可读取的数据流')
+    }
 
-    reader = response.body?.getReader() || null
+    reader = response.body.getReader()
     const decoder = new TextDecoder()
     let buffer = ''
-    let currentEventType = ''
+    let currentEventType = 'message'
+    const dataLines: string[] = []
+
+    const dispatchEvent = () => {
+      if (dataLines.length === 0) {
+        currentEventType = 'message'
+        return
+      }
+
+      try {
+        const data: unknown = JSON.parse(dataLines.join('\n'))
+        onEvent(currentEventType, data)
+        if (currentEventType === 'complete') {
+          onComplete?.()
+        } else if (currentEventType === 'error') {
+          const message = readStringProperty(data, 'message') || '未知错误'
+          const streamError = new Error(message)
+          error.value = streamError
+          onError?.(streamError)
+        }
+      } catch (cause) {
+        if (cause instanceof SyntaxError) {
+          console.error('[SSE] 无法解析事件数据')
+        } else {
+          throw cause
+        }
+      } finally {
+        dataLines.length = 0
+        currentEventType = 'message'
+      }
+    }
 
     try {
       while (true) {
-        const { done, value } = await reader!.read()
+        const { done, value } = await reader.read()
         if (done) break
 
         buffer += decoder.decode(value, { stream: true })
         const lines = buffer.split('\n')
         buffer = lines.pop() || ''
 
-        for (const line of lines) {
-          const trimmedLine = line.trim()
-          if (!trimmedLine) continue
-
-          if (trimmedLine.startsWith('event:')) {
-            currentEventType = trimmedLine.slice(6).trim()
-          } else if (trimmedLine.startsWith('data:')) {
-            try {
-              const data = JSON.parse(trimmedLine.slice(5).trim())
-              console.log('[SSE] 事件:', currentEventType, '数据:', data)
-              onEvent(currentEventType, data)
-
-              // 特殊事件处理
-              if (currentEventType === 'complete') {
-                onComplete?.()
-              } else if (currentEventType === 'error') {
-                error.value = new Error(data.message || '未知错误')
-                onError?.(error.value)
-              }
-            } catch (e) {
-              console.error('[SSE] 解析失败:', trimmedLine, e)
-            }
+        for (const rawLine of lines) {
+          const line = rawLine.replace(/\r$/, '')
+          if (line === '') {
+            dispatchEvent()
+          } else if (line.startsWith('event:')) {
+            currentEventType = line.slice(6).trim() || 'message'
+          } else if (line.startsWith('data:')) {
+            dataLines.push(line.slice(5).replace(/^ /, ''))
           }
         }
       }
+
+      buffer += decoder.decode()
+      if (buffer) {
+        for (const rawLine of buffer.split('\n')) {
+          const line = rawLine.replace(/\r$/, '')
+          if (line.startsWith('event:')) {
+            currentEventType = line.slice(6).trim() || 'message'
+          } else if (line.startsWith('data:')) {
+            dataLines.push(line.slice(5).replace(/^ /, ''))
+          }
+        }
+      }
+      dispatchEvent()
     } finally {
-      // ✅ 显式设置流式状态为 false
       isStreaming.value = false
       cleanup()
     }
   }
 
-  /**
-   * 开始流式聊天
-   */
-  const startStreaming = async (message: string, threadId?: string, files?: string[]) => {
+  const consume = async (startRequest: (signal: AbortSignal) => Promise<Response>) => {
     cleanup()
     isStreaming.value = true
     error.value = null
     controller = new AbortController()
 
     try {
-      const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api'
-
-      const readNumber = (key: string) => {
-        const raw = localStorage.getItem(key)
-        if (raw === null || raw === '') return undefined
-        const num = Number(raw)
-        return Number.isFinite(num) ? num : undefined
-      }
-
-      const llmConfig = {
-        api_base: localStorage.getItem('apiUrl') || undefined,
-        api_key: localStorage.getItem('apiKey') || undefined,
-        model: localStorage.getItem('model') || undefined,
-        temperature: readNumber('temperature'),
-        max_tokens: readNumber('maxTokens')
-      }
-
-      const hasLlmConfig = Object.values(llmConfig).some((v) => v !== undefined)
-
-      const response = await fetch(`${API_BASE}/chat/stream`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          message,
-          thread_id: threadId,
-          files: files || [],
-          ...(hasLlmConfig ? { llm_config: llmConfig } : {})
-        }),
-        signal: controller.signal
-      })
-
+      const response = await startRequest(controller.signal)
       await processSSEStream(response)
-    } catch (err: any) {
-      if (err.name !== 'AbortError') {
-        error.value = err
-        onError?.(err)
+    } catch (cause) {
+      if (cause instanceof Error && cause.name === 'AbortError') {
+        return
       }
-      isStreaming.value = false
+      const streamError = cause instanceof Error ? cause : new Error(String(cause))
+      error.value = streamError
+      onError?.(streamError)
+      cleanup()
     }
   }
 
-  /**
-   * 恢复执行
-   */
-  const resumeStreaming = async (threadId: string) => {
-    cleanup()
-    isStreaming.value = true
-    error.value = null
-    controller = new AbortController()
+  const startStreaming = (request: ChatRequest) => consume(signal => chatStream(request, signal))
 
-    try {
-      const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api'
-      const response = await fetch(`${API_BASE}/resume/${threadId}`, {
-        method: 'POST',
-        signal: controller.signal
-      })
+  const resumeStreaming = (threadId: string) => consume(signal => resumeExecution(threadId, signal))
 
-      await processSSEStream(response)
-    } catch (err: any) {
-      if (err.name !== 'AbortError') {
-        error.value = err
-        onError?.(err)
-      }
-      isStreaming.value = false
-    }
-  }
-
-  /**
-   * 停止流式传输
-   */
   const stopStreaming = () => {
     cleanup()
     isStreaming.value = false
   }
 
-  /**
-   * 清理资源
-   */
   const cleanup = () => {
     if (controller) {
       controller.abort()
       controller = null
     }
     if (reader) {
-      reader.cancel()
+      void reader.cancel()
       reader = null
     }
-    // ✅ 确保流式状态被重置
     isStreaming.value = false
   }
 
-  // 组件卸载时清理
-  onUnmounted(() => {
-    cleanup()
-  })
+  onUnmounted(cleanup)
 
   return {
     isStreaming,
@@ -218,32 +156,23 @@ export function useSSE(
   }
 }
 
-/**
- * 格式化消息内容（支持 Markdown 简单格式）
- */
-export function formatMessageContent(content: string): string {
-  return content
-    .replace(/\n/g, '<br>')
-    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+function readStringProperty(value: unknown, key: string): string | undefined {
+  if (typeof value !== 'object' || value === null || !(key in value)) return undefined
+  const property = (value as Record<string, unknown>)[key]
+  return typeof property === 'string' ? property : undefined
 }
 
-/**
- * 获取节点显示名称
- */
 export function getNodeDisplayName(node: string): string {
   const names: Record<string, string> = {
-    'planner_node': '📋 规划器',
-    'human_review_node': '👤 人工审核',
-    'risk_review_node': '🛡️ 风险审核',
-    'executor_node': '⚙️ 受控执行',
-    'reflector_node': '🔍 反思器'
+    planner_node: '📋 规划器',
+    human_review_node: '👤 人工审核',
+    risk_review_node: '🛡️ 风险审核',
+    executor_node: '⚙️ 受控执行',
+    reflector_node: '🔍 反思器'
   }
   return names[node] || node
 }
 
-/**
- * 格式化时间
- */
 export function formatTime(isoString: string): string {
   const date = new Date(isoString)
   const now = new Date()

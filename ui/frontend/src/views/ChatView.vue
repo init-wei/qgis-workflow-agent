@@ -98,6 +98,9 @@
         >
           <div class="text-2xl mb-2">📁</div>
           <div class="text-sm text-dark-textSecondary">点击或拖拽上传文件</div>
+          <div class="text-xs text-dark-textSecondary mt-1">
+            {{ uploadedFiles.length }} 个可用 · 已选 {{ selectedFileIds.length }} 个
+          </div>
           <input
             ref="fileInputRef"
             type="file"
@@ -106,20 +109,56 @@
             @change="handleFileUpload"
           />
         </div>
-        <div class="mt-2.5">
+        <div class="mt-2.5 max-h-[32vh] overflow-y-auto space-y-2">
           <div
-            v-for="(file, index) in uploadedFiles"
-            :key="index"
-            class="file-item flex items-center justify-between p-2 bg-dark-bgLight rounded mb-1"
+            v-for="file in uploadedFiles"
+            :key="file.file_id"
+            class="file-item p-2 bg-dark-bgLight rounded border border-dark-border"
           >
-            <span class="text-xs flex-1 truncate" :title="file.filename">{{ file.filename }}</span>
-            <el-button
-              type="danger"
-              size="small"
-              :icon="Close"
-              circle
-              @click="handleRemoveFile(index)"
-            />
+            <label class="flex items-start gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                class="mt-0.5 accent-primary-600"
+                :checked="selectedFileIds.includes(file.file_id)"
+                @change="handleFileSelection(file, $event)"
+              />
+              <span class="min-w-0 flex-1">
+                <span class="block text-xs font-medium truncate" :title="file.filename">{{ file.filename }}</span>
+                <span class="block text-[10px] text-dark-textSecondary mt-0.5">
+                  {{ formatBytes(file.size) }} · SHA-256 {{ file.sha256 }}
+                </span>
+                <span class="block text-[10px] text-dark-textSecondary break-all" :title="file.file_id">
+                  file_id: {{ file.file_id }}
+                </span>
+              </span>
+            </label>
+
+            <label v-if="file.layers && file.layers.length > 1" class="block mt-2 text-[11px]">
+              <span class="block text-dark-textSecondary mb-1">GeoPackage 图层</span>
+              <select
+                v-model="selectedLayerByFileId[file.file_id]"
+                class="w-full rounded border border-dark-border bg-dark-bg px-2 py-1 text-xs"
+              >
+                <option disabled value="">请选择图层</option>
+                <option v-for="(layer, layerIndex) in file.layers" :key="layerIndex" :value="getLayerName(layer)">
+                  {{ getLayerName(layer) || `图层 ${layerIndex + 1}` }}
+                </option>
+              </select>
+            </label>
+
+            <div v-for="(layer, layerIndex) in getFileLayerInfos(file)" :key="layerIndex" class="mt-2 border-t border-dark-border pt-2 text-[10px] leading-relaxed break-all">
+              <div v-if="getLayerName(layer)" class="font-medium text-primary-600">{{ getLayerName(layer) }}</div>
+              <div><span class="text-dark-textSecondary">来源：</span>{{ layer.source || '未提供' }}</div>
+              <div><span class="text-dark-textSecondary">CRS：</span>{{ layer.crs || '未提供' }}</div>
+              <div><span class="text-dark-textSecondary">几何：</span>{{ layer.geometry || '未提供' }}</div>
+              <div><span class="text-dark-textSecondary">要素数：</span>{{ layer.feature_count ?? '未提供' }}</div>
+              <div class="break-words">
+                <span class="text-dark-textSecondary">字段：</span>{{ formatFields(layer.fields) }}
+              </div>
+            </div>
+            <div v-if="getFileLayerInfos(file).length === 0" class="mt-2 border-t border-dark-border pt-2 text-[10px] leading-relaxed text-dark-textSecondary">
+              来源、CRS、几何、要素数和字段：未提供图层元信息
+            </div>
           </div>
         </div>
       </div>
@@ -156,9 +195,9 @@
             <div class="content max-w-[70%] p-3 rounded-xl bg-dark-bgLight rounded-tl-none">
               你好！我是 QGIS Agent，专注于地理数据处理。我可以帮你：
               <ul class="list-disc list-inside mt-2 space-y-1">
-                <li>规划 QGIS 工作流程</li>
-                <li>检索 GDAL/PyQGIS API 文档</li>
-                <li>生成并执行 Python 代码</li>
+                <li>查看上传的矢量图层信息</li>
+                <li>生成并审核 GIS 操作计划</li>
+                <li>记录执行结果并由您确认</li>
               </ul>
               请告诉我你需要什么帮助？
             </div>
@@ -193,8 +232,7 @@
                 <div
                   class="thinking-content text-sm leading-relaxed whitespace-pre-wrap"
                   :class="{ 'line-clamp-3': thinkingCollapsed[index] }"
-                  v-html="formatMessageContent(msg.content)"
-                ></div>
+                >{{ msg.content }}</div>
               </div>
             </template>
 
@@ -206,15 +244,14 @@
               >
                 <!-- 系统消息不显示头像 -->
                 <div
-                  v-if="msg.role !== 'system'"
+                  v-if="msg.role === 'user' || msg.role === 'assistant'"
                   class="avatar w-9 h-9 rounded-full flex items-center justify-center font-bold flex-shrink-0"
                   :class="{
                     'bg-primary-600': msg.role === 'assistant',
-                    'bg-green-500': msg.role === 'user',
-                    'bg-gray-500': msg.role === 'system'
+                    'bg-green-500': msg.role === 'user'
                   }"
                 >
-                  {{ msg.role === 'user' ? '👤' : msg.role === 'system' ? 'ℹ️' : 'AI' }}
+                  {{ msg.role === 'user' ? '👤' : 'AI' }}
                 </div>
                 <div
                   class="content bubble p-3 rounded-xl leading-relaxed"
@@ -223,8 +260,7 @@
                     'max-w-[70%] bg-primary-600 rounded-tr-none text-white': msg.role === 'user',
                     'max-w-[80%] bg-dark-bgLight/50 border border-dark-border text-center text-sm system-bubble': msg.role === 'system'
                   }"
-                  v-html="formatMessageContent(msg.content)"
-                ></div>
+                >{{ msg.content }}</div>
               </div>
             </template>
           </div>
@@ -234,22 +270,20 @@
         <div class="chat-input p-5 border-t border-dark-border flex-shrink-0 bg-dark-bgDark/80">
           <div class="input-wrapper flex gap-2.5 bg-dark-bgLight/80 border border-dark-border rounded-xl p-2.5 items-end">
             <el-input
-              ref="messageInputRef"
               v-model="inputMessage"
               type="textarea"
               :rows="1"
               :autosize="{ minRows: 1, maxRows: 4 }"
               placeholder="输入你的地理处理需求..."
-              :disabled="isExecuting"
+              :disabled="isExecuting || reviewModalVisible || resultModalVisible || riskReviewModalVisible"
               @keydown="handleKeyDown"
-              @input="handleInputResize"
               class="flex-1"
             />
             <el-button
               type="primary"
               :icon="Promotion"
               circle
-              :disabled="!inputMessage.trim() || isExecuting"
+              :disabled="!inputMessage.trim() || isExecuting || reviewModalVisible || resultModalVisible || riskReviewModalVisible"
               @click="handleSendMessage"
             />
           </div>
@@ -263,26 +297,87 @@
       title="⚠️ 人工审核"
       width="600px"
       :close-on-click-modal="false"
+      :close-on-press-escape="false"
+      :show-close="false"
     >
       <div v-if="currentDraft">
         <div class="plan-summary bg-dark-bgLight p-4 rounded-lg mb-4">
-          <h3 class="font-semibold text-primary-600 mb-2">📋 执行计划</h3>
-          <p>{{ currentDraft.task }}</p>
+          <h3 class="font-semibold text-primary-600 mb-2">📋 审核 TaskPlan</h3>
+          <p>{{ currentDraft.task_summary || '待审核的 GIS 任务计划' }}</p>
+          <div class="text-xs text-dark-textSecondary mt-2 break-all">
+            task_id: {{ currentDraft.task_id }} · revision: {{ currentDraft.revision }} · 状态: {{ currentDraft.review_status }}
+          </div>
         </div>
-        <h4 class="font-semibold mb-2">执行步骤 ({{ currentDraft.steps.length }}):</h4>
-        <ul class="steps-list space-y-2">
+        <h4 class="font-semibold mb-2">必需输入</h4>
+        <div v-if="currentDraft.required_inputs.length" class="space-y-2 mb-4">
+          <div
+            v-for="input in currentDraft.required_inputs"
+            :key="input.input_id"
+            class="p-2.5 bg-dark-bg rounded-lg border border-dark-border text-sm"
+          >
+            <div class="font-medium">{{ input.input_id }} · {{ input.description }}</div>
+            <div class="text-xs text-dark-textSecondary mt-1 break-all">
+              <span v-if="input.file_id">文件 ID: {{ input.file_id }}</span>
+              <span v-if="input.layer_name"> · 图层: {{ input.layer_name }}</span>
+              <span v-if="input.source"> · 来源: {{ input.source }}</span>
+              <span v-if="input.path"> · 路径: {{ input.path }}</span>
+            </div>
+          </div>
+        </div>
+        <p v-else class="text-sm text-dark-textSecondary mb-4">无额外必需输入。</p>
+
+        <h4 class="font-semibold mb-2">预期产物</h4>
+        <div v-if="currentDraft.expected_outputs.length" class="space-y-2 mb-4">
+          <div
+            v-for="output in currentDraft.expected_outputs"
+            :key="output.output_id"
+            class="p-2.5 bg-dark-bg rounded-lg border border-dark-border text-sm"
+          >
+            <div class="font-medium">{{ output.output_id }} · {{ output.description }}</div>
+            <div v-if="output.path" class="text-xs text-dark-textSecondary mt-1 break-all">{{ output.path }}</div>
+          </div>
+        </div>
+        <p v-else class="text-sm text-dark-textSecondary mb-4">计划未声明预期产物。</p>
+
+        <h4 class="font-semibold mb-2">执行步骤 ({{ currentDraft.steps.length }})</h4>
+        <ul class="steps-list space-y-2 mb-4">
           <li
             v-for="step in currentDraft.steps"
             :key="step.step_id"
             class="step p-2.5 bg-dark-bg rounded-lg border-l-4 border-primary-600"
           >
-            <div class="font-medium">步骤 {{ step.step_id }}: {{ step.description }}</div>
-            <div class="text-xs text-dark-textSecondary mt-1">
-              <span v-if="step.gdal_api && step.gdal_api.length">GDAL: {{ step.gdal_api.join(', ') }}</span>
-              <span v-if="step.pyqgis_api && step.pyqgis_api.length" class="ml-2">PyQGIS: {{ step.pyqgis_api.join(', ') }}</span>
+            <div class="font-medium">步骤 {{ step.step_id }} · {{ step.description }}</div>
+            <div class="text-xs text-dark-textSecondary mt-1 flex flex-wrap gap-x-3 gap-y-1">
+              <span v-if="step.step_type">类型: {{ step.step_type }}</span>
+              <span v-if="step.risk_level">风险: {{ step.risk_level }}</span>
+              <span v-if="step.requires_review !== undefined">额外审核: {{ step.requires_review ? '需要' : '不需要' }}</span>
+              <span v-if="step.input_refs?.length">输入引用: {{ step.input_refs.join(', ') }}</span>
+              <span v-if="step.output_refs?.length">输出引用: {{ step.output_refs.join(', ') }}</span>
             </div>
           </li>
         </ul>
+
+        <h4 class="font-semibold mb-2">具体工具调用 ({{ currentDraft.tool_calls.length }})</h4>
+        <div class="space-y-2 mb-4 max-h-72 overflow-y-auto">
+          <div
+            v-for="(call, index) in currentDraft.tool_calls"
+            :key="`${call.step_id}-${call.tool_name}-${index}`"
+            class="p-3 bg-dark-bg rounded-lg border border-dark-border"
+          >
+            <div class="flex items-center justify-between gap-2">
+              <div class="font-medium break-all">步骤 {{ call.step_id }} · {{ call.tool_name }}</div>
+              <span class="text-xs shrink-0">{{ call.risk_level }} 风险</span>
+            </div>
+            <div class="text-xs text-dark-textSecondary mt-1">
+              调用级审核: {{ call.requires_review ? '需要' : '不需要' }}
+            </div>
+            <pre class="mt-2 text-xs whitespace-pre-wrap break-all overflow-auto">{{ formatJson(call.arguments) }}</pre>
+          </div>
+          <p v-if="currentDraft.tool_calls.length === 0" class="text-sm text-red-400">
+            计划没有可审核的具体工具调用，不能批准执行。
+          </p>
+        </div>
+
         <div class="mt-4">
           <label class="block text-sm mb-2">如需修改，请输入修改意见：</label>
           <el-input
@@ -294,9 +389,8 @@
         </div>
       </div>
       <template #footer>
-        <el-button @click="reviewModalVisible = false">取消</el-button>
-        <el-button type="danger" @click="handleReview(false)">拒绝并修改</el-button>
-        <el-button type="success" @click="handleReview(true)">批准执行</el-button>
+        <el-button type="danger" @click="handleReview(false)">拒绝并重新规划</el-button>
+        <el-button type="success" :disabled="!currentDraft?.tool_calls.length" @click="handleReview(true)">批准执行</el-button>
       </template>
     </el-dialog>
 
@@ -306,6 +400,8 @@
       title="📋 确认执行结果"
       width="600px"
       :close-on-click-modal="false"
+      :close-on-press-escape="false"
+      :show-close="false"
     >
       <p class="mb-4">执行节点已完成，请确认任务是否成功完成：</p>
       <div class="bg-dark-bgLight p-4 rounded-lg mb-4">
@@ -322,7 +418,7 @@
         />
       </div>
       <p class="text-sm text-dark-textSecondary">
-        Reflector 将根据您的确认生成相应的总结和经验归档。
+        您的确认将保存在任务结果中，并用于生成总结。
       </p>
       <template #footer>
         <el-button type="danger" @click="handleResultConfirm(false)">❌ 任务失败</el-button>
@@ -336,6 +432,8 @@
       title="🛡️ 高风险工具审核"
       width="680px"
       :close-on-click-modal="false"
+      :close-on-press-escape="false"
+      :show-close="false"
     >
       <div v-if="currentRiskReview">
         <div class="bg-dark-bgLight p-4 rounded-lg mb-4">
@@ -349,22 +447,14 @@
           v-model="riskReviewComment"
           type="textarea"
           :rows="2"
-          placeholder="可选：说明批准、拒绝或修改原因"
-        />
-        <label class="block text-sm mt-4 mb-2">修改后的参数 JSON：</label>
-        <el-input
-          v-model="riskReviewModifiedArguments"
-          type="textarea"
-          :rows="5"
-          placeholder='例如：{"path":"shared/projects/reviewed.qgz"}'
+          placeholder="可选：说明批准或拒绝原因"
         />
         <p class="text-xs text-dark-textSecondary mt-2">
-          只有点击“修改后执行”时才会使用上方 JSON 参数。
+          如需更改参数，请拒绝此操作，重新提交任务并审核新计划。
         </p>
       </div>
       <template #footer>
         <el-button type="danger" @click="handleRiskReview('rejected')">拒绝</el-button>
-        <el-button @click="handleRiskReview('modified')">修改后执行</el-button>
         <el-button type="success" @click="handleRiskReview('approved')">批准执行</el-button>
       </template>
     </el-dialog>
@@ -372,30 +462,39 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, nextTick, toRefs } from 'vue'
+import { ref, computed, onMounted, onUnmounted, toRefs } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElButton, ElInput, ElDialog, ElMessage, ElMessageBox } from 'element-plus'
-import { Delete, Close, Promotion, Setting, DataAnalysis } from '@element-plus/icons-vue'
+import { Delete, Promotion, Setting, DataAnalysis } from '@element-plus/icons-vue'
 import { useChatStore } from '../stores/chat'
-import { useSSE, formatMessageContent, getNodeDisplayName, formatTime } from '../composables/useSSE'
+import { useSSE, getNodeDisplayName, formatTime } from '../composables/useSSE'
 import {
-  getSessions,
+  confirmResult,
   createSession,
   deleteSession as apiDeleteSession,
-  getSessionHistory,
-  uploadFile as apiUploadFile,
-  reviewPlan,
-  confirmResult,
-  submitRiskReview,
+  getCurrentState,
+  getExecution,
+  getFiles,
   getQGISStatus,
-  getCurrentState
+  getSessionHistory,
+  getSessions,
+  reviewPlan,
+  submitRiskReview,
+  uploadFile as apiUploadFile
 } from '../api'
-import type { Plan } from '../types'
+import type { LayerInfo, Message, SessionHistory, TaskPlan, UploadedFile } from '../types'
+
+interface RiskReviewData {
+  review_id: string
+  tool_call?: {
+    tool_name?: string
+    arguments?: Record<string, unknown>
+  }
+}
 
 const router = useRouter()
 const chatStore = useChatStore()
 
-// 组件状态
 const inputMessage = ref('')
 const reviewModalVisible = ref(false)
 const resultModalVisible = ref(false)
@@ -403,23 +502,20 @@ const riskReviewModalVisible = ref(false)
 const reviewAdvise = ref('')
 const resultFeedback = ref('')
 const riskReviewComment = ref('')
-const riskReviewModifiedArguments = ref('')
-const currentRiskReview = ref<any>(null)
+const currentRiskReview = ref<RiskReviewData | null>(null)
 const isDragOver = ref(false)
 const fileInputRef = ref<HTMLInputElement | null>(null)
 const screenshotTime = ref('暂无')
 const pluginStatusTimer = ref<number | null>(null)
-const messageInputRef = ref<any>(null) // Element Plus textarea ref
-
-// 思考内容折叠状态
+const selectedLayerByFileId = ref<Record<string, string>>({})
 const thinkingCollapsed = ref<Record<number, boolean>>({})
 
-// Store 引用 - 使用 toRefs 保持响应式
 const {
   currentThreadId,
   sessions,
   messages,
   uploadedFiles,
+  selectedFileIds,
   isExecuting,
   currentDraft,
   currentExecutionResult,
@@ -428,10 +524,8 @@ const {
   screenshotPath
 } = toRefs(chatStore)
 
-// 计算属性
 const qgisStatusText = computed(() => {
-  const status = qgisStatus.value
-  switch (status) {
+  switch (qgisStatus.value) {
     case 'running': return '插件已启动'
     case 'error': return '插件未启动'
     default: return '检测中...'
@@ -439,17 +533,18 @@ const qgisStatusText = computed(() => {
 })
 
 const qgisStatusDetail = computed(() => {
-  const status = qgisStatus.value
-  const count = qgisToolsCount.value ?? 0
-  if (status === 'running') {
-    return `工具数: ${count}`
+  if (qgisStatus.value === 'running') {
+    return `工具数: ${qgisToolsCount.value}`
   }
   return '请检查 QGIS MCP 插件'
 })
 
 const executionSummary = computed(() => {
-  const result = currentExecutionResult.value
-  return result?.execution_summary || '执行完成'
+  const result = asRecord(currentExecutionResult.value)
+  return readString(result, 'summary')
+    || readString(result, 'execution_summary')
+    || readString(result, 'status')
+    || '执行结果正在读取'
 })
 
 const screenshotUrl = computed(() => {
@@ -463,48 +558,51 @@ const screenshotUrl = computed(() => {
   return url
 })
 
-// SSE Hook
 const { isStreaming, startStreaming, resumeStreaming, stopStreaming } = useSSE(
   handleSSEEvent,
   handleSSEComplete,
   handleSSEError
 )
 
-// ========== 生命周期 ==========
-
 onMounted(async () => {
-  await loadSessions()
-  setupDragDrop()
+  await Promise.all([loadSessions(), loadFiles()])
   startPluginStatusMonitor()
-
-  // 自动调整 textarea 高度
-  // Element Plus autosize 已处理
 })
 
 onUnmounted(() => {
-  if (pluginStatusTimer.value) {
+  if (pluginStatusTimer.value !== null) {
     clearInterval(pluginStatusTimer.value)
   }
 })
 
-// ========== 会话管理 ==========
-
 async function loadSessions() {
   try {
-    const data = await getSessions()
-    chatStore.setSessions(data)
+    chatStore.setSessions(await getSessions())
   } catch (error) {
     console.error('加载会话失败:', error)
     ElMessage.error('加载会话失败')
   }
 }
 
+async function loadFiles() {
+  try {
+    const response = await getFiles()
+    chatStore.setUploadedFiles(Array.isArray(response.files) ? response.files : [])
+    for (const file of response.files || []) {
+      ensureLayerSelection(file)
+    }
+  } catch (error) {
+    console.error('加载文件列表失败:', error)
+    ElMessage.error('加载文件列表失败')
+  }
+}
+
 async function handleCreateSession() {
   try {
-    const data = await createSession()
-    chatStore.addSession(data)
-    await handleSwitchSession(data.thread_id)
-    ElMessage.success(`已创建新会话: ${data.name}`)
+    const session = await createSession()
+    chatStore.addSession(session)
+    await handleSwitchSession(session.thread_id)
+    ElMessage.success(`已创建新会话: ${session.name}`)
   } catch (error) {
     console.error('创建会话失败:', error)
     ElMessage.error('创建会话失败')
@@ -512,121 +610,96 @@ async function handleCreateSession() {
 }
 
 function handleOpenSettings() {
-  router.push('/settings')
+  void router.push('/settings')
 }
 
 function handleOpenTraceDemo() {
-  router.push('/trace-demo')
+  void router.push('/trace-demo')
 }
 
 async function handleSwitchSession(threadId: string) {
-  // 停止之前的流式连接
   stopStreaming()
-
-  // 重置所有状态
   resetStreamingState()
+  reviewModalVisible.value = false
+  resultModalVisible.value = false
+  riskReviewModalVisible.value = false
+  currentRiskReview.value = null
+  chatStore.setCurrentDraft(null)
+  chatStore.setExecutionResult(null)
   chatStore.setExecuting(false)
-
-  // 切换会话
+  chatStore.setScreenshotPath(null)
   chatStore.setThreadId(threadId)
   chatStore.clearMessages()
+
   await loadSessionHistory(threadId)
+  await restoreCurrentTaskPlan(threadId)
 }
 
 async function loadSessionHistory(threadId: string) {
   try {
-    const data = await getSessionHistory(threadId)
-    renderHistory(data)
+    renderHistory(await getSessionHistory(threadId))
   } catch (error) {
     console.error('加载历史失败:', error)
     ElMessage.error('加载历史失败')
   }
 }
 
-function renderHistory(data: any) {
+function renderHistory(data: SessionHistory) {
   chatStore.clearMessages()
-
-  console.log('[RenderHistory] 数据:', data)
-  console.log('[RenderHistory] history:', data.history)
-  console.log('[RenderHistory] chat_messages:', data.chat_messages)
-
-  // 优先使用 history 数组（包含完整的对话轮次）
-  if (data.history && data.history.length > 0) {
-    console.log('[RenderHistory] 使用 history，共', data.history.length, '轮')
-    data.history.forEach((entry: any, index: number) => {
-      // 添加轮次标题
-      chatStore.addSystemMessage(`📌 第 ${index + 1} 轮对话`)
-
-      // 用户输入
-      if (entry.input_query) {
-        chatStore.addUserMessage(entry.input_query)
-      }
-
-      // 执行计划
-      if (entry.plan) {
-        const plan = entry.plan
-        let planText = `📋 **执行计划**\n\n${plan.task || ''}\n\n**执行步骤**:\n\n`
-        if (Array.isArray(plan.steps) && plan.steps.length > 0) {
-          plan.steps.forEach((step: any) => {
-            planText += `${step.step_id}. ${step.description}\n`
-            if (step.gdal_api && step.gdal_api.length) {
-              planText += `   - GDAL API: ${step.gdal_api.join(', ')}\n`
-            }
-            if (step.pyqgis_api && step.pyqgis_api.length) {
-              planText += `   - PyQGIS API: ${step.pyqgis_api.join(', ')}\n`
-            }
-          })
-        }
-        chatStore.addAssistantMessage(planText)
-      }
-
-      // 执行结果
-      if (entry.executor_last_message) {
-        chatStore.addAssistantMessage(`⚙️ **执行结果**\n\n${entry.executor_last_message}`)
-      }
-
-      // 最终总结
-      if (entry.final_summary) {
-        chatStore.addAssistantMessage(`🎉 任务完成！\n\n${entry.final_summary}`)
-      }
-    })
-  }
-  // 如果 history 不存在，使用 chat_messages 数组
-  else if (data.chat_messages && data.chat_messages.length > 0) {
-    console.log('[RenderHistory] 使用 chat_messages，共', data.chat_messages.length, '条消息')
-    data.chat_messages.forEach((msg: any) => {
-      if (msg.role === 'user') {
-        chatStore.addUserMessage(msg.content)
-      } else {
-        chatStore.addAssistantMessage(msg.content)
-      }
-    })
-  }
-  // 后备方案：处理旧数据格式
-  else {
-    console.log('[RenderHistory] 使用后备方案（旧数据格式）')
-
-    if (data.input_query) {
-      chatStore.addUserMessage(data.input_query)
-    }
-
-    if (data.final_summary) {
-      chatStore.addAssistantMessage(`🎉 任务完成！\n\n${data.final_summary}`)
-    }
-
-    if (data.log_summary) {
-      chatStore.addAssistantMessage(`⚙️ **执行结果**\n\n${data.log_summary}`)
-    }
+  for (const message of data.chat_messages || []) {
+    appendHistoryMessage(message)
   }
 
-  // 显示截图（如果有）
+  if (!data.chat_messages?.length) {
+    if (data.input_query) chatStore.addUserMessage(data.input_query)
+    if (data.log_summary) chatStore.addAssistantMessage(data.log_summary)
+    if (data.final_summary) chatStore.addAssistantMessage(data.final_summary)
+  }
+
   if (data.screenshot_path) {
     chatStore.setScreenshotPath(data.screenshot_path)
     screenshotTime.value = new Date().toLocaleTimeString()
   }
+}
 
-  // 移除系统消息，让历史记录更干净
-  // chatStore.addSystemMessage('✅ 已加载会话历史')
+function appendHistoryMessage(message: Message) {
+  if (message.role === 'user') {
+    chatStore.addUserMessage(message.content)
+  } else if (message.role === 'system') {
+    chatStore.addSystemMessage(message.content)
+  } else if (message.role === 'thinking') {
+    chatStore.addThinkingMessage(message.content)
+  } else {
+    chatStore.addAssistantMessage(message.content)
+  }
+}
+
+async function restoreCurrentTaskPlan(threadId: string) {
+  try {
+    const snapshot = await getCurrentState(threadId)
+    const plan = snapshot.state.task_plan
+    if (!isTaskPlan(plan)) return
+
+    chatStore.setCurrentDraft(plan)
+    if (plan.review_status === 'pending_review') {
+      reviewAdvise.value = ''
+      reviewModalVisible.value = true
+    }
+    await loadExecutionDetails(plan.task_id)
+  } catch (error) {
+    // A new session may not have a checkpoint or an execution record yet.
+    console.debug('当前会话没有待恢复的执行状态:', error)
+  }
+}
+
+async function loadExecutionDetails(taskId: string) {
+  try {
+    const response = await getExecution(taskId)
+    chatStore.setExecutionResult(response.execution)
+  } catch (error) {
+    // Execution records are created after a plan reaches the backend runtime.
+    console.debug(`任务 ${taskId} 暂无可查询执行记录:`, error)
+  }
 }
 
 async function handleDeleteSession(threadId: string) {
@@ -639,7 +712,7 @@ async function handleDeleteSession(threadId: string) {
     await apiDeleteSession(threadId)
     chatStore.removeSession(threadId)
     ElMessage.success('会话已删除')
-  } catch (error: any) {
+  } catch (error) {
     if (error !== 'cancel') {
       console.error('删除会话失败:', error)
       ElMessage.error('删除会话失败')
@@ -647,204 +720,194 @@ async function handleDeleteSession(threadId: string) {
   }
 }
 
-// ========== 消息发送 ==========
-
 async function handleSendMessage() {
   const message = inputMessage.value.trim()
   if (!message) return
-
-  // 检查是否正在流式传输
   if (isStreaming.value) {
-    console.warn('正在流式传输中，无法发送新消息')
     ElMessage.warning('请等待当前任务完成')
     return
   }
 
-  // 重置流式状态
   resetStreamingState()
-
-  if (!currentThreadId.value) {
-    await handleCreateSession()
+  const files = selectedFileReferences()
+  if (!files) {
+    ElMessage.warning('请为每个已选择的 GeoPackage 明确选择一个图层')
+    return
   }
 
-  chatStore.addUserMessage(message)
-  inputMessage.value = ''
-  chatStore.setExecuting(true)
-
   try {
-    await startStreaming(message, currentThreadId.value!, uploadedFiles.value.map(f => f.file_path))
+    if (!currentThreadId.value) {
+      const session = await createSession()
+      chatStore.addSession(session)
+      chatStore.setThreadId(session.thread_id)
+    }
+    const threadId = currentThreadId.value
+    if (!threadId) throw new Error('无法创建会话')
+
+    chatStore.setCurrentDraft(null)
+    chatStore.setExecutionResult(null)
+    chatStore.addUserMessage(message)
+    inputMessage.value = ''
+    chatStore.setExecuting(true)
+    await startStreaming({
+      message,
+      thread_id: threadId,
+      files
+    })
   } catch (error) {
     console.error('发送消息失败:', error)
-    ElMessage.error('发送消息失败')
+    ElMessage.error(error instanceof Error ? error.message : '发送消息失败')
     chatStore.setExecuting(false)
   }
 }
 
-function handleKeyDown(event: KeyboardEvent) {
+function handleKeyDown(event: Event | KeyboardEvent) {
+  if (!(event instanceof KeyboardEvent)) return
   if (event.key === 'Enter' && !event.shiftKey) {
     event.preventDefault()
-    handleSendMessage()
+    void handleSendMessage()
   }
 }
-
-// ========== 输入框高度自动调整 ==========
-
-function handleInputResize() {
-  // Element Plus 的 autosize 属性已经处理了大部分情况
-  // 这里添加额外的稳定性保证
-  nextTick(() => {
-    if (messageInputRef.value) {
-      const textarea = messageInputRef.value.$?.querySelector('textarea')
-      if (textarea) {
-        // 确保最小高度
-        const minHeight = 32 // 单行高度
-        const currentHeight = textarea.scrollHeight
-        if (currentHeight < minHeight) {
-          textarea.style.height = minHeight + 'px'
-        }
-      }
-    }
-  })
-}
-
-// ========== 思考内容折叠/展开 ==========
 
 function toggleThinkingCollapse(index: number) {
   thinkingCollapsed.value[index] = !thinkingCollapsed.value[index]
 }
 
-// ========== SSE 事件处理 ==========
-
-// 跟踪当前是否正在接收流式消息
 let isStreamingMessage = false
-// 跟踪当前是否正在接收思考内容
 let isStreamingThinking = false
 
-// 重置流式状态（在发送新消息前调用）
 function resetStreamingState() {
   isStreamingMessage = false
   isStreamingThinking = false
 }
 
-function handleSSEEvent(event: string, data: any) {
+function handleSSEEvent(event: string, data: unknown) {
+  const payload = asRecord(data)
   switch (event) {
     case 'start':
-      chatStore.addSystemMessage('🚀 ' + data.message)
+      chatStore.addSystemMessage(`🚀 ${readString(payload, 'message') || '开始处理'}`)
       break
     case 'node_start':
-      chatStore.addSystemMessage(`🔄 正在执行: ${getNodeDisplayName(data.node)}`)
+      chatStore.addSystemMessage(`🔄 正在执行: ${getNodeDisplayName(readString(payload, 'node') || '未知节点')}`)
       break
     case 'node_end':
-      chatStore.addSystemMessage(`✅ 完成: ${getNodeDisplayName(data.node)}`)
+      chatStore.addSystemMessage(`✅ 完成: ${getNodeDisplayName(readString(payload, 'node') || '未知节点')}`)
       break
-    case 'thinking':
-      // 处理思考内容（reasoning_content）
-      const thinkingContent = data?.content || ''
-      if (thinkingContent) {
-        if (!isStreamingThinking) {
-          // 第一次接收思考内容，创建占位符
-          chatStore.startThinkingMessage()
-          isStreamingThinking = true
-        }
-        // 追加思考内容
-        chatStore.appendThinkingMessage(thinkingContent)
+    case 'thinking': {
+      const content = readString(payload, 'content')
+      if (!content) break
+      if (!isStreamingThinking) {
+        chatStore.startThinkingMessage()
+        isStreamingThinking = true
       }
+      chatStore.appendThinkingMessage(content)
       break
+    }
     case 'output':
-      // 处理正式输出（content）
-      const outputContent = data?.content || ''
-      if (outputContent) {
-        if (!isStreamingMessage) {
-          // 第一次接收输出，创建占位符
-          chatStore.startStreamingMessage()
-          isStreamingMessage = true
-          isStreamingThinking = false // 思考结束
-        }
-        // 追加输出内容
-        chatStore.appendAssistantMessage(outputContent)
+    case 'message_delta': {
+      const content = readString(payload, 'content')
+      if (!content) break
+      if (!isStreamingMessage) {
+        chatStore.startStreamingMessage()
+        isStreamingMessage = true
       }
-      break
-    case 'message_delta':
-      // 处理流式消息 - 追加到最后一条助手消息（保留兼容性）
-      const delta = data?.content || ''
-      if (delta) {
-        if (!isStreamingMessage) {
-          // 开始新的流式消息
-          chatStore.startStreamingMessage()
-          isStreamingMessage = true
-        }
-        // 追加内容
-        chatStore.appendAssistantMessage(delta)
-      }
-      break
-    case 'human_review_required':
-      isStreamingMessage = false // 结束流式消息
       isStreamingThinking = false
-      chatStore.setCurrentDraft(data.draft)
+      chatStore.appendAssistantMessage(content)
+      break
+    }
+    case 'human_review_required': {
+      const taskPlan = payload?.task_plan
+      if (!isTaskPlan(taskPlan)) {
+        chatStore.addSystemMessage('后端返回的 TaskPlan 格式无效，已停止审核。')
+        chatStore.setExecuting(false)
+        break
+      }
+      resetStreamingState()
+      chatStore.setCurrentDraft(taskPlan)
+      chatStore.setExecutionResult(null)
+      reviewAdvise.value = ''
       reviewModalVisible.value = true
       chatStore.setExecuting(false)
+      void loadExecutionDetails(taskPlan.task_id)
       break
-    case 'risk_review_required':
-      isStreamingMessage = false
-      isStreamingThinking = false
-      currentRiskReview.value = data
+    }
+    case 'risk_review_required': {
+      const riskReview = parseRiskReview(data)
+      if (!riskReview) {
+        chatStore.addSystemMessage('高风险审核请求缺少调用身份，已停止审核。')
+        chatStore.setExecuting(false)
+        break
+      }
+      resetStreamingState()
+      currentRiskReview.value = riskReview
       riskReviewComment.value = ''
-      riskReviewModifiedArguments.value = JSON.stringify(data.tool_call?.arguments || {}, null, 2)
       riskReviewModalVisible.value = true
       chatStore.setExecuting(false)
       break
+    }
     case 'result_review_required':
-      isStreamingMessage = false // 结束流式消息
-      isStreamingThinking = false
+      resetStreamingState()
       chatStore.setExecutionResult(data)
       resultFeedback.value = ''
       resultModalVisible.value = true
       chatStore.setExecuting(false)
-      refreshScreenshotFromState()
+      if (currentDraft.value) void loadExecutionDetails(currentDraft.value.task_id)
+      void refreshScreenshotFromState()
       break
-    case 'complete':
-      isStreamingMessage = false // 结束流式消息
-      isStreamingThinking = false
-      const finalSummary = data.summary || ''
-      if (finalSummary) {
-        const lastAssistant = [...messages.value].reverse().find((msg) => msg.role === 'assistant')
+    case 'complete': {
+      resetStreamingState()
+      const summary = readString(payload, 'summary')
+      if (summary) {
+        const lastAssistant = [...messages.value].reverse().find(message => message.role === 'assistant')
         const lastContent = lastAssistant?.content || ''
-        const alreadyStreamed = lastContent.trim() === finalSummary.trim()
-          || lastContent.trim().endsWith(finalSummary.trim())
-
-        if (!alreadyStreamed) {
-          chatStore.addAssistantMessage(`🎉 任务完成！\n\n${finalSummary}`)
+        if (!lastContent.trim().endsWith(summary.trim())) {
+          chatStore.addAssistantMessage(`🎉 任务完成！\n\n${summary}`)
         }
       } else {
         chatStore.addSystemMessage('🎉 任务完成！')
       }
-      if (data.screenshot_path) {
-        chatStore.setScreenshotPath(data.screenshot_path)
+      const screenshot = readString(payload, 'screenshot_path')
+      if (screenshot) {
+        chatStore.setScreenshotPath(screenshot)
         screenshotTime.value = new Date().toLocaleTimeString()
       }
       chatStore.setExecuting(false)
+      if (currentDraft.value) void loadExecutionDetails(currentDraft.value.task_id)
       break
+    }
     case 'error':
-      isStreamingMessage = false // 结束流式消息
-      isStreamingThinking = false
-      chatStore.addAssistantMessage(`❌ 错误: ${data.message}`)
+      resetStreamingState()
+      chatStore.addAssistantMessage(`❌ 错误: ${readString(payload, 'message') || '未知错误'}`)
       chatStore.setExecuting(false)
       break
     case 'paused':
-      isStreamingMessage = false // 结束流式消息
-      isStreamingThinking = false
+      resetStreamingState()
       chatStore.setExecuting(false)
-      chatStore.addSystemMessage(`⏸️ ${data.message}`)
+      chatStore.addSystemMessage(`⏸️ ${readString(payload, 'message') || '任务已暂停'}`)
       break
   }
 }
 
-function formatJson(value: any): string {
-  return JSON.stringify(value || {}, null, 2)
+function parseRiskReview(value: unknown): RiskReviewData | null {
+  const record = asRecord(value)
+  const reviewId = readString(record, 'review_id')
+  if (!reviewId) return null
+  const toolCall = asRecord(record?.tool_call)
+  const argumentsValue = asRecord(toolCall?.arguments) || undefined
+  return {
+    review_id: reviewId,
+    tool_call: toolCall
+      ? { tool_name: readString(toolCall, 'tool_name'), arguments: argumentsValue }
+      : undefined
+  }
+}
+
+function formatJson(value: unknown): string {
+  return JSON.stringify(value ?? {}, null, 2) || '{}'
 }
 
 function handleSSEComplete() {
-  // 流处理完成
+  // The event handler owns the UI transitions for each named SSE event.
 }
 
 function handleSSEError(error: Error) {
@@ -852,73 +915,50 @@ function handleSSEError(error: Error) {
   chatStore.setExecuting(false)
 }
 
-// ========== 人工审核 ==========
-
 async function handleReview(approved: boolean) {
-  if (!currentThreadId.value) return
+  const threadId = currentThreadId.value
+  const taskPlan = currentDraft.value
+  if (!threadId || !taskPlan) return
+
+  const advise = reviewAdvise.value.trim()
+  if (!approved && !advise) {
+    ElMessage.warning('拒绝计划时请填写修改意见')
+    return
+  }
 
   try {
-    await reviewPlan(currentThreadId.value, approved, approved ? null : reviewAdvise.value)
-
-    if (approved) {
-      // 显示计划内容
-      if (currentDraft.value) {
-        let planContent = `📋 **执行计划**\n\n${currentDraft.value.task}\n\n**执行步骤** (${currentDraft.value.steps.length}):\n\n`
-        currentDraft.value.steps.forEach((step) => {
-          planContent += `${step.step_id}. ${step.description}\n`
-          if (step.gdal_api && step.gdal_api.length) {
-            planContent += `   - GDAL API: ${step.gdal_api.join(', ')}\n`
-          }
-          if (step.pyqgis_api && step.pyqgis_api.length) {
-            planContent += `   - PyQGIS API: ${step.pyqgis_api.join(', ')}\n`
-          }
-        })
-        chatStore.addAssistantMessage(planContent)
-      }
-
-      reviewModalVisible.value = false
-      chatStore.addSystemMessage('✅ 已批准，继续执行')
-      chatStore.setExecuting(true)
-
-      // 重置流式状态，准备接收新的流式消息
-      resetStreamingState()
-
-      // ✅ 使用正确的函数名
-      await resumeStreaming(currentThreadId.value)
-    } else {
-      reviewModalVisible.value = false
-      chatStore.addSystemMessage('📝 已提交修改意见')
-
-      // 使用修改意见重新规划（不需要调用 resume）
-      await handleSendMessage()
-    }
+    await reviewPlan({
+      thread_id: threadId,
+      task_id: taskPlan.task_id,
+      revision: taskPlan.revision,
+      approved,
+      advise: approved ? undefined : advise
+    })
+    reviewModalVisible.value = false
+    chatStore.addSystemMessage(approved ? '✅ 已批准当前计划，继续执行' : '📝 已提交意见，将在同一任务中重新规划')
+    chatStore.setExecuting(true)
+    resetStreamingState()
+    await resumeStreaming(threadId)
   } catch (error) {
     console.error('审核失败:', error)
     ElMessage.error('审核失败')
-    // 审核失败时，恢复执行状态
     chatStore.setExecuting(false)
   }
 }
 
-// ========== 执行结果确认 ==========
-
 async function handleResultConfirm(isCompleted: boolean) {
-  if (!currentThreadId.value) return
+  const threadId = currentThreadId.value
+  if (!threadId) return
 
   try {
     const feedback = isCompleted ? undefined : resultFeedback.value.trim() || undefined
-    await confirmResult(currentThreadId.value, isCompleted, feedback)
+    await confirmResult(threadId, isCompleted, feedback)
     resultModalVisible.value = false
     chatStore.addSystemMessage(isCompleted ? '✅ 确认任务成功，继续反思' : '❌ 确认任务失败，继续反思')
     chatStore.setExecuting(true)
-
     resultFeedback.value = ''
-
-    // 重置流式状态
     resetStreamingState()
-
-    // ✅ 使用正确的函数名
-    await resumeStreaming(currentThreadId.value)
+    await resumeStreaming(threadId)
   } catch (error) {
     console.error('结果确认失败:', error)
     ElMessage.error('结果确认失败')
@@ -926,49 +966,32 @@ async function handleResultConfirm(isCompleted: boolean) {
   }
 }
 
-async function handleRiskReview(status: 'approved' | 'rejected' | 'modified') {
-  if (!currentThreadId.value || !currentRiskReview.value) return
+async function handleRiskReview(status: 'approved' | 'rejected') {
+  const threadId = currentThreadId.value
+  const riskReview = currentRiskReview.value
+  if (!threadId || !riskReview) return
 
   try {
-    let modifiedArguments: Record<string, any> | undefined
-    if (status === 'modified') {
-      try {
-        modifiedArguments = JSON.parse(riskReviewModifiedArguments.value || '{}')
-      } catch {
-        ElMessage.error('修改参数必须是有效 JSON')
-        return
-      }
-    }
-
     await submitRiskReview(
-      currentThreadId.value,
-      currentRiskReview.value.review_id,
+      threadId,
+      riskReview.review_id,
       status,
-      riskReviewComment.value.trim() || undefined,
-      modifiedArguments
+      riskReviewComment.value.trim() || undefined
     )
     riskReviewModalVisible.value = false
     chatStore.addSystemMessage(
       status === 'approved'
         ? '✅ 风险操作已批准，继续执行'
-        : status === 'modified'
-          ? '📝 风险操作参数已修改，继续执行'
-          : '❌ 风险操作已拒绝'
+        : '❌ 风险操作已拒绝'
     )
     chatStore.setExecuting(true)
     resetStreamingState()
-    await resumeStreaming(currentThreadId.value)
+    await resumeStreaming(threadId)
   } catch (error) {
     console.error('风险审核失败:', error)
     ElMessage.error('风险审核失败')
     chatStore.setExecuting(false)
   }
-}
-
-// ========== 文件上传 ==========
-
-function setupDragDrop() {
-  // 处理在模板中
 }
 
 function handleDragOver() {
@@ -982,9 +1005,7 @@ function handleDragLeave() {
 function handleDrop(event: DragEvent) {
   isDragOver.value = false
   const files = event.dataTransfer?.files
-  if (files) {
-    Array.from(files).forEach(uploadSingleFile)
-  }
+  if (files) void Promise.all(Array.from(files).map(uploadSingleFile))
 }
 
 function handleUploadClick() {
@@ -992,51 +1013,104 @@ function handleUploadClick() {
 }
 
 function handleFileUpload(event: Event) {
-  const files = (event.target as HTMLInputElement).files
-  if (files) {
-    Array.from(files).forEach(uploadSingleFile)
-  }
+  const input = event.target
+  if (!(input instanceof HTMLInputElement) || !input.files) return
+  const files = Array.from(input.files)
+  input.value = ''
+  void Promise.all(files.map(uploadSingleFile))
 }
 
 async function uploadSingleFile(file: File) {
   try {
-    const data = await apiUploadFile(file)
-    chatStore.addUploadedFile(data)
+    const uploaded = await apiUploadFile(file)
+    chatStore.addUploadedFile(uploaded)
+    chatStore.setFileSelected(uploaded.file_id, true)
+    ensureLayerSelection(uploaded)
+    ElMessage.success(`已上传并选择 ${uploaded.filename}`)
   } catch (error) {
     console.error('文件上传失败:', error)
-    ElMessage.error('文件上传失败')
+    ElMessage.error(error instanceof Error ? error.message : '文件上传失败')
   }
 }
 
-function handleRemoveFile(index: number) {
-  chatStore.removeUploadedFile(index)
+function handleFileSelection(file: UploadedFile, event: Event) {
+  const input = event.target
+  if (!(input instanceof HTMLInputElement)) return
+  chatStore.setFileSelected(file.file_id, input.checked)
 }
 
-// ========== QGIS 插件状态监控 ==========
+function selectedFileReferences(): Array<string | { file_id: string; layer_name: string }> | null {
+  const references: Array<string | { file_id: string; layer_name: string }> = []
+  for (const fileId of selectedFileIds.value) {
+    const file = uploadedFiles.value.find(candidate => candidate.file_id === fileId)
+    if (!file) continue
+    if (file.layers && file.layers.length > 1) {
+      const layerName = selectedLayerByFileId.value[file.file_id]
+      if (!layerName) return null
+      references.push({ file_id: file.file_id, layer_name: layerName })
+    } else {
+      references.push(file.file_id)
+    }
+  }
+  return references
+}
+
+function getLayerName(layer: LayerInfo): string {
+  return layer.layer_name || layer.name || ''
+}
+
+function getFileLayerInfos(file: UploadedFile): LayerInfo[] {
+  if (file.layers?.length) return file.layers
+  return file.layer_info ? [file.layer_info] : []
+}
+
+function ensureLayerSelection(file: UploadedFile) {
+  if (file.layers && file.layers.length > 1 && !(file.file_id in selectedLayerByFileId.value)) {
+    selectedLayerByFileId.value[file.file_id] = ''
+  }
+}
+
+function formatFields(fields: unknown[] | undefined): string {
+  if (!fields?.length) return fields ? '无' : '未提供'
+  return fields.map((field) => {
+    if (typeof field === 'string') return field
+    const record = asRecord(field)
+    if (record) {
+      const name = readString(record, 'name') || readString(record, 'field_name')
+      const type = readString(record, 'type') || readString(record, 'data_type') || readString(record, 'field_type')
+      if (name) return type ? `${name} (${type})` : name
+    }
+    return JSON.stringify(field) || String(field)
+  }).join(', ')
+}
+
+function formatBytes(size: number): string {
+  if (size < 1024) return `${size} B`
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`
+}
 
 async function refreshPluginStatus() {
   try {
     const data = await getQGISStatus()
-    chatStore.setQGISStatus(data.status || 'running')
-    chatStore.setQGISToolsCount(data.tools_count || 0)
-  } catch (error) {
+    chatStore.setQGISStatus(data.status)
+    chatStore.setQGISToolsCount(data.tools_count)
+  } catch {
     chatStore.setQGISStatus('error')
   }
 }
 
 function startPluginStatusMonitor() {
-  refreshPluginStatus()
+  void refreshPluginStatus()
   pluginStatusTimer.value = window.setInterval(refreshPluginStatus, 5000)
 }
 
-// ========== 截图预览 ==========
-
 async function refreshScreenshotFromState() {
-  if (!currentThreadId.value) return
-
+  const threadId = currentThreadId.value
+  if (!threadId) return
   try {
-    const data = await getCurrentState(currentThreadId.value)
-    const path = data?.state?.screenshot_path
+    const data = await getCurrentState(threadId)
+    const path = readString(asRecord(data.state), 'screenshot_path')
     if (path) {
       chatStore.setScreenshotPath(path)
       screenshotTime.value = new Date().toLocaleTimeString()
@@ -1044,6 +1118,28 @@ async function refreshScreenshotFromState() {
   } catch (error) {
     console.error('获取截图状态失败:', error)
   }
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null
+}
+
+function readString(record: Record<string, unknown> | null, key: string): string | undefined {
+  const value = record?.[key]
+  return typeof value === 'string' ? value : undefined
+}
+
+function isTaskPlan(value: unknown): value is TaskPlan {
+  const record = asRecord(value)
+  return typeof record?.task_id === 'string'
+    && typeof record.revision === 'number'
+    && typeof record.review_status === 'string'
+    && Array.isArray(record.required_inputs)
+    && Array.isArray(record.expected_outputs)
+    && Array.isArray(record.steps)
+    && Array.isArray(record.tool_calls)
 }
 </script>
 

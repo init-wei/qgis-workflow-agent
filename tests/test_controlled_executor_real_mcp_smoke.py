@@ -57,7 +57,7 @@ def test_controlled_smoke_defaults_to_ignored_run_artifacts():
     assert trace_path == DEFAULT_SMOKE_TRACE_PATH
     assert screenshot_path == DEFAULT_SMOKE_SCREENSHOT_PATH
     assert trace_path.parts[:2] == (".target", "demo")
-    assert screenshot_path.parts[:2] == (".target", "demo")
+    assert screenshot_path == Path("smoke_points.png")
 
 
 def test_controlled_smoke_can_resolve_tracked_demo_artifacts():
@@ -72,12 +72,12 @@ def test_controlled_smoke_can_resolve_tracked_demo_artifacts():
 
 
 def test_controlled_smoke_task_plan_uses_resolved_screenshot_path():
-    task_plan = build_smoke_task_plan(".target/demo/smoke_points.png")
+    task_plan = build_smoke_task_plan("smoke_points.png")
 
-    assert task_plan.expected_outputs[1].path == ".target/demo/smoke_points.png"
+    assert task_plan.expected_outputs[0].path == str(Path.cwd() / "shared/outputs/smoke-load-layer-capture/r1/map_screenshot/smoke_points.png")
     assert (
-        task_plan.metadata["tool_calls"][1]["arguments"]["path"]
-        == ".target/demo/smoke_points.png"
+        task_plan.tool_calls[1].arguments["path"]
+        == task_plan.expected_outputs[0].path
     )
 
 

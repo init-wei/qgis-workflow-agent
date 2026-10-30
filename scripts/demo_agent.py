@@ -18,19 +18,23 @@ from agent.state import create_initial_state
 
 
 def print_plan(plan):
-    """打印计划详情"""
+    """Print the single reviewable TaskPlan contract."""
     if not plan:
         print("  ❌ 计划为空")
         return
-    
-    print(f"\n  任务: {plan.task}")
-    print(f"\n  执行步骤（共{len(plan.steps)}步）:")
-    for step in plan.steps:
-        print(f"\n    步骤 {step.step_id}: {step.description}")
-        if step.gdal_api:
-            print(f"      GDAL API: {', '.join(step.gdal_api)}")
-        if step.pyqgis_api:
-            print(f"      PyQGIS API: {', '.join(step.pyqgis_api)}")
+
+    get_value = plan.get if isinstance(plan, dict) else lambda key, default=None: getattr(plan, key, default)
+    steps = get_value("steps", []) or []
+    calls = get_value("tool_calls", []) or []
+    print(f"\n  任务: {get_value('task_summary', '')}")
+    print(f"\n  执行步骤（共{len(steps)}步）:")
+    for step in steps:
+        step_value = step.get if isinstance(step, dict) else lambda key, default=None: getattr(step, key, default)
+        print(f"\n    步骤 {step_value('step_id')}: {step_value('description')}")
+    print("\n  实际调用:")
+    for call in calls:
+        call_value = call.get if isinstance(call, dict) else lambda key, default=None: getattr(call, key, default)
+        print(f"    - {call_value('tool_name')}: {json.dumps(call_value('arguments', {}), ensure_ascii=False)}")
 
 
 def review_plan() -> tuple[bool, Optional[str]]:
@@ -77,13 +81,6 @@ def review_result(state):
     # 显示截图路径
     if state.get("screenshot_path"):
         print(f"\n截图已保存: {state['screenshot_path']}")
-    
-    # 显示执行日志
-    if state.get("execution_logs"):
-        print(f"\n执行日志:")
-        for log in state["execution_logs"]:
-            status = "✅" if log.get("success") else "❌"
-            print(f"  {status} 步骤 {log.get('step_id')}: {log.get('message', '')}")
     
     input("\n按Enter键结束...")
 
@@ -216,17 +213,20 @@ async def run_agent(user_query: str, reset_thread: bool = False) -> Optional[dic
                 final_state = chunk
                 
                 # 显示Planner进度
-                if chunk.get("draft") and not chunk.get("plan"):
-                    print("✓ Planner生成draft完成")
+                if chunk.get("task_plan"):
+                    print("✓ Planner生成TaskPlan完成")
                 
                 # 显示执行进度
                 if "current_step_id" in chunk:
                     current_step = chunk["current_step_id"]
                     if current_step != last_step:
                         last_step = current_step
-                        plan = chunk.get("plan")
-                        if plan and current_step < len(plan.steps):
-                            print(f"⚙️  执行步骤 {current_step + 1}/{len(plan.steps)}: {plan.steps[current_step].description}")
+                        task_plan = chunk.get("task_plan")
+                        if task_plan:
+                            steps = task_plan.get("steps", []) if isinstance(task_plan, dict) else task_plan.steps
+                            if current_step < len(steps):
+                                description = steps[current_step].get("description") if isinstance(steps[current_step], dict) else steps[current_step].description
+                                print(f"⚙️  执行步骤 {current_step + 1}/{len(steps)}: {description}")
                 
                 # 检查是否完成API RAG
                 if chunk.get("api_context_structured") and not interrupted:
@@ -237,10 +237,16 @@ async def run_agent(user_query: str, reset_thread: bool = False) -> Optional[dic
                     print("✓ Reflector节点完成")
             
             # 检查是否在human_review_node前中断
-            if final_state and final_state.get("draft") and not final_state.get("status", False):
+            task_plan = final_state.get("task_plan") if final_state else None
+            plan_status = (
+                task_plan.get("review_status")
+                if isinstance(task_plan, dict)
+                else getattr(task_plan, "review_status", None)
+            )
+            if task_plan and plan_status == "pending_review":
                 interrupted = True
                 print("\n⏸️  到达中断点：计划审核")
-                print_plan(final_state["draft"])
+                print_plan(task_plan)
                 
                 # 人工审核
                 approved, advise = review_plan()
@@ -256,20 +262,21 @@ async def run_agent(user_query: str, reset_thread: bool = False) -> Optional[dic
                     await app.aupdate_state(
                         config,
                         {
-                            "plan": final_state["draft"],
-                            "status": True
+                            "task_plan": task_plan.model_copy(update={"review_status": "approved"})
+                            if hasattr(task_plan, "model_copy")
+                            else {**task_plan, "review_status": "approved"}
                         }
                     )
                 else:
                     # 需要修改
                     print(f"\n📝 修改意见: {advise}")
-                    retry_count = final_state.get("retry_count", 0)
                     await app.aupdate_state(
                         config,
                         {
                             "advise": advise,
-                            "status": False,
-                            "retry_count": retry_count + 1
+                            "task_plan": task_plan.model_copy(update={"review_status": "rejected"})
+                            if hasattr(task_plan, "model_copy")
+                            else {**task_plan, "review_status": "rejected"}
                         }
                     )
                     print("🔄 将根据意见重新规划...\n")
