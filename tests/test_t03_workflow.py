@@ -7,6 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 from langgraph.checkpoint.memory import MemorySaver
 
+from agent import spatial_validation
 from agent.graph import build_graph
 from agent.nodes import planner_node as planner_module
 from agent.planning.plan_schema import TaskPlan
@@ -23,6 +24,10 @@ def event(response, name):
 
 
 def test_planning_receives_installed_capabilities_and_selected_layer_metadata(monkeypatch, tmp_path):
+    def no_system_inspection(_request):
+        raise AssertionError('Offline planning test must not call the system GIS inspector')
+
+    monkeypatch.setattr(spatial_validation, '_system_inspector', no_system_inspection)
     monkeypatch.chdir(tmp_path)
     source = tmp_path / "points.geojson"
     source.write_text('{"type":"FeatureCollection","features":[]}')
@@ -59,7 +64,8 @@ def test_planning_receives_installed_capabilities_and_selected_layer_metadata(mo
             }))
 
     model = Model()
-    graph = build_graph(MemorySaver(), processing_inspector=processing_inspector)
+    graph = build_graph(MemorySaver(), processing_inspector=processing_inspector,
+                        spatial_inspector=fake_spatial_inspector)
 
     async def get_graph():
         return graph
