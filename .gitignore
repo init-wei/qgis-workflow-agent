@@ -72,5 +72,10 @@ desktop.ini
 # --- Docker ---
 .docker-compose.override.yml
 
-# langsmith
-agent/observability.py
+# LangSmith implementation is source code and must be tracked.
+# Isolated development runtime
+.runtime/
+.env.*
+!.env.example
+!.env.*.example
+.ruff_cache/

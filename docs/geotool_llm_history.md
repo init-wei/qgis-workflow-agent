@@ -1,3 +1,5 @@
+> 原型历史/基线说明。V1 当前范围和开发入口见[文档索引](README.md)，不可据此宣称重构已完成。
+
 # GeoTool-LLM Q0 Implementation History
 
 This note replaces the earlier Q0 task checklist. The checklist items are complete enough to be represented as history, so this document keeps only what was implemented, where it lives, and how it is verified.

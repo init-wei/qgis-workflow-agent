@@ -1,0 +1,51 @@
+{
+  "type": "FeatureCollection",
+  "name": "phase11_points",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 1,
+        "group": "a",
+        "value": 10
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          116.38,
+          39.9
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 2,
+        "group": "a",
+        "value": 20
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          116.39,
+          39.91
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 3,
+        "group": "b",
+        "value": 30
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          116.4,
+          39.92
+        ]
+      }
+    }
+  ]
+}

@@ -1,8 +1,7 @@
 -- PostgreSQL扩展初始化脚本
 -- 该文件会在容器启动时自动执行
 
--- 连接到qgis_db数据库
-\c qgis_db;
+-- 使用容器 POSTGRES_DB 指定的当前项目数据库；不切换到其他数据库。
 
 -- 启用PostGIS扩展（空间数据支持）
 CREATE EXTENSION IF NOT EXISTS postgis;

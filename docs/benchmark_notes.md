@@ -1,3 +1,5 @@
+> 原型历史/基线说明。V1 当前范围和开发入口见[文档索引](README.md)，不可据此宣称重构已完成。
+
 # Phase 9/10 Benchmark Notes
 
 ## Purpose

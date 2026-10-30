@@ -1,29 +1,21 @@
-version: '3.8'
-
+name: ${COMPOSE_PROJECT_NAME:-qgis-workflow-agent-v1}
 services:
   postgres:
-    image: postgis/postgis:16-3.4
-    container_name: qgis_postgres
+    image: postgis/postgis:16-3.4@sha256:44126d872ac91993766c341e369c539e8196614321765d36a6f1bab0419a5fa5
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: qgis_db
-      # 允许所有IP连接（开发环境）
-      POSTGRES_HOST_AUTH_METHOD: trust
+      POSTGRES_USER: ${POSTGRES_USER:-qgis_agent}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-qgis_workflow}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-55433}:5432"
     volumes:
-      # 数据持久化
       - postgres_data:/var/lib/postgresql/data
-      # 初始化脚本
-      - ./scripts/init_extensions.sql:/docker-entrypoint-initdb.d/init_extensions.sql
+      - ./scripts/init_extensions.sql:/docker-entrypoint-initdb.d/10-extensions.sql:ro
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
 volumes:
   postgres_data:
-    driver: local

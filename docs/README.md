@@ -1,21 +1,13 @@
-# Project Documentation
+# 项目文档
 
-This folder is the single home for project documentation. Current operational docs live at the top level; historical implementation notes keep only what was actually built.
+当前处于 V1 重构的开发前置阶段。已确认方案已迁入本仓库，业务代码仍为原型；环境验证与任务实施分别验收。
 
-## Current Docs
+- [开发交接与自主编排](agents/orchestration.md)
+- [环境与启动](onboarding/README.md)、[实际基线](onboarding/baseline-2026-10-30.md)
+- [领域词汇](../CONTEXT.md)、[目标架构](architecture/README.md)、[决策](adr/README.md)
+- [V1 规格与验收](specs/0001-qgis-workflow-agent-v1.md)
+- [分阶段实施与评测](implementation-plan.md)、[正式任务索引](tickets/README.md)
+- [开发](development.md)、[测试](testing.md)、[文档](documentation.md)
+- [代码规模估计](size-estimate.md)、[来源说明](onboarding/provenance.md)
 
-- [minimal_real_e2e_task.md](minimal_real_e2e_task.md): manual E2E flow for the proven QGIS layer-loading path.
-- [web_ui.md](web_ui.md): current Web UI flow and backend endpoints.
-- [geotool_llm_integration.md](geotool_llm_integration.md): schema boundary between this runtime and GeoTool-LLM.
-- [benchmark_notes.md](benchmark_notes.md): static demo replay evidence and benchmark limits.
-
-## Historical Implementation Notes
-
-- [geotool_llm_history.md](geotool_llm_history.md): completed Q0 work, mapped to code and tests.
-
-## Documentation Policy
-
-- Keep current docs factual and runnable.
-- Do not keep open-ended phase task lists after the work is implemented.
-- Preserve history as concise implementation notes: what changed, where it lives, and how it was verified.
-- Move speculative or superseded design material out of the active docs path unless it still describes current behavior.
+原型历史材料保留在本目录旧文件和 superpowers 下，仅供理解基线；它们描述的自动模板注册、旧 ExecutionTrace、RAG 或演示不能覆盖 V1 规格。

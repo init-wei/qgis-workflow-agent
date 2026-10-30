@@ -1,5 +1,5 @@
 blank_issues_enabled: false
 contact_links:
   - name: Engineering plan
-    url: https://github.com/init-wei/qgis-workflow-agent/blob/main/doc/qgis_workflow_agent_engineering_plan.md
-    about: See doc/qgis_workflow_agent_engineering_plan.md in this repository for the planned architecture and phases.
+    url: https://github.com/init-wei/qgis-workflow-agent/blob/codex/v1-refactor/docs/specs/0001-qgis-workflow-agent-v1.md
+    about: See the accepted V1 spec on codex/v1-refactor for scope and acceptance criteria.
