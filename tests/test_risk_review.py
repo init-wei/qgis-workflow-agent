@@ -236,20 +236,20 @@ def test_feedback_must_match_reviewed_arguments(tmp_path):
     assert client.calls == []
 
 
-def test_review_manager_flags_save_overwrite_and_delete_semantics():
+def test_review_manager_uses_declared_risk_not_argument_text():
     manager = RiskReviewManager()
 
     assert manager.requires_risk_review(
         ToolCallPlan(step_id=1, tool_name="save_project", arguments={})
     )
-    assert manager.requires_risk_review(
+    assert not manager.requires_risk_review(
         ToolCallPlan(
             step_id=2,
             tool_name="execute_processing",
             arguments={"parameters": {"OVERWRITE": True}},
         )
     )
-    assert manager.requires_risk_review(
+    assert not manager.requires_risk_review(
         ToolCallPlan(
             step_id=3,
             tool_name="layer_operation",
@@ -273,6 +273,8 @@ def test_backend_builds_risk_review_feedback_from_api_shape():
     )
     request = RiskReviewDecisionRequest(
         thread_id="thread-1",
+        task_id="task-1",
+        revision=1,
         review_id="review-4",
         status="modified",
         comment="Change output path",

@@ -109,10 +109,8 @@ async def reflector_node(state: AgentState) -> Dict[str, Any]:
     # 1. 分析执行结果
     total_steps = len(task_plan.steps) if task_plan else 0
     is_completed = state.get("is_completed")
-    if is_completed is None:
-        is_success = len(messages) > 0
-    else:
-        is_success = bool(is_completed)
+    is_success = is_completed is True
+    result_label = '未确认' if is_completed is None else ('成功' if is_success else '失败')
 
     error_count = 0 if is_success else 1
     
@@ -157,7 +155,7 @@ async def reflector_node(state: AgentState) -> Dict[str, Any]:
 {{ log_summary_text }}
 
 总步骤数: {{ total_steps }}
-执行结果: {{ "成功" if is_success else "失败" }}
+用户确认结果: {{ result_label }}
 {% if not is_success %}用户认为的失败原因: {{ user_feedback }}{% endif %}
 """
     )
@@ -167,6 +165,7 @@ async def reflector_node(state: AgentState) -> Dict[str, Any]:
         log_summary_text=log_summary_text,
         total_steps=total_steps,
         is_success=is_success,
+        result_label=result_label,
         user_feedback=state.get("user_feedback", "无反馈"),
     )
     
@@ -183,7 +182,7 @@ async def reflector_node(state: AgentState) -> Dict[str, Any]:
         
     except Exception as e:
         logger.error(f"生成总结失败: {e}")
-        final_summary = f"任务{'成功' if is_success else '失败'} (总步骤: {total_steps})"
+        final_summary = f"用户确认结果: {result_label} (总步骤: {total_steps})"
     
     # 3. 评估任务价值
     quality_score = 0.0

@@ -215,6 +215,7 @@ def create_tables():
             
             cur.execute("ALTER TABLE task_executions ADD COLUMN IF NOT EXISTS inflight_call JSONB")
             cur.execute("ALTER TABLE task_executions ADD COLUMN IF NOT EXISTS resume_state JSONB")
+            cur.execute("ALTER TABLE task_executions ADD COLUMN IF NOT EXISTS reconciliation JSONB")
 
             # 提交事务
             conn.commit()

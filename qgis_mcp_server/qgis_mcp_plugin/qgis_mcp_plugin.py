@@ -5,6 +5,7 @@ import json
 import stat
 import socket
 import traceback
+from uuid import uuid4
 from qgis.core import *
 from qgis.gui import *
 from qgis.PyQt.QtCore import QObject, pyqtSignal, QTimer, Qt, QSize
@@ -12,9 +13,9 @@ from qgis.PyQt.QtWidgets import QAction, QDockWidget, QVBoxLayout, QLabel, QPush
 from qgis.PyQt.QtGui import QIcon, QColor, QImageReader
 from qgis.utils import active_plugins
 from .processing_policy import validate_processing_request, validate_parameter_values
-from .artifact_paths import (artifact_component_paths, call_output_paths, new_output_path,
+from .artifact_paths import (artifact_component_paths, call_output_paths, new_output_path, new_project_output_path,
                              replace_processing_output_paths, reserve_output_path,
-                             resolve_owned_output_path)
+                             resolve_owned_output_path, validate_qgz_archive)
 
 
 def _require_readable_output(path):
@@ -27,6 +28,44 @@ def _require_readable_output(path):
     with open(path, 'rb') as stream:
         if not stream.read(1):
             raise ValueError(f"Output is empty: {path}")
+
+
+def _require_persisted_project_layer(layer):
+    """Accept only supported, readable local layers with no pending edits."""
+    if isinstance(layer, QgsVectorLayer):
+        edit_buffer = layer.editBuffer()
+        if layer.isModified() or (edit_buffer is not None and edit_buffer.isModified()):
+            raise ValueError(f"Cannot save project with uncommitted layer edits: {layer.name()}")
+        provider = 'ogr'
+        extensions = {'.geojson', '.json', '.gpkg', '.shp'}
+    elif isinstance(layer, QgsRasterLayer):
+        provider = 'gdal'
+        extensions = {'.tif', '.tiff'}
+    else:
+        raise ValueError(f"Cannot save project with an unsupported layer: {layer.name()}")
+
+    if layer.providerType() != provider:
+        raise ValueError(
+            f"Cannot save project with a non-persistent or unsupported provider "
+            f"({layer.providerType()}): {layer.name()}; use a readable local OGR or GDAL file"
+        )
+    parts = QgsProviderRegistry.instance().decodeUri(provider, layer.source())
+    source = parts.get('path')
+    if (not layer.isValid() or parts.get('vsiPrefix') or not isinstance(source, str)
+            or not os.path.isabs(source) or os.path.splitext(source)[1].lower() not in extensions):
+        raise ValueError(
+            f"Cannot save project with a non-persistent or unsupported source: {layer.name()}; "
+            "use a readable local GeoJSON, JSON, GeoPackage, Shapefile, or TIFF file"
+        )
+    try:
+        info = os.stat(source)
+        if not stat.S_ISREG(info.st_mode) or not info.st_mode & 0o444:
+            raise ValueError("source is not a readable regular file")
+        with open(source, 'rb') as stream:
+            stream.read(1)
+    except (OSError, ValueError) as exc:
+        raise ValueError(f"Cannot save project with an unreadable local source: {layer.name()}") from exc
+
 
 class QgisMCPServer(QObject):
     """Server class to handle socket connections and execute QGIS commands"""
@@ -41,6 +80,7 @@ class QgisMCPServer(QObject):
         self.client = None
         self.buffer = b''
         self.timer = None
+        self.instance_id = str(uuid4())
     
     def start(self):
         """Start the server"""
@@ -52,6 +92,7 @@ class QgisMCPServer(QObject):
             self.socket.bind((self.host, self.port))
             self.socket.listen(1)
             self.socket.setblocking(False)
+            self.instance_id = str(uuid4())
             
             # Create a timer to process server operations
             self.timer = QTimer()
@@ -164,6 +205,7 @@ class QgisMCPServer(QObject):
                 "get_layer_features": self.get_layer_features,
                 "execute_processing": self.execute_processing,
                 "capture_map_canvas": self.capture_map_canvas,
+                "save_project": self.save_project,
             }
             
             handler = handlers.get(cmd_type)
@@ -198,6 +240,8 @@ class QgisMCPServer(QObject):
             "qgis_version": Qgis.version(),
             "profile_folder": QgsApplication.qgisSettingsDirPath(),
             "plugins_count": len(active_plugins),
+            "process_id": os.getpid(),
+            "instance_id": self.instance_id,
         }
         if processing_requests is not None:
             if not isinstance(processing_requests, list):
@@ -497,18 +541,31 @@ class QgisMCPServer(QObject):
         except Exception as e:
             raise Exception(f"Processing error: {str(e)}")
     
-    def save_project(self, path=None, **kwargs):
-        """Save the current project"""
+    def save_project(self, path, **kwargs):
+        """Write an owned project copy without changing the active project's identity."""
         project = QgsProject.instance()
-        
-        if not path and not project.fileName():
-            raise Exception("No project path specified and no current project path")
-        
-        save_path = path if path else project.fileName()
-        if project.write(save_path):
-            return {"saved": save_path}
-        else:
-            raise Exception(f"Failed to save project to {save_path}")
+        target = new_project_output_path(path)
+        for layer in project.mapLayers().values():
+            _require_persisted_project_layer(layer)
+        reserve_output_path(str(target))
+        original_filename = project.fileName()
+        original_dirty = project.isDirty()
+        layer_count = len(project.mapLayers())
+        try:
+            self._write_started = True
+            if not project.write(str(target)):
+                raise ValueError(f"Failed to save project to {target}")
+        finally:
+            project.setFileName(original_filename)
+            project.setDirty(original_dirty)
+        _require_readable_output(target)
+        with open(target, 'rb') as stream:
+            validate_qgz_archive(stream)
+        readback = QgsProject()
+        if (not readback.read(str(target)) or len(readback.mapLayers()) != layer_count
+                or any(not layer.isValid() for layer in readback.mapLayers().values())):
+            raise ValueError(f"Saved project could not be read back: {target}")
+        return {"success": True, "path": str(target), "layer_count": layer_count}
     
     def load_project(self, path, **kwargs):
         """Load a project"""

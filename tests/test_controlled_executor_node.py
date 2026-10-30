@@ -87,7 +87,7 @@ async def _assert_executor_does_not_call_mcp_before_plan_approval(monkeypatch):
     result = await executor_node(state)
 
     assert fake_client.calls == []
-    assert result["is_completed"] is False
+    assert result["is_completed"] is None
     assert "未批准" in result["messages"][0].content
 
 
@@ -145,5 +145,5 @@ async def _assert_executor_rejects_invalid_references(monkeypatch):
     result = await executor_node(state)
 
     assert fake_client.calls == []
-    assert result["is_completed"] is False
+    assert result["is_completed"] is None
     assert "校验失败" in result["messages"][0].content

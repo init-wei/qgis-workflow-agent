@@ -9,27 +9,13 @@ from uuid import uuid4
 
 from agent.tools.tool_contracts import HumanFeedback, ToolCallPlan
 
-RISKY_TOOL_KEYWORDS = (
-    "delete",
-    "remove",
-    "overwrite",
-    "save_project",
-    "save-project",
-    "save project",
-)
-
-
 class RiskReviewManager:
     """Build and apply risk-review feedback for planned tool calls."""
 
     def requires_risk_review(self, call: ToolCallPlan) -> bool:
-        if call.tool_name == "execute_code":
+        if call.tool_name in {"execute_code", "save_project"}:
             return True
-        if call.risk_level == "high" or call.requires_review:
-            return True
-        return self._contains_risky_semantics(call.tool_name) or (
-            self._contains_risky_semantics(call.arguments)
-        )
+        return call.risk_level == "high" or call.requires_review
 
     def build_pending_feedback(
         self,
@@ -79,25 +65,3 @@ class RiskReviewManager:
                 (effective_call or original_call).arguments
             )
         return metadata
-
-    def _contains_risky_semantics(self, value: Any) -> bool:
-        if isinstance(value, bool):
-            return False
-        if isinstance(value, str):
-            normalized = value.lower().replace("-", "_")
-            return any(
-                keyword.replace("-", "_") in normalized
-                for keyword in RISKY_TOOL_KEYWORDS
-            )
-        if isinstance(value, dict):
-            for key, nested_value in value.items():
-                if self._contains_risky_semantics(str(key)):
-                    if nested_value is False or nested_value is None:
-                        continue
-                    return True
-                if self._contains_risky_semantics(nested_value):
-                    return True
-            return False
-        if isinstance(value, list):
-            return any(self._contains_risky_semantics(item) for item in value)
-        return False

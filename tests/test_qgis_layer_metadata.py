@@ -11,13 +11,15 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 @pytest.mark.external
-def test_loaded_layer_metadata_matches_known_three_point_fixture():
+def test_loaded_layer_metadata_matches_known_three_point_fixture(tmp_path):
     script = '''
 import json
+import os
 import sys
 from qgis.core import QgsApplication
 app = QgsApplication([], False)
 app.initQgis()
+assert os.path.commonpath([os.environ['QGIS_CUSTOM_CONFIG_PATH'], QgsApplication.qgisSettingsDirPath()]) == os.environ['QGIS_CUSTOM_CONFIG_PATH']
 from qgis_mcp_server.qgis_mcp_plugin.qgis_mcp_plugin import QgisMCPServer
 server = QgisMCPServer()
 loaded = server.add_vector_layer(sys.argv[1], "phase11_points")
@@ -28,7 +30,7 @@ print(json.dumps({"loaded": loaded, "layers": layers}))
     result = subprocess.run(
         ["/usr/bin/python3", "-c", script, str(source)],
         cwd=ROOT,
-        env={**os.environ, "QT_QPA_PLATFORM": "offscreen"},
+        env={**os.environ, "QT_QPA_PLATFORM": "offscreen", "QGIS_CUSTOM_CONFIG_PATH": str(tmp_path / 'qgis-config')},
         capture_output=True,
         text=True,
         timeout=30,
@@ -45,13 +47,15 @@ print(json.dumps({"loaded": loaded, "layers": layers}))
 
 
 @pytest.mark.external
-def test_public_plugin_metadata_failure_cannot_add_a_layer():
+def test_public_plugin_metadata_failure_cannot_add_a_layer(tmp_path):
     script = '''
 import json
+import os
 import sys
 from qgis.core import QgsApplication, QgsProject
 app = QgsApplication([], False)
 app.initQgis()
+assert os.path.commonpath([os.environ['QGIS_CUSTOM_CONFIG_PATH'], QgsApplication.qgisSettingsDirPath()]) == os.environ['QGIS_CUSTOM_CONFIG_PATH']
 from qgis_mcp_server.qgis_mcp_plugin.qgis_mcp_plugin import QgisMCPServer
 server = QgisMCPServer()
 def broken(layer):
@@ -61,7 +65,8 @@ reply = server.execute_command({'type': 'add_vector_layer', 'params': {'path': s
 print(json.dumps({'reply': reply, 'count': len(QgsProject.instance().mapLayers())}))
 '''
     result = subprocess.run(['/usr/bin/python3', '-c', script, str(ROOT / 'tests/fixtures/gis/phase11_points.geojson')],
-                            cwd=ROOT, env={**os.environ, 'QT_QPA_PLATFORM': 'offscreen'},
+                            cwd=ROOT, env={**os.environ, 'QT_QPA_PLATFORM': 'offscreen',
+                                           'QGIS_CUSTOM_CONFIG_PATH': str(tmp_path / 'qgis-config')},
                             capture_output=True, text=True, timeout=30, check=True)
     result = json.loads(result.stdout)
     assert result['count'] == 0
@@ -70,13 +75,15 @@ print(json.dumps({'reply': reply, 'count': len(QgsProject.instance().mapLayers()
 
 
 @pytest.mark.external
-def test_public_plugin_error_after_layer_mutation_reports_unknown_outcome():
+def test_public_plugin_error_after_layer_mutation_reports_unknown_outcome(tmp_path):
     script = '''
 import json
+import os
 import sys
 from qgis.core import QgsApplication, QgsProject
 app = QgsApplication([], False)
 app.initQgis()
+assert os.path.commonpath([os.environ['QGIS_CUSTOM_CONFIG_PATH'], QgsApplication.qgisSettingsDirPath()]) == os.environ['QGIS_CUSTOM_CONFIG_PATH']
 import qgis_mcp_server.qgis_mcp_plugin.qgis_mcp_plugin as plugin
 project = QgsProject.instance()
 class ProjectProxy:
@@ -92,7 +99,8 @@ reply = server.execute_command({'type': 'add_vector_layer', 'params': {'path': s
 print(json.dumps({'reply': reply, 'count': len(project.mapLayers())}))
 '''
     result = subprocess.run(['/usr/bin/python3', '-c', script, str(ROOT / 'tests/fixtures/gis/phase11_points.geojson')],
-                            cwd=ROOT, env={**os.environ, 'QT_QPA_PLATFORM': 'offscreen'},
+                            cwd=ROOT, env={**os.environ, 'QT_QPA_PLATFORM': 'offscreen',
+                                           'QGIS_CUSTOM_CONFIG_PATH': str(tmp_path / 'qgis-config')},
                             capture_output=True, text=True, timeout=30, check=True)
     result = json.loads(result.stdout)
     assert result['count'] == 1
@@ -103,11 +111,12 @@ print(json.dumps({'reply': reply, 'count': len(project.mapLayers())}))
 @pytest.mark.external
 def test_current_qgis_definitions_reject_invalid_parameters_for_all_six_algorithms(tmp_path):
     script = '''
-import json, sys
+import json, os, sys
 sys.path.append('/usr/share/qgis/python/plugins')
 from qgis.core import QgsApplication, QgsProject
 app = QgsApplication([], False)
 app.initQgis()
+assert os.path.commonpath([os.environ['QGIS_CUSTOM_CONFIG_PATH'], QgsApplication.qgisSettingsDirPath()]) == os.environ['QGIS_CUSTOM_CONFIG_PATH']
 from processing.core.Processing import Processing
 Processing.initialize()
 from qgis_mcp_server.qgis_mcp_plugin.qgis_mcp_plugin import QgisMCPServer
@@ -134,7 +143,8 @@ print(json.dumps({'replies': replies, 'valid': valid, 'count': len(QgsProject.in
     source = ROOT / 'tests/fixtures/gis/phase11_points.geojson'
     target = tmp_path / 'not-created.gpkg'
     result = subprocess.run(['/usr/bin/python3', '-c', script, str(source), str(target)],
-                            cwd=ROOT, env={**os.environ, 'QT_QPA_PLATFORM': 'offscreen'},
+                            cwd=ROOT, env={**os.environ, 'QT_QPA_PLATFORM': 'offscreen',
+                                           'QGIS_CUSTOM_CONFIG_PATH': str(tmp_path / 'qgis-config')},
                             capture_output=True, text=True, timeout=30, check=True)
     result = json.loads(result.stdout)
     assert len(result['replies']) == 6

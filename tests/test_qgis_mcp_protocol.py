@@ -1,6 +1,8 @@
 import asyncio
 import json
+from pathlib import Path
 import socket
+from zipfile import ZipFile
 
 import pytest
 
@@ -17,6 +19,7 @@ ALLOWED_TOOLS = {
     "get_layer_features",
     "capture_map_canvas",
     "execute_processing",
+    "save_project",
 }
 
 ALLOWED_ALGORITHMS = {
@@ -27,6 +30,17 @@ ALLOWED_ALGORITHMS = {
     "qgis:statisticsbycategories",
     "native:basicstatisticsforfields",
 }
+
+
+def test_distributed_plugin_zip_matches_all_five_source_files():
+    root = Path(__file__).resolve().parents[1] / 'qgis_mcp_server'
+    files = {'__init__.py', 'artifact_paths.py', 'metadata.txt', 'processing_policy.py', 'qgis_mcp_plugin.py'}
+    with ZipFile(root / 'qgis_mcp_plugin.zip') as archive:
+        assert set(archive.namelist()) == {f'qgis_mcp_plugin/{name}' for name in files}
+        assert len(archive.namelist()) == len(files)
+        assert archive.testzip() is None
+        for name in files:
+            assert archive.read(f'qgis_mcp_plugin/{name}') == (root / 'qgis_mcp_plugin' / name).read_bytes()
 
 
 class FakeSocket:
@@ -63,6 +77,28 @@ def test_mcp_tool_list_is_the_explicit_safe_subset():
     assert {"algorithm", "parameters"} <= set(
         tools["execute_processing"].inputSchema["required"]
     )
+    assert tools["save_project"].inputSchema["required"] == ["path"]
+    assert tools["save_project"].inputSchema["properties"]["path"]["type"] == "string"
+    for name, tool in tools.items():
+        assert tool.inputSchema == qgis_mcp_server.tool_argument_model(name).model_json_schema()
+
+
+@pytest.mark.parametrize(('name', 'arguments'), [
+    ('ping', {'unexpected': True}),
+    ('get_qgis_info', {'processing_requests': 'invalid'}),
+    ('get_project_info', {'unexpected': True}),
+    ('get_layers', {'unexpected': True}),
+    ('add_layer', {'path': 'data.geojson', 'layer_type': True}),
+    ('get_layer_features', {'layer_id': 'layer', 'limit': '10'}),
+    ('execute_processing', {'algorithm': 'native:buffer', 'parameters': []}),
+    ('capture_map_canvas', {'path': 'map.png', 'width': '800'}),
+    ('save_project', {'path': 123}),
+    ('save_project', {}),
+    ('save_project', {'path': 'result.qgz', 'unexpected': True}),
+])
+def test_paired_tool_arguments_reject_invalid_types_and_extras(name, arguments):
+    with pytest.raises(ValueError):
+        qgis_mcp_server.validate_tool_arguments(name, arguments)
 
 
 def test_client_round_trips_one_raw_json_message(monkeypatch):
@@ -110,7 +146,12 @@ def test_write_timeout_does_not_retry_with_another_protocol(monkeypatch):
         "type": "execute_processing",
         "params": {"algorithm": "native:buffer", "parameters": {"INPUT": "layer"}},
     }
+    assert first_socket.closed
     assert second_socket.sent == []
+
+    # A later explicit read starts a fresh socket; it cannot consume an old reply.
+    assert client.send_command("get_qgis_info") == {"status": "success"}
+    assert json.loads(second_socket.sent[0]) == {"type": "get_qgis_info", "params": {}}
 
 
 def test_processing_tool_rejects_unknown_algorithm_before_socket_write(monkeypatch):

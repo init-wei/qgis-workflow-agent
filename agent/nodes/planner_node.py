@@ -92,10 +92,10 @@ GDAL API往往用于数据处理，PyQGIS API往往用于QGIS内部的图层以�
 5. candidate_gdal_apis和candidate_pyqgis_apis列出所有可能用到的API名称，尽量精确到方法级别（不需要参数细节），如果该步骤不需要使用某类API，可以留空
 6. 参考相似案例可以提高准确性
 7. 必须返回有效的JSON格式，不要添加任何额外的解释文字
-8. 任一步骤需要删除、覆盖、保存工程或 execute_code 时，risk_level 必须为 high 且 requires_review 必须为 true
+8. 保存新工程使用 save_project，参数仅有 {"path": "新工程.qgz"}；对应步骤和调用都必须为 high 且 requires_review 为 true，并声明相同的产物引用。禁止删除、覆盖及 execute_code。
 9. TaskPlan.tool_calls 是实际执行的唯一调用序列；每个 step 必须恰有一个 tool_call，step_id 必须匹配，调用参数需完整并引用 selected file_id 提供的路径
 11. 有文件产物时 expected_outputs.path 只填写新的文件名（例如 buffer.gpkg），output_id 只使用英文字母、数字、下划线或连字符；output_refs 指向该产物 ID，调用的输出参数使用完全相同文件名。服务器会在展示审核前绑定为本任务/修订的受控完整路径。禁止绝对输出路径、已有文件和临时输出。步骤与调用的 risk_level 和 requires_review 必须一致，调用顺序必须与步骤一致。
-10. 只允许使用有限 MCP 工具。禁止 execute_code、remove_layer、覆盖输入和任意 Processing 算法；可用算法只有 native:reprojectlayer、native:buffer、native:clip、native:dissolve、qgis:statisticsbycategories、native:basicstatisticsforfields
+10. 只允许 ping、get_qgis_info、get_project_info、get_layers、add_layer、get_layer_features、execute_processing、capture_map_canvas、save_project。禁止 execute_code、remove_layer、覆盖输入和任意 Processing 算法；可用算法只有 native:reprojectlayer、native:buffer、native:clip、native:dissolve、qgis:statisticsbycategories、native:basicstatisticsforfields
 """)
 
 # 定义User Message模板
@@ -142,7 +142,7 @@ async def planner_node(state: AgentState) -> Dict[str, Any]:
         if isinstance(previous_plan, dict)
         else getattr(previous_plan, "revision", 0)
     )
-    revision = prior_revision + 1 if previous_plan else 1
+    revision = state.get("planning_revision") or (prior_revision + 1 if previous_plan else 1)
     llm = _get_llm(state)
 
     user_message = USER_MESSAGE_TEMPLATE.render(
@@ -180,6 +180,7 @@ async def planner_node(state: AgentState) -> Dict[str, Any]:
                 "task_plan": None,
                 "plan_validation": validation_report,
                 "planning_error": f"{validation_report.summary} {details}",
+                "planning_revision": revision,
                 "retry_count": retry_count + 1,
             }
 
@@ -190,6 +191,7 @@ async def planner_node(state: AgentState) -> Dict[str, Any]:
             "task_plan": task_plan,
             "plan_validation": validation_report,
             "planning_error": None,
+            "planning_revision": revision,
             "retry_count": retry_count + 1,
             "advise": None,
         }
@@ -199,6 +201,7 @@ async def planner_node(state: AgentState) -> Dict[str, Any]:
             "task_plan": None,
             "plan_validation": None,
             "planning_error": str(exc),
+            "planning_revision": revision,
             "retry_count": retry_count + 1,
         }
 

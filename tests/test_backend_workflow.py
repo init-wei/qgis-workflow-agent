@@ -177,6 +177,7 @@ def test_rejected_plan_resumes_to_new_revision_with_same_sse_contract(monkeypatc
     monkeypatch.setattr(backend, "get_uploaded_file_record", lambda file_id: record if file_id == "file-1" else None)
     monkeypatch.setattr(backend, "get_app_with_checkpointer", get_graph)
     monkeypatch.setattr(backend, "save_task_execution_record", lambda **kwargs: None)
+    monkeypatch.setattr(backend, "get_task_execution_record", lambda task_id: None)
     monkeypatch.setattr(planner_module, "_get_llm", lambda state: NamedModel())
     monkeypatch.setattr(executor_module, "get_mcp_client", get_gis)
     monkeypatch.setattr(executor_module, "save_task_execution_record", lambda **kwargs: None)
@@ -282,13 +283,13 @@ def test_approved_load_and_result_confirmation_are_queryable(monkeypatch, tmp_pa
     assert result["confirmed"] is None
 
     unsolicited = client.post("/api/risk-review", json={
-        "thread_id": "thread-2", "review_id": "no-pending-review", "status": "approved",
+        "thread_id": "thread-2", "task_id": plan["task_id"], "revision": plan["revision"], "review_id": "no-pending-review", "status": "approved",
         "tool_call": plan["tool_calls"][0],
     })
     assert unsolicited.status_code == 409
     assert len(gis.calls) == 1
 
-    response = client.post("/api/confirm-result", json={"thread_id": "thread-2", "is_completed": True})
+    response = client.post("/api/confirm-result", json={"thread_id": "thread-2", "task_id": plan["task_id"], "revision": plan["revision"], "review_id": f"result:{plan['task_id']}:{plan['revision']}", "is_completed": True})
     assert response.status_code == 200
     result = client.get(f"/api/executions/{plan['task_id']}").json()["execution"]
     assert result["confirmed"] is True
@@ -417,6 +418,7 @@ def test_qgis_failure_never_changes_approved_arguments_or_reports_success(
     monkeypatch.setattr(backend, "get_uploaded_file_record", lambda file_id: file_record)
     monkeypatch.setattr(backend, "get_app_with_checkpointer", get_graph)
     monkeypatch.setattr(backend, "save_task_execution_record", save_record)
+    monkeypatch.setattr(backend, "get_task_execution_record", lambda task_id: None)
     monkeypatch.setattr(executor_module, "save_task_execution_record", save_record)
     monkeypatch.setattr(executor_module, "get_mcp_client", get_gis)
     monkeypatch.setattr(planner_module, "_get_llm", lambda state: RepairSuggestingModel())
@@ -606,6 +608,7 @@ def test_output_filename_is_bound_before_review_and_existing_target_is_refused_a
 
     monkeypatch.setattr(backend, 'get_app_with_checkpointer', get_graph)
     monkeypatch.setattr(backend, 'save_task_execution_record', lambda **kwargs: None)
+    monkeypatch.setattr(backend, 'get_task_execution_record', lambda task_id: None)
     monkeypatch.setattr(executor_module, 'get_mcp_client', get_gis)
     monkeypatch.setattr(executor_module, 'save_task_execution_record', lambda **kwargs: None)
     monkeypatch.setattr(planner_module, '_get_llm', lambda state: ScreenshotModel())
@@ -1112,7 +1115,7 @@ def test_risk_resume_consumes_checkpoint_prefix_with_existing_outputs(risk_execu
     risk = _sse_event(first, 'risk_review_required')
     assert [name for name, _ in env.calls] == ['add_layer', 'capture_map_canvas']
     assert env.client.post('/api/risk-review', json={
-        'thread_id': 'risk-positive', 'review_id': risk['review_id'], 'status': 'approved'}).status_code == 200
+        'thread_id': 'risk-positive', 'task_id': plan['task_id'], 'revision': plan['revision'], 'review_id': risk['review_id'], 'status': 'approved'}).status_code == 200
     continued = env.client.post('/api/resume/risk-positive')
     _sse_event(continued, 'result_review_required')
     assert [name for name, _ in env.calls] == ['add_layer', 'capture_map_canvas', 'capture_map_canvas']
@@ -1183,7 +1186,7 @@ def test_changed_completed_artifact_cannot_authorize_risk_continuation(risk_exec
     completed = Path(env.calls[-1][1]['path'])
     completed.write_bytes(b'changed externally')
     assert env.client.post('/api/risk-review', json={
-        'thread_id': 'changed-artifact', 'review_id': risk['review_id'], 'status': 'approved'}).status_code == 200
+        'thread_id': 'changed-artifact', 'task_id': plan['task_id'], 'revision': plan['revision'], 'review_id': risk['review_id'], 'status': 'approved'}).status_code == 200
     response = env.client.post('/api/resume/changed-artifact')
     assert 'artifact changed' in _sse_event(response, 'error')['message']
     assert len(env.calls) == 2
@@ -1240,6 +1243,21 @@ def test_later_original_input_failure_prevents_even_first_mcp_connection(executi
     assert _sse_event(response, 'error')['message']
     assert connections == []
     assert env.calls == []
+    assert env.records[plan['task_id']]['status'] == 'failed'
+    env.records[plan['task_id']]['plan_revision'] += 1
+    assert env.client.get('/api/state/whole-inputs').json()['can_start_task'] is False
+    assert env.client.post('/api/chat/stream', json={
+        'thread_id': 'whole-inputs', 'message': 'Do not replace', 'files': ['file-1'],
+    }).status_code == 409
+    env.records[plan['task_id']]['plan_revision'] = plan['revision']
+    assert env.client.get('/api/state/whole-inputs').json()['can_start_task'] is True
+    assert env.client.post('/api/resume/whole-inputs').status_code == 409
+    monkeypatch.setattr(planner_module, '_get_llm', lambda state: FakeModel())
+    fresh = _sse_event(env.client.post('/api/chat/stream', json={
+        'thread_id': 'whole-inputs', 'message': 'Load only the first input', 'files': ['file-1'],
+    }), 'human_review_required')['task_plan']
+    assert fresh['task_id'] != plan['task_id']
+    assert connections == [] and env.calls == []
     assert env.records[plan['task_id']]['status'] == 'failed'
 
 
@@ -1429,3 +1447,678 @@ def test_cancelled_review_request_keeps_owner_until_durable_and_checkpoint_decis
             await asyncio.sleep(.02)
 
     asyncio.run(exercise())
+
+
+def test_each_manual_revision_has_two_generation_attempts_and_keeps_task_identity(monkeypatch):
+    class RevisionsModel:
+        def __init__(self):
+            self.calls = 0
+
+        async def ainvoke(self, messages):
+            self.calls += 1
+            if self.calls == 2:
+                return SimpleNamespace(content='not json')
+            return SimpleNamespace(content=json.dumps({
+                "task_id": "untrusted-model-id", "task_summary": "Inspect layers",
+                "risk_level": "low", "review_status": "pending_review", "required_inputs": [],
+                "expected_outputs": [],
+                "steps": [{"step_id": 1, "description": "Inspect", "allowed_tools": ["get_layers"],
+                           "input_refs": [], "output_refs": [], "risk_level": "low", "requires_review": False}],
+                "tool_calls": [{"step_id": 1, "tool_name": "get_layers", "arguments": {},
+                                "risk_level": "low", "requires_review": False}],
+            }))
+
+    model = RevisionsModel()
+    graph = build_graph(MemorySaver())
+
+    async def get_graph():
+        return graph
+
+    monkeypatch.setattr(backend, "get_app_with_checkpointer", get_graph)
+    monkeypatch.setattr(backend, "save_task_execution_record", lambda **kwargs: None)
+    monkeypatch.setattr(planner_module, "_get_llm", lambda state: model)
+    client = TestClient(backend.app)
+    first = _sse_event(client.post('/api/chat/stream', json={
+        'thread_id': 'repeated-revisions', 'message': 'Inspect layers',
+    }), 'human_review_required')['task_plan']
+    current = first
+    for revision in (2, 3):
+        response = client.post('/api/review', json={
+            'thread_id': 'repeated-revisions', 'task_id': current['task_id'],
+            'revision': current['revision'], 'approved': False, 'advise': f'Change {revision}',
+        })
+        assert response.status_code == 200
+        current = _sse_event(client.post('/api/resume/repeated-revisions'), 'human_review_required')['task_plan']
+        assert current['task_id'] == first['task_id']
+        assert current['revision'] == revision
+        assert current['review_status'] == 'pending_review'
+    assert model.calls == 4
+
+
+def test_resume_requires_plan_and_result_decisions(execution_app):
+    env = execution_app
+    first = _sse_event(env.client.post('/api/chat/stream', json={
+        'thread_id': 'must-decide', 'message': 'Load', 'files': ['file-1'],
+    }), 'human_review_required')['task_plan']
+    assert env.client.post('/api/resume/must-decide').status_code == 409
+    assert env.calls == []
+    assert env.client.post('/api/review', json={
+        'thread_id': 'must-decide', 'task_id': first['task_id'],
+        'revision': first['revision'], 'approved': True,
+    }).status_code == 200
+    _sse_event(env.client.post('/api/resume/must-decide'), 'result_review_required')
+    assert len(env.calls) == 1
+    assert env.client.post('/api/resume/must-decide').status_code == 409
+    assert len(env.calls) == 1
+
+
+def test_duplicate_plan_decision_is_idempotent_but_opposite_is_stale(execution_app):
+    env = execution_app
+    response = env.client.post('/api/chat/stream', json={
+        'thread_id': 'duplicate-plan', 'message': 'Load', 'files': ['file-1'],
+    })
+    plan = _sse_event(response, 'human_review_required')['task_plan']
+    decision = {'thread_id': 'duplicate-plan', 'task_id': plan['task_id'],
+                'revision': plan['revision'], 'approved': True}
+    assert env.client.post('/api/review', json=decision).status_code == 200
+    assert env.client.post('/api/review', json=decision).status_code == 200
+    assert env.client.post('/api/review', json={**decision, 'approved': False, 'advise': 'Change'}).status_code == 409
+    _sse_event(env.client.post('/api/resume/duplicate-plan'), 'result_review_required')
+    assert len(env.calls) == 1
+    assert env.client.post('/api/review', json=decision).status_code == 200
+    assert len(env.calls) == 1
+
+
+def test_result_review_is_checkpoint_bound_and_duplicate_is_idempotent(execution_app, monkeypatch):
+    env = execution_app
+    plan = env.approve('result-identity')
+    _sse_event(env.client.post('/api/resume/result-identity'), 'result_review_required')
+    pause = env.client.get('/api/state/result-identity').json()['pause']
+    assert pause['kind'] == 'result_review'
+    assert (pause['task_id'], pause['revision']) == (plan['task_id'], plan['revision'])
+    confirmations = []
+    monkeypatch.setattr(backend, 'confirm_task_execution', lambda *args: confirmations.append(args) or True)
+    decision = {'thread_id': 'result-identity', 'task_id': pause['task_id'],
+                'revision': pause['revision'], 'review_id': pause['review_id'], 'is_completed': True}
+    assert env.client.post('/api/confirm-result', json={**decision, 'revision': pause['revision'] + 1}).status_code == 409
+    assert env.client.post('/api/confirm-result', json={**decision, 'review_id': 'stale'}).status_code == 409
+    assert env.client.post('/api/confirm-result', json=decision).status_code == 200
+    assert env.client.post('/api/confirm-result', json=decision).status_code == 200
+    assert env.client.post('/api/confirm-result', json={**decision, 'is_completed': False}).status_code == 409
+    assert len(confirmations) == 1
+    assert len(env.calls) == 1
+
+
+def test_risk_review_is_bound_to_checkpoint_and_duplicate_never_reexecutes(risk_execution_app):
+    env = risk_execution_app
+    plan = env.approve('risk-identity')
+    _sse_event(env.client.post('/api/resume/risk-identity'), 'risk_review_required')
+    pause = env.client.get('/api/state/risk-identity').json()['pause']
+    assert pause['kind'] == 'risk_review'
+    assert (pause['task_id'], pause['revision']) == (plan['task_id'], plan['revision'])
+    assert env.client.post('/api/resume/risk-identity').status_code == 409
+    decision = {'thread_id': 'risk-identity', 'task_id': pause['task_id'],
+                'revision': pause['revision'], 'review_id': pause['review_id'], 'status': 'approved'}
+    assert env.client.post('/api/risk-review', json={**decision, 'task_id': 'different'}).status_code == 409
+    assert env.client.post('/api/risk-review', json={**decision, 'revision': pause['revision'] + 1}).status_code == 409
+    assert env.client.post('/api/risk-review', json=decision).status_code == 200
+    assert env.client.post('/api/risk-review', json=decision).status_code == 200
+    assert env.client.post('/api/risk-review', json={**decision, 'status': 'rejected'}).status_code == 409
+    _sse_event(env.client.post('/api/resume/risk-identity'), 'result_review_required')
+    assert len(env.calls) == 3
+    assert env.client.post('/api/risk-review', json=decision).status_code == 200
+    assert len(env.calls) == 3
+
+
+@pytest.mark.parametrize('risk_choice', ['approved', 'rejected'])
+def test_save_project_waits_for_specific_risk_approval(execution_app, monkeypatch, risk_choice):
+    from pathlib import Path
+    from agent.nodes import executor_node as executor_module
+    env = execution_app
+
+    class ProjectModel(FakeModel):
+        async def ainvoke(self, messages):
+            response = await super().ainvoke(messages)
+            plan = json.loads(response.content)
+            plan['risk_level'] = 'high'
+            plan['expected_outputs'] = [{'output_id': 'project', 'description': 'New project', 'path': 'reviewed.qgz'}]
+            plan['steps'].append({'step_id': 2, 'description': 'Save new project', 'allowed_tools': ['save_project'],
+                                  'input_refs': [], 'output_refs': ['project'], 'risk_level': 'high', 'requires_review': True})
+            plan['tool_calls'].append({'step_id': 2, 'tool_name': 'save_project', 'arguments': {'path': 'reviewed.qgz'},
+                                       'risk_level': 'high', 'requires_review': True})
+            return SimpleNamespace(content=json.dumps(plan))
+
+    class ProjectGIS:
+        async def list_tools(self):
+            return [{'name': 'add_layer'}, {'name': 'save_project'}]
+
+        async def call_tool(self, name, arguments):
+            env.calls.append((name, arguments))
+            if name == 'add_layer':
+                return {'status': 'success', 'result': {'id': 'points'}}
+            path = Path(arguments['path'])
+            path.parent.mkdir(parents=True)
+            from zipfile import ZipFile
+            with ZipFile(path, 'w') as project:
+                project.writestr('project.qgs', '<qgis/>')
+            return {'status': 'success', 'result': {'success': True, 'path': str(path.resolve()), 'layer_count': 1}}
+
+    async def get_gis():
+        return ProjectGIS()
+
+    monkeypatch.setattr(planner_module, '_get_llm', lambda state: ProjectModel())
+    monkeypatch.setattr(executor_module, 'get_mcp_client', get_gis)
+    plan = env.approve('project-review')
+    assert plan['tool_calls'][1]['arguments']['path'].endswith('/project/reviewed.qgz')
+    risk = _sse_event(env.client.post('/api/resume/project-review'), 'risk_review_required')
+    assert risk['tool_call']['tool_name'] == 'save_project'
+    assert [name for name, _ in env.calls] == ['add_layer']
+    payload = {'thread_id': 'project-review', 'task_id': plan['task_id'], 'revision': plan['revision'],
+               'review_id': risk['review_id'], 'status': risk_choice}
+    assert env.client.post('/api/risk-review', json={**payload, 'review_id': 'stale'}).status_code == 409
+    assert env.client.post('/api/risk-review', json=payload).status_code == 200
+    assert env.client.post('/api/risk-review', json=payload).status_code == 200
+    opposite = 'rejected' if risk_choice == 'approved' else 'approved'
+    assert env.client.post('/api/risk-review', json={**payload, 'status': opposite}).status_code == 409
+    response = env.client.post('/api/resume/project-review')
+    _sse_event(response, 'result_review_required' if risk_choice == 'approved' else 'error')
+    assert [name for name, _ in env.calls] == (['add_layer', 'save_project'] if risk_choice == 'approved' else ['add_layer'])
+
+
+@pytest.mark.parametrize('failure_mode', ['persist-failure', 'unknown-response', 'disconnect'])
+def test_unknown_outcome_requires_operator_evidence_and_never_replays(execution_app, monkeypatch, failure_mode):
+    from copy import deepcopy
+    from agent.nodes import executor_node as executor_module
+    env = execution_app
+    plan = env.approve('unknown-checked')
+    if failure_mode == 'persist-failure':
+        env.faults['after_dispatch'] = True
+    else:
+        class UnknownGIS:
+            async def list_tools(self):
+                return [{'name': 'add_layer'}]
+
+            async def call_tool(self, name, arguments):
+                env.calls.append((name, arguments))
+                if len(env.calls) == 1:
+                    if failure_mode == 'disconnect':
+                        raise TimeoutError('QGIS connection timed out after dispatch')
+                    return {'status': 'error', 'message': 'Unknown result after write', 'outcome': 'unknown'}
+                return {'status': 'success', 'result': {'id': 'new-layer'}}
+
+        async def get_unknown_gis():
+            return UnknownGIS()
+
+        monkeypatch.setattr(executor_module, 'get_mcp_client', get_unknown_gis)
+    _sse_event(env.client.post('/api/resume/unknown-checked'), 'error')
+    env.faults['after_dispatch'] = False
+    assert env.client.get(f"/api/executions/{plan['task_id']}").json()['execution']['status'] == 'needs_attention'
+    original_calls = list(env.calls)
+    original_intent = deepcopy(env.records[plan['task_id']]['inflight_call'])
+    original_attempts = deepcopy(env.records[plan['task_id']]['attempts'])
+    state = env.client.get('/api/state/unknown-checked').json()
+    assert state['next'] == (['executor_node'] if failure_mode == 'persist-failure' else ['reflector_node'])
+    if failure_mode != 'persist-failure':
+        assert len(original_attempts) == 1
+        assert original_attempts[0]['observation']['outcome'] == 'unknown'
+    assert state['can_start_task'] is False
+    assert env.client.post('/api/chat/stream', json={
+        'thread_id': 'unknown-checked', 'message': 'Do something else', 'files': ['file-1'],
+    }).status_code == 409
+
+    class ProbeGIS:
+        async def call_tool(self, name, arguments):
+            assert name == 'get_qgis_info'
+            return {'status': 'success', 'result': {
+                'process_id': 1234, 'instance_id': 'qgis-instance', 'profile_folder': '/test/profile'}}
+
+    async def get_probe_gis():
+        return ProbeGIS()
+
+    def save_reconciliation(task_id, session_id, evidence):
+        row = env.records[task_id]
+        if row['status'] != 'needs_attention' or row['session_id'] != session_id:
+            return False
+        row['status'] = 'reconciled'
+        row['reconciliation'] = evidence
+        return True
+
+    monkeypatch.setattr(backend, 'get_mcp_client', get_probe_gis)
+    monkeypatch.setattr(backend, 'reconcile_task_execution', save_reconciliation, raising=False)
+    url = f"/api/executions/{plan['task_id']}/reconciliation"
+    probe = env.client.get(f'{url}/probe')
+    assert probe.status_code == 200
+    identity = probe.json()['qgis']
+    assert identity['instance_id'] == 'qgis-instance'
+    decision = {'thread_id': 'unknown-checked', 'checked': True,
+                'note': 'Inspected the test profile, layer and project; no operation is running.', 'qgis': identity}
+    assert env.client.post(url, json={**decision, 'checked': False}).status_code == 422
+    assert env.client.post(url, json={**decision, 'qgis': {**identity, 'instance_id': 'old'}}).status_code == 409
+    assert env.records[plan['task_id']]['status'] == 'needs_attention'
+    assert env.client.post(url, json=decision).status_code == 200
+    record = env.client.get(f"/api/executions/{plan['task_id']}").json()['execution']
+    assert record['status'] == 'reconciled'
+    assert record['reconciliation']['note'] == decision['note']
+    assert env.client.post('/api/resume/unknown-checked').status_code == 409
+    assert env.calls == original_calls
+    old_row = env.records[plan['task_id']]
+    for key, value in (
+        ('task_id', 'other-task'), ('session_id', 'other-session'),
+        ('plan_revision', plan['revision'] + 1),
+        ('plan', {**old_row['plan'], 'task_summary': 'Different plan'}),
+        ('reconciliation', None),
+        ('reconciliation', {'note': 'Checked', 'qgis': {'process_id': 0, 'instance_id': '', 'profile_folder': ''}}),
+    ):
+        saved = old_row[key]
+        old_row[key] = value
+        assert env.client.get('/api/state/unknown-checked').json()['can_start_task'] is False
+        assert env.client.post('/api/chat/stream', json={
+            'thread_id': 'unknown-checked', 'message': 'Mismatch', 'files': ['file-1'],
+        }).status_code == 409
+        old_row[key] = saved
+    assert env.client.get('/api/state/unknown-checked').json()['can_start_task'] is True
+    fresh = _sse_event(env.client.post('/api/chat/stream', json={
+        'thread_id': 'unknown-checked', 'message': 'New task after inspection', 'files': ['file-1'],
+    }), 'human_review_required')['task_plan']
+    assert fresh['task_id'] != plan['task_id']
+    assert env.calls == original_calls
+    monkeypatch.setattr(backend, 'list_task_executions_for_session', lambda session: [])
+    history = env.client.get('/api/sessions/unknown-checked/history').json()
+    contents = [message['content'] for message in history['chat_messages']]
+    assert contents.count('Load') == 1
+    assert contents.count('New task after inspection') == 1
+    assert any(plan['task_id'] in item and '未知' in item and '核查' in item and '未确认' in item
+               and plan['task_summary'] in item for item in contents)
+    assert history['history'][0]['task_plan']['revision'] == plan['revision']
+    assert history['history'][0]['confirmed'] is None
+    graph = env.graphs['current']
+    env.graphs['current'] = build_graph(graph.checkpointer)
+    assert env.client.get('/api/sessions/unknown-checked/history').json()['chat_messages'] == history['chat_messages']
+    assert env.client.post('/api/review', json={
+        'thread_id': 'unknown-checked', 'task_id': fresh['task_id'],
+        'revision': fresh['revision'], 'approved': True,
+    }).status_code == 200
+    _sse_event(env.client.post('/api/resume/unknown-checked'), 'result_review_required')
+    assert len(env.calls) == 2
+    assert env.records[plan['task_id']]['status'] == 'reconciled'
+    assert env.records[plan['task_id']]['inflight_call'] == original_intent
+    assert env.records[plan['task_id']]['attempts'] == original_attempts
+
+
+def test_duplicate_approval_while_gis_runs_returns_existing_decision(execution_app):
+    from concurrent.futures import ThreadPoolExecutor
+    env = execution_app
+    plan = env.approve('duplicate-running')
+    env.block['enabled'] = True
+    payload = {'thread_id': 'duplicate-running', 'task_id': plan['task_id'],
+               'revision': plan['revision'], 'approved': True}
+    with ThreadPoolExecutor(max_workers=1) as workers:
+        running = workers.submit(env.client.post, '/api/resume/duplicate-running')
+        assert env.entered.wait(5)
+        try:
+            state = env.client.get('/api/state/duplicate-running').json()
+            assert state['running'] is True and state['can_start_task'] is False
+            assert state['continuation'] is None
+            assert env.client.post('/api/review', json=payload).status_code == 200
+            assert env.client.post('/api/review', json={**payload, 'approved': False, 'advise': 'Change'}).status_code == 409
+        finally:
+            env.release.set()
+        _sse_event(running.result(timeout=10), 'result_review_required')
+    assert len(env.calls) == 1
+
+
+def test_new_chat_cannot_replace_a_plan_awaiting_review(execution_app):
+    env = execution_app
+    thread = 'protect-plan-pause'
+    plan = _sse_event(env.client.post('/api/chat/stream', json={
+        'thread_id': thread, 'message': 'Load', 'files': ['file-1'],
+    }), 'human_review_required')['task_plan']
+    before = env.client.get(f'/api/state/{thread}').json()['pause']
+    assert env.client.get(f'/api/state/{thread}').json()['can_start_task'] is False
+    response = env.client.post('/api/chat/stream', json={
+        'thread_id': thread, 'message': 'Another task', 'files': ['file-1'],
+    })
+    assert response.status_code == 409
+    assert env.client.get(f'/api/state/{thread}').json()['pause'] == before
+    assert env.client.post('/api/review', json={
+        'thread_id': thread, 'task_id': plan['task_id'], 'revision': plan['revision'], 'approved': True,
+    }).status_code == 200
+    _sse_event(env.client.post(f'/api/resume/{thread}'), 'result_review_required')
+    assert len(env.calls) == 1
+
+
+def test_approved_task_remains_resumable_after_gis_busy(execution_app):
+    from concurrent.futures import ThreadPoolExecutor
+    env = execution_app
+    env.approve('busy-owner')
+    plan = env.approve('busy-waiter')
+    env.block['enabled'] = True
+    with ThreadPoolExecutor(max_workers=1) as workers:
+        first = workers.submit(env.client.post, '/api/resume/busy-owner')
+        assert env.entered.wait(5)
+        try:
+            assert env.client.post('/api/resume/busy-waiter').status_code == 409
+            snapshot = env.client.get('/api/state/busy-waiter').json()
+            assert snapshot['pause'] is None
+            assert snapshot['can_start_task'] is False
+            assert snapshot['continuation'] == {'kind': 'resume', 'task_id': plan['task_id'], 'revision': plan['revision']}
+            assert env.client.post('/api/chat/stream', json={
+                'thread_id': 'busy-waiter', 'message': 'Replace', 'files': ['file-1'],
+            }).status_code == 409
+        finally:
+            env.release.set()
+        _sse_event(first.result(timeout=10), 'result_review_required')
+    _sse_event(env.client.post('/api/resume/busy-waiter'), 'result_review_required')
+    assert len(env.calls) == 2
+
+
+def test_saved_risk_and_result_decisions_project_continuation(risk_execution_app, monkeypatch):
+    from agent.nodes import reflector_node as reflector_module
+    env = risk_execution_app
+    thread = 'continue-decisions'
+    plan = env.approve(thread)
+    risk = _sse_event(env.client.post(f'/api/resume/{thread}'), 'risk_review_required')
+    before_risk = env.client.get(f'/api/state/{thread}').json()['pause']
+    assert env.client.post('/api/chat/stream', json={
+        'thread_id': thread, 'message': 'Replace risk pause', 'files': ['file-1'],
+    }).status_code == 409
+    after_risk = env.client.get(f'/api/state/{thread}').json()['pause']
+    assert (after_risk['review_id'], after_risk['tool_call']) == (before_risk['review_id'], before_risk['tool_call'])
+    assert len(env.calls) == 2
+    payload = {'thread_id': thread, 'task_id': plan['task_id'], 'revision': plan['revision'],
+               'review_id': risk['review_id'], 'status': 'approved'}
+    assert env.client.post('/api/risk-review', json=payload).status_code == 200
+    continuation = {'kind': 'resume', 'task_id': plan['task_id'], 'revision': plan['revision']}
+    assert env.client.get(f'/api/state/{thread}').json()['continuation'] == continuation
+    _sse_event(env.client.post(f'/api/resume/{thread}'), 'result_review_required')
+    pause = env.client.get(f'/api/state/{thread}').json()['pause']
+    assert env.client.post('/api/chat/stream', json={
+        'thread_id': thread, 'message': 'Replace result pause', 'files': ['file-1'],
+    }).status_code == 409
+    assert env.client.get(f'/api/state/{thread}').json()['pause'] == pause
+    monkeypatch.setattr(backend, 'confirm_task_execution', lambda *args: True)
+    monkeypatch.setattr(reflector_module, '_get_llm', lambda state: FakeModel())
+    assert env.client.post('/api/confirm-result', json={
+        'thread_id': thread, 'task_id': plan['task_id'], 'revision': plan['revision'],
+        'review_id': pause['review_id'], 'is_completed': True,
+    }).status_code == 200
+    assert env.client.get(f'/api/state/{thread}').json()['continuation'] == continuation
+    assert env.client.post('/api/chat/stream', json={
+        'thread_id': thread, 'message': 'Replace', 'files': ['file-1'],
+    }).status_code == 409
+    _sse_event(env.client.post(f'/api/resume/{thread}'), 'complete')
+    assert env.client.get(f'/api/state/{thread}').json()['continuation'] is None
+    assert len(env.calls) == 3
+
+
+def test_named_sessions_keep_name_and_created_order_after_reload(monkeypatch):
+    graph = build_graph(MemorySaver())
+    ids = []
+
+    async def get_graph():
+        return graph
+
+    async def list_ids(app):
+        return list(ids)
+
+    monkeypatch.setattr(backend, 'get_app_with_checkpointer', get_graph)
+    monkeypatch.setattr(backend, 'fetch_checkpoint_thread_ids', list_ids)
+    monkeypatch.setattr(backend, 'sessions', {})
+    client = TestClient(backend.app)
+    first = client.post('/api/sessions', json={'session_name': '先前任务'}).json()
+    ids.append(first['thread_id'])
+    second = client.post('/api/sessions', json={'session_name': '恢复验证'}).json()
+    ids.append(second['thread_id'])
+    listed = client.get('/api/sessions').json()
+    assert listed == [second, first]
+    backend.sessions.clear()
+    assert client.get('/api/sessions').json() == [second, first]
+    assert client.get('/api/sessions').json() == [second, first]
+
+    class MetadataModel(FakeModel):
+        async def ainvoke(self, messages):
+            response = await super().ainvoke(messages)
+            plan = json.loads(response.content)
+            plan['required_inputs'] = []
+            plan['steps'][0].update(allowed_tools=['get_layers'], input_refs=[])
+            plan['tool_calls'][0].update(tool_name='get_layers', arguments={})
+            return SimpleNamespace(content=json.dumps(plan))
+
+    monkeypatch.setattr(planner_module, '_get_llm', lambda state: MetadataModel())
+    _sse_event(client.post('/api/chat/stream', json={
+        'thread_id': first['thread_id'], 'message': 'Inspect current layers',
+    }), 'human_review_required')
+    backend.sessions.clear()
+    assert client.get('/api/sessions').json() == [second, first]
+
+
+def test_new_chat_holds_thread_owner_while_reading_checkpoint(execution_app, monkeypatch):
+    import asyncio
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+    env = execution_app
+    thread = 'chat-review-race'
+    plan = _sse_event(env.client.post('/api/chat/stream', json={
+        'thread_id': thread, 'message': 'Load', 'files': ['file-1'],
+    }), 'human_review_required')['task_plan']
+    graph = env.graphs['current']
+    entered, release = threading.Event(), threading.Event()
+    block_once = {'value': True}
+
+    class DelayedGraph:
+        def __getattr__(self, name):
+            return getattr(graph, name)
+
+        async def aget_state(self, config):
+            if config['configurable']['thread_id'] == thread and block_once['value']:
+                block_once['value'] = False
+                entered.set()
+                assert await asyncio.to_thread(release.wait, 5)
+            return await graph.aget_state(config)
+
+    async def get_delayed_graph():
+        return DelayedGraph()
+
+    monkeypatch.setattr(backend, 'get_app_with_checkpointer', get_delayed_graph)
+    with ThreadPoolExecutor(max_workers=1) as workers:
+        pending = workers.submit(env.client.post, '/api/chat/stream', json={
+            'thread_id': thread, 'message': 'Replace', 'files': ['file-1'],
+        })
+        assert entered.wait(5)
+        try:
+            assert env.client.post('/api/review', json={
+                'thread_id': thread, 'task_id': plan['task_id'], 'revision': plan['revision'], 'approved': True,
+            }).status_code == 409
+        finally:
+            release.set()
+        assert pending.result(timeout=10).status_code == 409
+    assert env.client.get(f'/api/state/{thread}').json()['pause']['task_id'] == plan['task_id']
+    assert env.calls == []
+
+
+def test_rejected_plan_with_saved_decision_can_be_continued(execution_app):
+    env = execution_app
+    thread = 'continue-revision'
+    plan = _sse_event(env.client.post('/api/chat/stream', json={
+        'thread_id': thread, 'message': 'Load', 'files': ['file-1'],
+    }), 'human_review_required')['task_plan']
+    assert env.client.post('/api/review', json={
+        'thread_id': thread, 'task_id': plan['task_id'], 'revision': plan['revision'],
+        'approved': False, 'advise': 'Change the name',
+    }).status_code == 200
+    state = env.client.get(f'/api/state/{thread}').json()
+    assert state['continuation'] == {'kind': 'resume', 'task_id': plan['task_id'], 'revision': plan['revision']}
+    assert state['can_start_task'] is False
+    revised = _sse_event(env.client.post(f'/api/resume/{thread}'), 'human_review_required')['task_plan']
+    assert revised['task_id'] == plan['task_id'] and revised['revision'] == 2
+    assert env.calls == []
+
+
+def test_resume_owns_thread_before_reading_checkpoint(execution_app, monkeypatch):
+    import asyncio
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+    env = execution_app
+    env.approve('resume-read-race')
+    graph = env.graphs['current']
+    entered, release = threading.Event(), threading.Event()
+    block_once = {'value': True}
+
+    class DelayedGraph:
+        def __getattr__(self, name):
+            return getattr(graph, name)
+
+        async def aget_state(self, config):
+            if config['configurable']['thread_id'] == 'resume-read-race' and block_once['value']:
+                block_once['value'] = False
+                entered.set()
+                assert await asyncio.to_thread(release.wait, 5)
+            return await graph.aget_state(config)
+
+    async def get_delayed_graph():
+        return DelayedGraph()
+
+    monkeypatch.setattr(backend, 'get_app_with_checkpointer', get_delayed_graph)
+    with ThreadPoolExecutor(max_workers=1) as workers:
+        first = workers.submit(env.client.post, '/api/resume/resume-read-race')
+        assert entered.wait(5)
+        try:
+            assert env.client.post('/api/resume/resume-read-race').status_code == 409
+        finally:
+            release.set()
+        _sse_event(first.result(timeout=10), 'result_review_required')
+    assert len(env.calls) == 1
+
+
+def test_rejected_risk_finishes_without_confirmation_and_allows_new_task_in_session(risk_execution_app):
+    env = risk_execution_app
+    thread = 'risk-rejected-next-task'
+    first = env.approve(thread)
+    risk = _sse_event(env.client.post(f'/api/resume/{thread}'), 'risk_review_required')
+    assert env.client.post('/api/risk-review', json={
+        'thread_id': thread, 'task_id': first['task_id'], 'revision': first['revision'],
+        'review_id': risk['review_id'], 'status': 'rejected',
+    }).status_code == 200
+    _sse_event(env.client.post(f'/api/resume/{thread}'), 'error')
+    assert [name for name, _ in env.calls] == ['add_layer', 'capture_map_canvas']
+    assert env.records[first['task_id']]['status'] == 'failed'
+    assert env.records[first['task_id']]['confirmed'] is None
+    state = env.client.get(f'/api/state/{thread}').json()
+    assert state['pause'] is None and state['continuation'] is None
+    assert state['state']['is_completed'] is None
+    assert state['can_start_task'] is True
+    response = env.client.post('/api/chat/stream', json={
+        'thread_id': thread, 'message': 'Try a separate task', 'files': ['file-1'],
+    })
+    second = _sse_event(response, 'human_review_required')['task_plan']
+    assert second['task_id'] != first['task_id']
+    assert second['review_status'] == 'pending_review'
+    assert [name for name, _ in env.calls] == ['add_layer', 'capture_map_canvas']
+    assert env.records[first['task_id']]['status'] == 'failed'
+    assert env.records[first['task_id']]['confirmed'] is None
+
+
+@pytest.mark.parametrize('mutation', ['task', 'session', 'revision', 'plan', 'confirmed', 'inflight', 'unknown',
+                                     'missing-write-evidence', 'missing-record', 'database-unavailable'])
+def test_failed_task_cannot_unlock_session_with_mismatched_or_uncertain_facts(risk_execution_app, monkeypatch, mutation):
+    env = risk_execution_app
+    thread = f'failed-facts-{mutation}'
+    plan = env.approve(thread)
+    risk = _sse_event(env.client.post(f'/api/resume/{thread}'), 'risk_review_required')
+    assert env.client.post('/api/risk-review', json={
+        'thread_id': thread, 'task_id': plan['task_id'], 'revision': plan['revision'],
+        'review_id': risk['review_id'], 'status': 'rejected',
+    }).status_code == 200
+    _sse_event(env.client.post(f'/api/resume/{thread}'), 'error')
+    row = env.records[plan['task_id']]
+    if mutation == 'task':
+        row['task_id'] = 'different-task'
+    elif mutation == 'session':
+        row['session_id'] = 'different-session'
+    elif mutation == 'revision':
+        row['plan_revision'] += 1
+    elif mutation == 'plan':
+        row['plan'] = {**row['plan'], 'task_summary': 'Different plan'}
+    elif mutation == 'confirmed':
+        row['confirmed'] = True
+    elif mutation == 'inflight':
+        row['inflight_call'] = {'tool_name': 'save_project'}
+    elif mutation == 'unknown':
+        row['attempts'][0]['observation']['outcome'] = 'unknown'
+    elif mutation == 'missing-write-evidence':
+        row['attempts'][0]['observation']['outcome'] = None
+    elif mutation == 'missing-record':
+        monkeypatch.setattr(backend, 'get_task_execution_record', lambda task_id: None)
+    else:
+        def unavailable(task_id):
+            raise RuntimeError('database unavailable')
+        monkeypatch.setattr(backend, 'get_task_execution_record', unavailable)
+    assert env.client.get(f'/api/state/{thread}').json()['can_start_task'] is False
+    assert env.client.post('/api/chat/stream', json={
+        'thread_id': thread, 'message': 'Replace', 'files': ['file-1'],
+    }).status_code == 409
+    assert [name for name, _ in env.calls] == ['add_layer', 'capture_map_canvas']
+
+
+def test_terminal_fact_is_checked_under_thread_owner(risk_execution_app, monkeypatch):
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+    env = risk_execution_app
+    thread = 'terminal-fact-owner'
+    plan = env.approve(thread)
+    risk = _sse_event(env.client.post(f'/api/resume/{thread}'), 'risk_review_required')
+    assert env.client.post('/api/risk-review', json={
+        'thread_id': thread, 'task_id': plan['task_id'], 'revision': plan['revision'],
+        'review_id': risk['review_id'], 'status': 'rejected',
+    }).status_code == 200
+    _sse_event(env.client.post(f'/api/resume/{thread}'), 'error')
+    entered, release = threading.Event(), threading.Event()
+    query = backend.get_task_execution_record
+
+    def delayed_query(task_id):
+        entered.set()
+        assert release.wait(5)
+        return query(task_id)
+
+    monkeypatch.setattr(backend, 'get_task_execution_record', delayed_query)
+    payload = {'thread_id': thread, 'message': 'New task', 'files': ['file-1']}
+    with ThreadPoolExecutor(max_workers=1) as workers:
+        first = workers.submit(env.client.post, '/api/chat/stream', json=payload)
+        assert entered.wait(5)
+        try:
+            assert env.client.post(f'/api/resume/{thread}').status_code == 409
+            assert env.client.post('/api/chat/stream', json=payload).status_code == 409
+        finally:
+            release.set()
+        new_plan = _sse_event(first.result(timeout=10), 'human_review_required')['task_plan']
+    assert new_plan['task_id'] != plan['task_id']
+    assert [name for name, _ in env.calls] == ['add_layer', 'capture_map_canvas']
+
+
+def test_new_task_keeps_previous_rejected_risk_visible_in_session_history(risk_execution_app, monkeypatch):
+    env = risk_execution_app
+    thread = 'terminal-history-visible'
+    first = env.approve(thread)
+    risk = _sse_event(env.client.post(f'/api/resume/{thread}'), 'risk_review_required')
+    assert env.client.post('/api/risk-review', json={
+        'thread_id': thread, 'task_id': first['task_id'], 'revision': first['revision'],
+        'review_id': risk['review_id'], 'status': 'rejected',
+    }).status_code == 200
+    _sse_event(env.client.post(f'/api/resume/{thread}'), 'error')
+    original_calls = list(env.calls)
+    monkeypatch.setattr(backend, 'list_task_executions_for_session', lambda session: [])
+    second = _sse_event(env.client.post('/api/chat/stream', json={
+        'thread_id': thread, 'message': 'New request after rejection', 'files': ['file-1'],
+    }), 'human_review_required')['task_plan']
+    assert second['task_id'] != first['task_id']
+    assert env.calls == original_calls
+    history = env.client.get(f'/api/sessions/{thread}/history').json()
+    contents = [message['content'] for message in history['chat_messages']]
+    assert contents.count('Load') == 1
+    assert contents.count('New request after rejection') == 1
+    assert any(first['task_id'] in item and '失败' in item and '未确认' in item for item in contents)
+    assert history['history'][0]['task_plan']['task_id'] == first['task_id']
+    assert history['history'][0]['confirmed'] is None
+    graph = env.graphs['current']
+    env.graphs['current'] = build_graph(graph.checkpointer)
+    assert env.client.get(f'/api/sessions/{thread}/history').json()['chat_messages'] == history['chat_messages']

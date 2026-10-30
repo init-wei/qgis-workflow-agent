@@ -6,7 +6,9 @@ from typing import Any, Iterable, Iterator
 
 from agent.tools.tool_contracts import PolicyDecision, ToolCallPlan
 from agent.tools.tool_registry import ToolRegistry
-from qgis_mcp_server.qgis_mcp_plugin.artifact_paths import call_output_paths, new_output_path
+from qgis_mcp_server.qgis_mcp_plugin.artifact_paths import (
+    call_output_paths, new_output_path, new_project_output_path,
+)
 
 PATH_ARGUMENT_KEYS = {
     "path",
@@ -36,6 +38,11 @@ class PathPolicy:
             try:
                 new_output_path(path, self.workspace_root)
             except ValueError as exc:
+                return PolicyDecision(allowed=False, reason="unsafe_output_path", message=str(exc))
+        if call.tool_name == "save_project":
+            try:
+                new_project_output_path(call.arguments.get("path"), self.workspace_root)
+            except (TypeError, ValueError) as exc:
                 return PolicyDecision(allowed=False, reason="unsafe_output_path", message=str(exc))
         return PolicyDecision(allowed=True)
 
@@ -103,6 +110,15 @@ class RiskPolicy:
     """Policy for high-risk non-code tool calls."""
 
     def evaluate(self, call: ToolCallPlan, approved: bool = False) -> PolicyDecision:
+        if call.tool_name == "save_project" and (
+            call.risk_level != "high" or not call.requires_review or not approved
+        ):
+            return PolicyDecision(
+                allowed=False,
+                reason="high_risk_requires_review",
+                message="Saving a project requires a high-risk declaration and explicit review approval.",
+                requires_review=True,
+            )
         if call.risk_level == "high" and (not call.requires_review or not approved):
             return PolicyDecision(
                 allowed=False,
@@ -149,7 +165,10 @@ class ToolPolicy:
         for decision in (
             self.path_policy.evaluate_call(normalized_call),
             self.code_policy.evaluate(normalized_call, approved=approved),
-            self.risk_policy.evaluate(normalized_call, approved=approved),
+            self.risk_policy.evaluate(
+                call if call.tool_name == "save_project" else normalized_call,
+                approved=approved,
+            ),
         ):
             if not decision.allowed:
                 return decision

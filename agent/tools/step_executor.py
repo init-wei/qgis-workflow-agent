@@ -23,6 +23,7 @@ from qgis_mcp_server.qgis_mcp_plugin.artifact_paths import (
     artifact_component_paths,
     call_output_paths,
     resolve_owned_output_path,
+    validate_qgz_archive,
 )
 
 
@@ -96,7 +97,7 @@ class StepExecutor:
         else:
             observation = self.parser.parse(call.tool_name, raw_response)
             if observation.status == "success" and call.tool_name in {
-                "capture_map_canvas", "execute_processing"
+                "capture_map_canvas", "execute_processing", "save_project"
             }:
                 try:
                     self._verify_output_files(call, observation)
@@ -130,11 +131,12 @@ class StepExecutor:
             resolve_owned_output_path(item["path"], self.workspace_root)
             for item in observation.artifacts if item.get("kind") == "path"
         }
-        if actual != expected or (call.tool_name == "capture_map_canvas" and len(expected) != 1):
+        if actual != expected or (call.tool_name in {"capture_map_canvas", "save_project"} and len(expected) != 1):
             raise ValueError("returned artifact paths differ from the requested outputs")
         for path in expected:
             components = [self._read_file_evidence(
-                resolve_owned_output_path(str(component), self.workspace_root)
+                resolve_owned_output_path(str(component), self.workspace_root),
+                project=call.tool_name == "save_project",
             ) for component in artifact_component_paths(path)]
             for item in observation.artifacts:
                 if (item.get("kind") == "path"
@@ -143,7 +145,7 @@ class StepExecutor:
                     if len(components) > 1:
                         item["components"] = components[1:]
 
-    def _read_file_evidence(self, path: Path) -> dict:
+    def _read_file_evidence(self, path: Path, *, project: bool = False) -> dict:
         digest = hashlib.sha256()
         with path.open("rb") as stream:
             info = os.fstat(stream.fileno())
@@ -151,6 +153,8 @@ class StepExecutor:
                 raise ValueError(f"artifact is not a readable file: {path}")
             while chunk := stream.read(1024 * 1024):
                 digest.update(chunk)
+            if project:
+                validate_qgz_archive(stream)
             after = os.fstat(stream.fileno())
         if not info.st_size:
             raise ValueError(f"artifact is empty: {path}")

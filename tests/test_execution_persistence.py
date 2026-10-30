@@ -18,6 +18,7 @@ def task_store(monkeypatch):
     # No application task, attempt or checkpoint is modified by these cases.
     conn = psycopg.connect(os.environ["DATABASE_URL"])
     conn.execute("CREATE TEMP TABLE task_executions (LIKE public.task_executions INCLUDING ALL)")
+    conn.execute("ALTER TABLE task_executions ADD COLUMN IF NOT EXISTS reconciliation JSONB")
     conn.execute("CREATE TEMP TABLE task_step_attempts (LIKE public.task_step_attempts INCLUDING ALL)")
     conn.commit()
 
@@ -110,3 +111,34 @@ def test_equal_pause_proof_cannot_hide_changed_attempt_facts(task_store, mutatio
     assert result["execution"]["status"] == "needs_attention"
     assert result["attempts"][0]["tool_arguments"] == {"path": "original.geojson"}
     assert result["attempts"][0]["observation"]["data"] == {"id": "layer-1"}
+
+
+def test_reconciliation_keeps_unknown_call_and_attempts_without_authorizing_replay(task_store):
+    attempt = pause_attempt()
+    attempt['status'] = 'failed'
+    attempt['observation']['outcome'] = 'unknown'
+    intent = {'tool_name': 'add_layer', 'arguments': {'path': 'original.geojson'}}
+    task_store.save_task_execution_record(**record(status='needs_attention', attempts=[attempt], inflight_call=intent))
+    evidence = {'note': 'Inspected QGIS and the layer; the operation is no longer active.',
+                'qgis': {'process_id': 42, 'instance_id': 'instance-1', 'profile_folder': '/test/profile'}}
+    assert not task_store.reconcile_task_execution('pg-claim', 'other-session', evidence)
+    assert task_store.reconcile_task_execution('pg-claim', 'pg-session', evidence)
+    assert not task_store.reconcile_task_execution('pg-claim', 'pg-session', evidence)
+    result = task_store.get_task_execution_record('pg-claim')
+    assert result['execution']['status'] == 'reconciled'
+    assert result['execution']['inflight_call'] == intent
+    assert result['execution']['reconciliation'] == evidence
+    assert result['attempts'][0]['observation']['outcome'] == 'unknown'
+    with pytest.raises(RuntimeError, match='needs attention'):
+        task_store.save_task_execution_record(**record(status='running', claim_execution=True))
+
+
+def test_result_confirmation_rejects_conflicting_decision_after_checkpoint_failure(task_store):
+    task_store.save_task_execution_record(**record(status='success'))
+    assert task_store.confirm_task_execution('pg-claim', False, 'Layer is missing')
+    assert task_store.confirm_task_execution('pg-claim', False, 'Layer is missing')
+    assert not task_store.confirm_task_execution('pg-claim', True)
+    assert not task_store.confirm_task_execution('pg-claim', False, 'Different observation')
+    result = task_store.get_task_execution_record('pg-claim')['execution']
+    assert result['confirmed'] is False
+    assert result['summary'] == 'Layer is missing'

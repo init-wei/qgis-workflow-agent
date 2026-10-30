@@ -268,6 +268,22 @@
 
         <!-- 输入区域 -->
         <div class="chat-input p-5 border-t border-dark-border flex-shrink-0 bg-dark-bgDark/80">
+          <div v-if="executionStatus === 'needs_attention'" class="mb-3 p-3 border border-yellow-500 rounded-lg text-sm">
+            <p>上次操作结果未知。请在实际 QGIS 中检查工程、图层和产物，确认该操作已结束或原进程已停止；核查不会重放旧操作。</p>
+            <el-button class="mt-2" @click="handleProbeReconciliation">读取当前 QGIS 身份</el-button>
+            <div v-if="reconciliationProbe" class="mt-2">
+              <pre class="whitespace-pre-wrap break-all">{{ formatJson(reconciliationProbe) }}</pre>
+              <el-input v-model="reconciliationNote" type="textarea" :rows="2" placeholder="记录检查了哪个工程、图层或文件，以及观察到的情况" />
+              <label class="block mt-2"><input v-model="reconciliationChecked" type="checkbox" /> 我已检查实际 QGIS 和相关产物，并确认旧操作不再运行</label>
+              <el-button class="mt-2" :disabled="!reconciliationChecked || !reconciliationNote.trim()" @click="handleReconciliation">记录核查结果</el-button>
+            </div>
+          </div>
+          <p v-if="executionStatus === 'reconciled'" class="mb-3 text-sm">未知结果已记录人工核查；请创建新任务继续，旧操作不会重放。</p>
+          <el-button v-if="isStreaming" class="mb-2" @click="handleStopReading">停止读取</el-button>
+          <el-button v-if="currentThreadId" class="mb-2" :disabled="snapshotLoading" @click="refreshCurrentState">刷新当前状态</el-button>
+          <el-button v-if="currentPause" class="mb-2" @click="showCurrentPause">继续处理待审核内容</el-button>
+          <el-button v-if="currentContinuation" class="mb-2" :disabled="isExecuting" @click="handleContinueTask">继续已决定的任务</el-button>
+          <p v-if="currentRunActive && !isStreaming" class="mb-2 text-sm">后台任务仍在运行；可稍后刷新状态。</p>
           <div class="input-wrapper flex gap-2.5 bg-dark-bgLight/80 border border-dark-border rounded-xl p-2.5 items-end">
             <el-input
               v-model="inputMessage"
@@ -275,7 +291,7 @@
               :rows="1"
               :autosize="{ minRows: 1, maxRows: 4 }"
               placeholder="输入你的地理处理需求..."
-              :disabled="isExecuting || reviewModalVisible || resultModalVisible || riskReviewModalVisible"
+              :disabled="isExecuting || snapshotLoading || !canStartTask"
               @keydown="handleKeyDown"
               class="flex-1"
             />
@@ -283,7 +299,7 @@
               type="primary"
               :icon="Promotion"
               circle
-              :disabled="!inputMessage.trim() || isExecuting || reviewModalVisible || resultModalVisible || riskReviewModalVisible"
+              :disabled="!inputMessage.trim() || isExecuting || snapshotLoading || !canStartTask"
               @click="handleSendMessage"
             />
           </div>
@@ -389,6 +405,7 @@
         </div>
       </div>
       <template #footer>
+        <el-button @click="reviewModalVisible = false">稍后处理</el-button>
         <el-button type="danger" @click="handleReview(false)">拒绝并重新规划</el-button>
         <el-button type="success" :disabled="!currentDraft?.tool_calls.length" @click="handleReview(true)">批准执行</el-button>
       </template>
@@ -407,6 +424,10 @@
       <div class="bg-dark-bgLight p-4 rounded-lg mb-4">
         <strong>执行摘要：</strong>
         <pre class="mt-2 text-sm whitespace-pre-wrap">{{ executionSummary }}</pre>
+        <p class="mt-2 text-sm">工具执行：{{ executionStatus || '等待记录' }}</p>
+        <p class="text-sm">文件完整性：{{ fileEvidenceSummary }}</p>
+        <p class="text-sm">空间验证：{{ spatialEvidenceSummary }}</p>
+        <p class="text-sm">用户确认：{{ userConfirmationSummary }}</p>
       </div>
       <div class="mt-4">
         <label class="block text-sm mb-2">若任务未完成，请补充失败原因（可选）：</label>
@@ -421,6 +442,7 @@
         您的确认将保存在任务结果中，并用于生成总结。
       </p>
       <template #footer>
+        <el-button @click="resultModalVisible = false">稍后处理</el-button>
         <el-button type="danger" @click="handleResultConfirm(false)">❌ 任务失败</el-button>
         <el-button type="success" @click="handleResultConfirm(true)">✅ 任务成功</el-button>
       </template>
@@ -454,6 +476,7 @@
         </p>
       </div>
       <template #footer>
+        <el-button @click="riskReviewModalVisible = false">稍后处理</el-button>
         <el-button type="danger" @click="handleRiskReview('rejected')">拒绝</el-button>
         <el-button type="success" @click="handleRiskReview('approved')">批准执行</el-button>
       </template>
@@ -476,15 +499,19 @@ import {
   getExecution,
   getFiles,
   getQGISStatus,
+  probeReconciliation,
+  reconcileExecution,
   getSessionHistory,
   getSessions,
   reviewPlan,
   submitRiskReview,
   uploadFile as apiUploadFile
 } from '../api'
-import type { LayerInfo, Message, SessionHistory, TaskPlan, UploadedFile } from '../types'
+import type { LayerInfo, Message, QGISIdentity, ReviewPause, SessionHistory, TaskPlan, UploadedFile } from '../types'
 
 interface RiskReviewData {
+  task_id: string
+  revision: number
   review_id: string
   tool_call?: {
     tool_name?: string
@@ -503,6 +530,14 @@ const reviewAdvise = ref('')
 const resultFeedback = ref('')
 const riskReviewComment = ref('')
 const currentRiskReview = ref<RiskReviewData | null>(null)
+const currentPause = ref<ReviewPause | null>(null)
+const currentContinuation = ref<{ kind: 'resume'; task_id: string; revision: number } | null>(null)
+const canStartTask = ref(true)
+const currentRunActive = ref(false)
+const snapshotLoading = ref(false)
+const reconciliationProbe = ref<QGISIdentity | null>(null)
+const reconciliationNote = ref('')
+const reconciliationChecked = ref(false)
 const isDragOver = ref(false)
 const fileInputRef = ref<HTMLInputElement | null>(null)
 const screenshotTime = ref('暂无')
@@ -545,6 +580,21 @@ const executionSummary = computed(() => {
     || readString(result, 'execution_summary')
     || readString(result, 'status')
     || '执行结果正在读取'
+})
+
+const executionStatus = computed(() => readString(asRecord(currentExecutionResult.value), 'status'))
+const fileEvidenceSummary = computed(() => {
+  const artifacts = asRecord(currentExecutionResult.value)?.artifacts
+  if (!Array.isArray(artifacts)) return '等待记录'
+  const paths = artifacts.map(asRecord).filter(item => item?.kind === 'path')
+  if (!paths.length) return '无文件产物'
+  const verified = paths.filter(item => typeof item?.sha256 === 'string' && typeof item?.size_bytes === 'number').length
+  return `${verified}/${paths.length} 个文件具有可读性和校验和证据`
+})
+const spatialEvidenceSummary = computed(() => '未提供独立空间验证')
+const userConfirmationSummary = computed(() => {
+  const confirmed = asRecord(currentExecutionResult.value)?.confirmed
+  return confirmed === true ? '已确认成功' : confirmed === false ? '已确认失败' : '尚未确认'
 })
 
 const screenshotUrl = computed(() => {
@@ -617,13 +667,24 @@ function handleOpenTraceDemo() {
   void router.push('/trace-demo')
 }
 
+let sessionEpoch = 0
+let snapshotVersion = 0
+
 async function handleSwitchSession(threadId: string) {
+  const epoch = ++sessionEpoch
   stopStreaming()
   resetStreamingState()
   reviewModalVisible.value = false
   resultModalVisible.value = false
   riskReviewModalVisible.value = false
   currentRiskReview.value = null
+  currentPause.value = null
+  currentContinuation.value = null
+  canStartTask.value = false
+  currentRunActive.value = false
+  reconciliationProbe.value = null
+  reconciliationNote.value = ''
+  reconciliationChecked.value = false
   chatStore.setCurrentDraft(null)
   chatStore.setExecutionResult(null)
   chatStore.setExecuting(false)
@@ -631,13 +692,14 @@ async function handleSwitchSession(threadId: string) {
   chatStore.setThreadId(threadId)
   chatStore.clearMessages()
 
-  await loadSessionHistory(threadId)
-  await restoreCurrentTaskPlan(threadId)
+  await loadSessionHistory(threadId, epoch)
+  if (epoch === sessionEpoch) await restoreCurrentTaskPlan(threadId, epoch)
 }
 
-async function loadSessionHistory(threadId: string) {
+async function loadSessionHistory(threadId: string, epoch: number) {
   try {
-    renderHistory(await getSessionHistory(threadId))
+    const history = await getSessionHistory(threadId)
+    if (currentThreadId.value === threadId && epoch === sessionEpoch) renderHistory(history)
   } catch (error) {
     console.error('加载历史失败:', error)
     ElMessage.error('加载历史失败')
@@ -674,31 +736,120 @@ function appendHistoryMessage(message: Message) {
   }
 }
 
-async function restoreCurrentTaskPlan(threadId: string) {
+function showCurrentPause() {
+  if (currentPause.value?.kind === 'plan_review') reviewModalVisible.value = true
+  if (currentPause.value?.kind === 'risk_review') riskReviewModalVisible.value = true
+  if (currentPause.value?.kind === 'result_review') resultModalVisible.value = true
+}
+
+async function restoreCurrentTaskPlan(threadId: string, epoch: number) {
+  const version = ++snapshotVersion
+  snapshotLoading.value = true
   try {
     const snapshot = await getCurrentState(threadId)
+    if (currentThreadId.value !== threadId || epoch !== sessionEpoch || version !== snapshotVersion) return
     const plan = snapshot.state.task_plan
-    if (!isTaskPlan(plan)) return
-
-    chatStore.setCurrentDraft(plan)
-    if (plan.review_status === 'pending_review') {
+    if (isTaskPlan(plan)) chatStore.setCurrentDraft(plan)
+    const pause = snapshot.pause || null
+    currentPause.value = pause
+    currentContinuation.value = snapshot.continuation || null
+    canStartTask.value = snapshot.can_start_task
+    currentRunActive.value = snapshot.running
+    reviewModalVisible.value = false
+    riskReviewModalVisible.value = false
+    resultModalVisible.value = false
+    if (pause?.kind === 'plan_review' && isTaskPlan(plan)) {
       reviewAdvise.value = ''
-      reviewModalVisible.value = true
+      showCurrentPause()
+    } else if (pause?.kind === 'risk_review') {
+      currentRiskReview.value = parseRiskReview(pause)
+      riskReviewComment.value = ''
+      if (currentRiskReview.value) showCurrentPause()
+    } else if (pause?.kind === 'result_review') {
+      chatStore.setExecutionResult(pause)
+      resultFeedback.value = ''
+      showCurrentPause()
     }
-    await loadExecutionDetails(plan.task_id)
+    if (isTaskPlan(plan)) await loadExecutionDetails(plan.task_id, threadId)
   } catch (error) {
-    // A new session may not have a checkpoint or an execution record yet.
     console.debug('当前会话没有待恢复的执行状态:', error)
+  } finally {
+    if (version === snapshotVersion) snapshotLoading.value = false
   }
 }
 
-async function loadExecutionDetails(taskId: string) {
+function refreshCurrentState() {
+  const threadId = currentThreadId.value
+  if (threadId) void restoreCurrentTaskPlan(threadId, sessionEpoch)
+}
+
+async function loadExecutionDetails(taskId: string, threadId = currentThreadId.value) {
+  const epoch = sessionEpoch
   try {
     const response = await getExecution(taskId)
-    chatStore.setExecutionResult(response.execution)
+    if (threadId === currentThreadId.value && epoch === sessionEpoch && currentDraft.value?.task_id === taskId) {
+      chatStore.setExecutionResult(response.execution)
+    }
   } catch (error) {
-    // Execution records are created after a plan reaches the backend runtime.
     console.debug(`任务 ${taskId} 暂无可查询执行记录:`, error)
+  }
+}
+
+function handleStopReading() {
+  stopStreaming()
+  chatStore.setExecuting(false)
+  canStartTask.value = false
+  chatStore.addSystemMessage('已停止读取；后台任务可能仍在运行，QGIS 操作没有被取消。')
+  refreshCurrentState()
+}
+
+async function handleContinueTask() {
+  const threadId = currentThreadId.value
+  const epoch = sessionEpoch
+  if (!threadId || !currentContinuation.value) return
+  currentContinuation.value = null
+  canStartTask.value = false
+  chatStore.setExecuting(true)
+  resetStreamingState()
+  await resumeStreaming(threadId)
+  if (currentThreadId.value === threadId && epoch === sessionEpoch) {
+    await restoreCurrentTaskPlan(threadId, epoch)
+  }
+}
+
+async function handleProbeReconciliation() {
+  const threadId = currentThreadId.value
+  const epoch = sessionEpoch
+  const taskId = currentDraft.value?.task_id
+  if (!threadId || !taskId) return
+  try {
+    const probe = await probeReconciliation(taskId)
+    if (currentThreadId.value === threadId && epoch === sessionEpoch && currentDraft.value?.task_id === taskId) {
+      reconciliationProbe.value = probe.qgis
+      reconciliationChecked.value = false
+    }
+  } catch (error) {
+    if (currentThreadId.value === threadId && epoch === sessionEpoch && currentDraft.value?.task_id === taskId) {
+      ElMessage.error(readString(asRecord(error), 'detail') || '无法读取 QGIS 身份')
+    }
+  }
+}
+
+async function handleReconciliation() {
+  const threadId = currentThreadId.value
+  const epoch = sessionEpoch
+  const taskId = currentDraft.value?.task_id
+  const probe = reconciliationProbe.value
+  if (!threadId || !taskId || !probe || !reconciliationChecked.value || !reconciliationNote.value.trim()) return
+  try {
+    await reconcileExecution(taskId, threadId, reconciliationNote.value.trim(), probe)
+    if (currentThreadId.value !== threadId || epoch !== sessionEpoch || currentDraft.value?.task_id !== taskId) return
+    reconciliationProbe.value = null
+    await restoreCurrentTaskPlan(threadId, epoch)
+  } catch (error) {
+    if (currentThreadId.value === threadId && epoch === sessionEpoch && currentDraft.value?.task_id === taskId) {
+      ElMessage.error(readString(asRecord(error), 'detail') || '无法记录核查结果')
+    }
   }
 }
 
@@ -749,11 +900,13 @@ async function handleSendMessage() {
     chatStore.addUserMessage(message)
     inputMessage.value = ''
     chatStore.setExecuting(true)
+    canStartTask.value = false
     await startStreaming({
       message,
       thread_id: threadId,
       files
     })
+    if (currentThreadId.value === threadId) await restoreCurrentTaskPlan(threadId, sessionEpoch)
   } catch (error) {
     console.error('发送消息失败:', error)
     ElMessage.error(error instanceof Error ? error.message : '发送消息失败')
@@ -824,6 +977,7 @@ function handleSSEEvent(event: string, data: unknown) {
       }
       resetStreamingState()
       chatStore.setCurrentDraft(taskPlan)
+      currentPause.value = { kind: 'plan_review', task_id: taskPlan.task_id, revision: taskPlan.revision }
       chatStore.setExecutionResult(null)
       reviewAdvise.value = ''
       reviewModalVisible.value = true
@@ -840,12 +994,20 @@ function handleSSEEvent(event: string, data: unknown) {
       }
       resetStreamingState()
       currentRiskReview.value = riskReview
+      currentPause.value = { kind: 'risk_review', ...riskReview }
       riskReviewComment.value = ''
       riskReviewModalVisible.value = true
       chatStore.setExecuting(false)
       break
     }
-    case 'result_review_required':
+    case 'result_review_required': {
+      const result = parseRiskReview(data)
+      if (!result) {
+        chatStore.addSystemMessage('结果确认缺少任务身份，已停止审核。')
+        chatStore.setExecuting(false)
+        break
+      }
+      currentPause.value = { kind: 'result_review', ...result }
       resetStreamingState()
       chatStore.setExecutionResult(data)
       resultFeedback.value = ''
@@ -854,6 +1016,7 @@ function handleSSEEvent(event: string, data: unknown) {
       if (currentDraft.value) void loadExecutionDetails(currentDraft.value.task_id)
       void refreshScreenshotFromState()
       break
+    }
     case 'complete': {
       resetStreamingState()
       const summary = readString(payload, 'summary')
@@ -861,10 +1024,10 @@ function handleSSEEvent(event: string, data: unknown) {
         const lastAssistant = [...messages.value].reverse().find(message => message.role === 'assistant')
         const lastContent = lastAssistant?.content || ''
         if (!lastContent.trim().endsWith(summary.trim())) {
-          chatStore.addAssistantMessage(`🎉 任务完成！\n\n${summary}`)
+          chatStore.addAssistantMessage(`任务处理结束。\n\n${summary}`)
         }
       } else {
-        chatStore.addSystemMessage('🎉 任务完成！')
+        chatStore.addSystemMessage('任务处理结束。')
       }
       const screenshot = readString(payload, 'screenshot_path')
       if (screenshot) {
@@ -891,11 +1054,15 @@ function handleSSEEvent(event: string, data: unknown) {
 function parseRiskReview(value: unknown): RiskReviewData | null {
   const record = asRecord(value)
   const reviewId = readString(record, 'review_id')
-  if (!reviewId) return null
+  const taskId = readString(record, 'task_id')
+  const revision = record?.revision
+  if (!reviewId || !taskId || typeof revision !== 'number') return null
   const toolCall = asRecord(record?.tool_call)
   const argumentsValue = asRecord(toolCall?.arguments) || undefined
   return {
     review_id: reviewId,
+    task_id: taskId,
+    revision,
     tool_call: toolCall
       ? { tool_name: readString(toolCall, 'tool_name'), arguments: argumentsValue }
       : undefined
@@ -913,10 +1080,12 @@ function handleSSEComplete() {
 function handleSSEError(error: Error) {
   console.error('SSE 错误:', error)
   chatStore.setExecuting(false)
+  ElMessage.error(error.message)
 }
 
 async function handleReview(approved: boolean) {
   const threadId = currentThreadId.value
+  const epoch = sessionEpoch
   const taskPlan = currentDraft.value
   if (!threadId || !taskPlan) return
 
@@ -934,50 +1103,69 @@ async function handleReview(approved: boolean) {
       approved,
       advise: approved ? undefined : advise
     })
+    if (currentThreadId.value !== threadId || epoch !== sessionEpoch) return
+    currentPause.value = null
     reviewModalVisible.value = false
     chatStore.addSystemMessage(approved ? '✅ 已批准当前计划，继续执行' : '📝 已提交意见，将在同一任务中重新规划')
     chatStore.setExecuting(true)
     resetStreamingState()
     await resumeStreaming(threadId)
+    if (currentThreadId.value === threadId && epoch === sessionEpoch) await restoreCurrentTaskPlan(threadId, epoch)
   } catch (error) {
     console.error('审核失败:', error)
-    ElMessage.error('审核失败')
-    chatStore.setExecuting(false)
+    if (currentThreadId.value === threadId && epoch === sessionEpoch) {
+      ElMessage.error(readString(asRecord(error), 'detail') || '审核失败')
+      chatStore.setExecuting(false)
+      await restoreCurrentTaskPlan(threadId, epoch)
+    }
   }
 }
 
 async function handleResultConfirm(isCompleted: boolean) {
   const threadId = currentThreadId.value
-  if (!threadId) return
+  const epoch = sessionEpoch
+  const pause = currentPause.value
+  if (!threadId || !pause || pause.kind !== 'result_review' || !pause.review_id) return
 
   try {
     const feedback = isCompleted ? undefined : resultFeedback.value.trim() || undefined
-    await confirmResult(threadId, isCompleted, feedback)
+    await confirmResult(threadId, pause.task_id, pause.revision, pause.review_id, isCompleted, feedback)
+    if (currentThreadId.value !== threadId || epoch !== sessionEpoch) return
+    currentPause.value = null
     resultModalVisible.value = false
     chatStore.addSystemMessage(isCompleted ? '✅ 确认任务成功，继续反思' : '❌ 确认任务失败，继续反思')
     chatStore.setExecuting(true)
     resultFeedback.value = ''
     resetStreamingState()
     await resumeStreaming(threadId)
+    if (currentThreadId.value === threadId && epoch === sessionEpoch) await restoreCurrentTaskPlan(threadId, epoch)
   } catch (error) {
     console.error('结果确认失败:', error)
-    ElMessage.error('结果确认失败')
-    chatStore.setExecuting(false)
+    if (currentThreadId.value === threadId && epoch === sessionEpoch) {
+      ElMessage.error(readString(asRecord(error), 'detail') || '结果确认失败')
+      chatStore.setExecuting(false)
+      await restoreCurrentTaskPlan(threadId, epoch)
+    }
   }
 }
 
 async function handleRiskReview(status: 'approved' | 'rejected') {
   const threadId = currentThreadId.value
+  const epoch = sessionEpoch
   const riskReview = currentRiskReview.value
   if (!threadId || !riskReview) return
 
   try {
     await submitRiskReview(
       threadId,
+      riskReview.task_id,
+      riskReview.revision,
       riskReview.review_id,
       status,
       riskReviewComment.value.trim() || undefined
     )
+    if (currentThreadId.value !== threadId || epoch !== sessionEpoch) return
+    currentPause.value = null
     riskReviewModalVisible.value = false
     chatStore.addSystemMessage(
       status === 'approved'
@@ -987,10 +1175,14 @@ async function handleRiskReview(status: 'approved' | 'rejected') {
     chatStore.setExecuting(true)
     resetStreamingState()
     await resumeStreaming(threadId)
+    if (currentThreadId.value === threadId && epoch === sessionEpoch) await restoreCurrentTaskPlan(threadId, epoch)
   } catch (error) {
     console.error('风险审核失败:', error)
-    ElMessage.error('风险审核失败')
-    chatStore.setExecuting(false)
+    if (currentThreadId.value === threadId && epoch === sessionEpoch) {
+      ElMessage.error(readString(asRecord(error), 'detail') || '风险审核失败')
+      chatStore.setExecuting(false)
+      await restoreCurrentTaskPlan(threadId, epoch)
+    }
   }
 }
 
@@ -1107,9 +1299,11 @@ function startPluginStatusMonitor() {
 
 async function refreshScreenshotFromState() {
   const threadId = currentThreadId.value
+  const epoch = sessionEpoch
   if (!threadId) return
   try {
     const data = await getCurrentState(threadId)
+    if (currentThreadId.value !== threadId || epoch !== sessionEpoch) return
     const path = readString(asRecord(data.state), 'screenshot_path')
     if (path) {
       chatStore.setScreenshotPath(path)

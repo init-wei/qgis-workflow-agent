@@ -7,6 +7,7 @@ import type {
   ReviewRequest,
   ExecutionResponse,
   CurrentStateResponse,
+  QGISIdentity,
   SessionHistory,
   QGISStatus,
   DemoCaseDetail,
@@ -146,16 +147,32 @@ export const getExecution = (task_id: string): Promise<ExecutionResponse> => {
   return api.get(`/executions/${encodeURIComponent(task_id)}`)
 }
 
+export const probeReconciliation = (taskId: string): Promise<{ task_id: string; qgis: QGISIdentity }> => {
+  return api.get(`/executions/${encodeURIComponent(taskId)}/reconciliation/probe`)
+}
+
+export const reconcileExecution = (taskId: string, threadId: string, note: string, qgis: QGISIdentity): Promise<unknown> => {
+  return api.post(`/executions/${encodeURIComponent(taskId)}/reconciliation`, {
+    thread_id: threadId, checked: true, note, qgis
+  })
+}
+
 /**
  * 确认执行结果
  */
 export const confirmResult = (
   thread_id: string,
+  task_id: string,
+  revision: number,
+  review_id: string,
   is_completed: boolean,
   user_feedback?: string
 ): Promise<unknown> => {
   return api.post('/confirm-result', {
     thread_id,
+    task_id,
+    revision,
+    review_id,
     is_completed,
     user_feedback
   })
@@ -163,6 +180,8 @@ export const confirmResult = (
 
 export const submitRiskReview = (
   thread_id: string,
+  task_id: string,
+  revision: number,
   review_id: string,
   status: 'approved' | 'rejected' | 'modified',
   comment?: string,
@@ -171,6 +190,8 @@ export const submitRiskReview = (
 ): Promise<any> => {
   return api.post('/risk-review', {
     thread_id,
+    task_id,
+    revision,
     review_id,
     status,
     comment,

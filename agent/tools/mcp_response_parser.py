@@ -2,12 +2,13 @@
 """Normalize MCP tool responses into ToolObservation objects."""
 
 import json
+from pathlib import Path
 from typing import Any
 
 from langchain_core.messages import ToolMessage
 
 from agent.tools.tool_contracts import ToolObservation
-from qgis_mcp_server.qgis_mcp_plugin.artifact_paths import call_output_paths
+from qgis_mcp_server.qgis_mcp_plugin.artifact_paths import WRITE_TOOLS, call_output_paths
 
 
 class MCPResponseParser:
@@ -15,12 +16,12 @@ class MCPResponseParser:
 
     def parse(self, tool_name: str, raw_response: Any) -> ToolObservation:
         observation = self._parse(tool_name, raw_response)
-        if tool_name in {"add_layer", "execute_processing", "capture_map_canvas"}:
+        if tool_name in WRITE_TOOLS:
             payload = self._coerce_payload(raw_response)
             outcome = "completed" if observation.status == "success" else "unknown"
             if isinstance(payload, dict) and observation.status == "error" and payload.get("outcome") == "not_started":
                 outcome = "not_started"
-            observation = observation.model_copy(update={"outcome": outcome})
+            observation = observation.model_copy(update={"outcome": outcome, "retryable": False})
         return observation
 
     def _parse(self, tool_name: str, raw_response: Any) -> ToolObservation:
@@ -129,6 +130,17 @@ class MCPResponseParser:
                 and all(isinstance(key, str) and isinstance(value, str)
                         for key, value in data["result"].items())
             )
+        elif tool_name == "save_project":
+            valid_write_result = (
+                payload.get("status") == "success"
+                and isinstance(data, dict)
+                and data.get("success") is True
+                and isinstance(data.get("path"), str)
+                and Path(data["path"]).is_absolute()
+                and Path(data["path"]).suffix == ".qgz"
+                and type(data.get("layer_count")) is int
+                and data["layer_count"] >= 0
+            )
         if not valid_write_result:
             return ToolObservation(
                 tool_name=tool_name,
@@ -140,7 +152,7 @@ class MCPResponseParser:
                 retryable=False,
             )
 
-        if tool_name == "capture_map_canvas":
+        if tool_name in {"capture_map_canvas", "save_project"}:
             artifacts = [{"kind": "path", "path": data["path"]}]
         elif tool_name == "execute_processing":
             artifacts = [

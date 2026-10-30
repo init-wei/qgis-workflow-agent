@@ -3,11 +3,13 @@
 import os
 from pathlib import Path, PureWindowsPath
 import re
+from zlib import error as ZlibError
+from zipfile import BadZipFile, ZipFile
 
 
 SOURCE_WORKSPACE = Path(__file__).resolve().parents[2]
 OUTPUT_SUBDIRECTORY = Path('shared/outputs')
-WRITE_TOOLS = frozenset({'add_layer', 'execute_processing', 'capture_map_canvas'})
+WRITE_TOOLS = frozenset({'add_layer', 'execute_processing', 'capture_map_canvas', 'save_project'})
 
 
 def workspace_directory(workspace_root=None):
@@ -79,6 +81,14 @@ def new_output_path(raw_path, workspace_root=None, *, task_id=None, revision=Non
     return resolved
 
 
+def new_project_output_path(raw_path, workspace_root=None, *, task_id=None, revision=None):
+    """Require a new owned QGZ destination for a project copy."""
+    resolved = new_output_path(raw_path, workspace_root, task_id=task_id, revision=revision)
+    if resolved.suffix != '.qgz':
+        raise ValueError('Project output must have a .qgz suffix')
+    return resolved
+
+
 def reserve_output_path(raw_path, workspace_root=None):
     """Create exactly one new artifact directory at the plugin write boundary.
 
@@ -117,6 +127,18 @@ def artifact_component_paths(path):
     return (path,)
 
 
+def validate_qgz_archive(stream):
+    """Check the complete ZIP and its project member, without claiming spatial validity."""
+    try:
+        with ZipFile(stream) as archive:
+            projects = [item for item in archive.infolist()
+                        if item.filename.endswith('.qgs') and item.file_size > 0]
+            if len(projects) != 1 or archive.testzip() is not None:
+                raise ValueError('Invalid QGZ project archive')
+    except (BadZipFile, EOFError, RuntimeError, NotImplementedError, ZlibError) as exc:
+        raise ValueError('Unreadable QGZ project archive') from exc
+
+
 def processing_output_paths(value, key=''):
     """Walk nested QGIS output parameters without losing their dictionary keys."""
     if isinstance(value, dict):
@@ -142,7 +164,7 @@ def replace_processing_output_paths(value, replacements, key=''):
 
 
 def call_output_paths(tool_name, arguments):
-    if tool_name == 'capture_map_canvas':
+    if tool_name in {'capture_map_canvas', 'save_project'}:
         path = arguments.get('path')
         if isinstance(path, str):
             yield path

@@ -23,7 +23,7 @@ class ThreadRun:
     def __init__(self, thread_id: str):
         with _owners_lock:
             if thread_id in _active_threads:
-                raise ExecutionBusy('Task busy; this graph run is already active.')
+                raise ExecutionBusy('此任务正在运行，请等待后重试。 Task busy; this graph run is already active.')
             _active_threads.add(thread_id)
         self.thread_id = thread_id
 
@@ -37,19 +37,44 @@ def is_task_active(task_id: str) -> bool:
         return task_id in _active_tasks
 
 
+def is_thread_active(thread_id: str) -> bool:
+    with _owners_lock:
+        return thread_id in _active_threads
+
+
 def block_unknown_task(task_id: str) -> None:
     """T02 must reconcile actual remote work before allowing a new GIS task."""
     with _owners_lock:
         _unknown_tasks.add(task_id)
 
 
+@contextmanager
+def reconciliation_slot(task_id: str):
+    """Serialize an operator's read-only probe with all GIS work."""
+    with _owners_lock:
+        if task_id not in _unknown_tasks:
+            raise ExecutionBusy('This task is not awaiting unknown-outcome reconciliation.')
+        if not _execution_lock.acquire(blocking=False):
+            raise ExecutionBusy('GIS 仍在执行，请等待并检查实际状态。 GIS execution is still active.')
+    try:
+        yield
+    finally:
+        _execution_lock.release()
+
+
+def clear_reconciled_task(task_id: str) -> None:
+    """Release only the task whose operator evidence was durably recorded."""
+    with _owners_lock:
+        _unknown_tasks.discard(task_id)
+
+
 class ExecutionSlot:
     def __init__(self, task_id: str | None = None):
         with _owners_lock:
             if _unknown_tasks:
-                raise ExecutionBusy('GIS execution needs attention: an earlier operation outcome is unknown.')
+                raise ExecutionBusy('此前 GIS 操作结果未知，请先核查。 GIS execution needs attention.')
             if not _execution_lock.acquire(blocking=False):
-                raise ExecutionBusy('GIS execution busy; retry after the active task finishes.')
+                raise ExecutionBusy('GIS 正在执行另一项任务，请等待后重试；不会排队。 GIS execution busy.')
             if task_id:
                 _active_tasks.add(task_id)
         self.task_id = task_id

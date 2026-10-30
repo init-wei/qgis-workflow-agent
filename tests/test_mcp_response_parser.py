@@ -53,7 +53,9 @@ def test_parser_normalizes_socket_success_and_extracts_artifact():
 def test_parser_normalizes_tool_message_json_content():
     message = ToolMessage(
         content=json.dumps(
-            {"status": "success", "result": {"saved": "shared/projects/demo.qgz"}}
+            {"status": "success", "result": {
+                "success": True, "path": "/workspace/shared/outputs/task/r1/project/demo.qgz",
+                "layer_count": 1}}
         ),
         tool_call_id="call-1",
         name="save_project",
@@ -63,8 +65,30 @@ def test_parser_normalizes_tool_message_json_content():
 
     assert observation.status == "success"
     assert observation.artifacts == [
-        {"kind": "path", "path": "shared/projects/demo.qgz"}
+        {"kind": "path", "path": "/workspace/shared/outputs/task/r1/project/demo.qgz"}
     ]
+
+
+@pytest.mark.parametrize('result', [
+    {},
+    {'success': True, 'path': '/workspace/project.qgz'},
+    {'success': True, 'path': '/workspace/project.qgz', 'layer_count': True},
+    {'success': True, 'path': '/workspace/project.qgz', 'layer_count': -1},
+    {'success': True, 'path': 'relative/project.qgz', 'layer_count': 0},
+    {'success': True, 'path': '/workspace/project.qgs', 'layer_count': 0},
+])
+def test_project_save_rejects_incomplete_or_invalid_success_result(result):
+    observation = MCPResponseParser().parse('save_project', {'status': 'success', 'result': result})
+    assert observation.status == 'malformed'
+    assert observation.outcome == 'unknown'
+    assert observation.retryable is False
+
+
+def test_project_save_disconnect_is_never_automatically_retryable():
+    observation = MCPResponseParser().parse('save_project', TimeoutError('socket timed out'))
+    assert observation.status == 'disconnected'
+    assert observation.outcome == 'unknown'
+    assert observation.retryable is False
 
 
 def test_parser_normalizes_content_block_json():

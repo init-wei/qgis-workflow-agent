@@ -39,6 +39,8 @@ class AgentState(TypedDict):
     # ========== 基础输入 ==========
     input_query: str  # 用户的原始地理处理需求
     session_id: str   # 会话ID（用于数据隔离）
+    session_name: Optional[str]
+    session_created_at: Optional[str]
     task_id: str
     uploaded_files: List[Dict[str, Any]]
     llm_config: Optional[Dict[str, Any]]  # 非敏感运行选项；密钥与入口仅由服务端环境决定
@@ -49,6 +51,10 @@ class AgentState(TypedDict):
     task_plan: Optional[TaskPlan]        # 唯一权威计划及当前审核版本
     plan_validation: Optional[PlanValidationReport]  # TaskPlan验证报告
     planning_error: Optional[str]
+    planning_revision: int            # 修订目标；生成失败时仍保留身份
+    last_plan_decision: Optional[Dict[str, Any]]
+    last_result_decision: Optional[Dict[str, Any]]
+    last_risk_decision: Optional[Dict[str, Any]]
     retry_count: int                  # 人工审查/修改的循环次数
     
     # ========== API RAG Node 字段 ==========
@@ -85,6 +91,8 @@ def create_initial_state(
     llm_config: Optional[Dict[str, Any]] = None,
     task_id: str | None = None,
     uploaded_files: List[Dict[str, Any]] | None = None,
+    session_name: str | None = None,
+    session_created_at: str | None = None,
 ) -> AgentState:
     """
     创建初始状态
@@ -100,6 +108,8 @@ def create_initial_state(
         # 基础输入
         input_query=input_query,
         session_id=session_id if session_id else str(uuid.uuid4()),
+        session_name=session_name,
+        session_created_at=session_created_at,
         task_id=task_id or str(uuid.uuid4()),
         uploaded_files=uploaded_files or [],
         
@@ -112,6 +122,10 @@ def create_initial_state(
         task_plan=None,
         plan_validation=None,
         planning_error=None,
+        planning_revision=1,
+        last_plan_decision=None,
+        last_result_decision=None,
+        last_risk_decision=None,
         retry_count=0,
         
         # API RAG字段

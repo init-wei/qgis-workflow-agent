@@ -88,6 +88,9 @@ export interface FileReference {
 
 export interface ResultConfirmRequest {
   thread_id: string
+  task_id: string
+  revision: number
+  review_id: string
   is_completed: boolean
   user_feedback?: string
 }
@@ -140,6 +143,13 @@ export interface Execution {
   artifacts: unknown[]
   confirmed: boolean | null
   summary: string | null
+  reconciliation?: { note: string; checked_at: string; qgis: QGISIdentity } | null
+}
+
+export interface QGISIdentity {
+  process_id: number
+  instance_id: string
+  profile_folder: string
 }
 
 export interface ExecutionResponse {
@@ -154,6 +164,19 @@ export interface CurrentStateResponse {
     [key: string]: unknown
   }
   next?: string[]
+  pause?: ReviewPause | null
+  continuation?: { kind: 'resume'; task_id: string; revision: number } | null
+  can_start_task: boolean
+  running: boolean
+}
+
+export interface ReviewPause {
+  kind: 'plan_review' | 'risk_review' | 'result_review'
+  task_id: string
+  revision: number
+  review_id?: string
+  execution_summary?: string
+  tool_call?: { tool_name?: string; arguments?: Record<string, unknown> }
 }
 
 // 会话历史

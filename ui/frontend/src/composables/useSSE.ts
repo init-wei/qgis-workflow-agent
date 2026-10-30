@@ -19,24 +19,28 @@ export function useSSE(
 ): UseSSEReturn {
   const isStreaming = ref(false)
   const error = ref<Error | null>(null)
-  let reader: ReadableStreamDefaultReader<Uint8Array> | null = null
-  let controller: AbortController | null = null
+  type Run = { controller: AbortController; reader: ReadableStreamDefaultReader<Uint8Array> | null }
+  let active: Run | null = null
 
-  const processSSEStream = async (response: Response) => {
+  const processSSEStream = async (response: Response, run: Run) => {
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`)
+      const payload: unknown = await response.json().catch(() => null)
+      throw new Error(readStringProperty(payload, 'detail') || `HTTP ${response.status}`)
     }
     if (!response.body) {
       throw new Error('SSE 响应没有可读取的数据流')
     }
 
-    reader = response.body.getReader()
+    if (active !== run) return
+    const reader = response.body.getReader()
+    run.reader = reader
     const decoder = new TextDecoder()
     let buffer = ''
     let currentEventType = 'message'
     const dataLines: string[] = []
 
     const dispatchEvent = () => {
+      if (active !== run) return
       if (dataLines.length === 0) {
         currentEventType = 'message'
         return
@@ -99,8 +103,7 @@ export function useSSE(
       }
       dispatchEvent()
     } finally {
-      isStreaming.value = false
-      cleanup()
+      if (active === run) cleanup()
     }
   }
 
@@ -108,13 +111,14 @@ export function useSSE(
     cleanup()
     isStreaming.value = true
     error.value = null
-    controller = new AbortController()
+    const run: Run = { controller: new AbortController(), reader: null }
+    active = run
 
     try {
-      const response = await startRequest(controller.signal)
-      await processSSEStream(response)
+      const response = await startRequest(run.controller.signal)
+      await processSSEStream(response, run)
     } catch (cause) {
-      if (cause instanceof Error && cause.name === 'AbortError') {
+      if (active !== run || (cause instanceof Error && cause.name === 'AbortError')) {
         return
       }
       const streamError = cause instanceof Error ? cause : new Error(String(cause))
@@ -134,13 +138,11 @@ export function useSSE(
   }
 
   const cleanup = () => {
-    if (controller) {
-      controller.abort()
-      controller = null
-    }
-    if (reader) {
-      void reader.cancel()
-      reader = null
+    const run = active
+    active = null
+    if (run) {
+      run.controller.abort()
+      if (run.reader) void run.reader.cancel().catch(() => {})
     }
     isStreaming.value = false
   }

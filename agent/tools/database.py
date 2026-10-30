@@ -435,9 +435,26 @@ def confirm_task_execution(task_id: str, confirmed: bool, summary: str | None = 
                 SET confirmed = %s,
                     summary = COALESCE(%s, summary),
                     updated_at = CURRENT_TIMESTAMP
-                WHERE task_id = %s
+                WHERE task_id = %s AND (
+                    confirmed IS NULL OR
+                    (confirmed = %s AND COALESCE(summary, '') = COALESCE(%s, ''))
+                )
                 """,
-                (confirmed, summary, task_id),
+                (confirmed, summary, task_id, confirmed, summary),
+            )
+            conn.commit()
+            return cur.rowcount == 1
+
+
+def reconcile_task_execution(task_id: str, session_id: str, evidence: dict[str, Any]) -> bool:
+    """Record human inspection without changing the unknown attempt or intent."""
+    with _get_pool().connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """UPDATE task_executions SET status = 'reconciled', reconciliation = %s::jsonb,
+                   updated_at = CURRENT_TIMESTAMP
+                   WHERE task_id = %s AND session_id = %s AND status = 'needs_attention'""",
+                (json.dumps(evidence, ensure_ascii=False), task_id, session_id),
             )
             conn.commit()
             return cur.rowcount == 1

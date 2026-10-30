@@ -22,12 +22,15 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_two_plugin_writers_cannot_reserve_the_same_artifact(tmp_path):
     target = tmp_path / 'shared/outputs/task-1/r1/image/map.png'
     script = '''
+import os
+os.environ['QGIS_CUSTOM_CONFIG_PATH'] = os.path.join(os.environ['QWA_ROOT'], f'qgis-config-{os.getpid()}')
 import json, sys
 from qgis.core import QgsApplication
 from qgis.PyQt.QtCore import QSize
 from qgis.PyQt.QtGui import QImage
 app = QgsApplication([], True)
 app.initQgis()
+assert os.path.commonpath([os.environ['QGIS_CUSTOM_CONFIG_PATH'], QgsApplication.qgisSettingsDirPath()]) == os.environ['QGIS_CUSTOM_CONFIG_PATH']
 from qgis_mcp_server.qgis_mcp_plugin.qgis_mcp_plugin import QgisMCPServer
 class Canvas:
     def size(self): return QSize(2, 2)
@@ -42,6 +45,7 @@ print('ready', flush=True)
 sys.stdin.readline()
 reply = QgisMCPServer(iface=Iface()).execute_command({
     'type': 'capture_map_canvas', 'params': {'path': sys.argv[1]}})
+reply['_profile'] = QgsApplication.qgisSettingsDirPath()
 print(json.dumps(reply), flush=True)
 '''
     env = {**os.environ, 'QT_QPA_PLATFORM': 'offscreen', 'QWA_ROOT': str(tmp_path)}
@@ -61,6 +65,7 @@ print(json.dumps(reply), flush=True)
             stdout, stderr = process.communicate(timeout=30)
             assert process.returncode == 0, stderr
             replies.append(json.loads(stdout))
+        assert len({reply.pop('_profile') for reply in replies}) == 2
         assert sorted(reply['status'] for reply in replies) == ['error', 'success']
         assert next(reply for reply in replies if reply['status'] == 'error')['outcome'] == 'not_started'
         assert target.read_bytes().startswith(b'\x89PNG\r\n\x1a\n')
@@ -75,6 +80,8 @@ print(json.dumps(reply), flush=True)
 def test_real_qgis_capture_creates_a_readable_png_in_a_new_directory(tmp_path):
     target = tmp_path / 'shared/outputs/task-1/r1/image/map.png'
     script = '''
+import os
+os.environ['QGIS_CUSTOM_CONFIG_PATH'] = os.path.join(os.environ['QWA_ROOT'], f'qgis-config-{os.getpid()}')
 import json, sys
 from qgis.core import QgsApplication, QgsVectorLayer, QgsFeature, QgsGeometry, QgsPointXY, QgsRectangle
 from qgis.gui import QgsMapCanvas
@@ -82,6 +89,7 @@ from qgis.PyQt.QtCore import QEventLoop, QTimer
 from qgis.PyQt.QtGui import QImageReader
 app = QgsApplication([], True)
 app.initQgis()
+assert os.path.commonpath([os.environ['QGIS_CUSTOM_CONFIG_PATH'], QgsApplication.qgisSettingsDirPath()]) == os.environ['QGIS_CUSTOM_CONFIG_PATH']
 canvas = QgsMapCanvas()
 layer = QgsVectorLayer('Point?crs=EPSG:4326', 'synthetic', 'memory')
 feature = QgsFeature()
@@ -132,13 +140,15 @@ print(json.dumps({'reply': reply, 'png': bytes(reader.format()).decode(),
 def test_capture_reports_unknown_when_canvas_does_not_produce_a_readable_png(tmp_path, mode):
     target = tmp_path / 'shared/outputs/task-1/r1/image/map.png'
     script = '''
-import json, sys
 import os
+os.environ['QGIS_CUSTOM_CONFIG_PATH'] = os.path.join(os.environ['QWA_ROOT'], f'qgis-config-{os.getpid()}')
+import json, sys
 from qgis.core import QgsApplication
 from qgis.PyQt.QtCore import QSize
 from qgis.PyQt.QtGui import QImage
 app = QgsApplication([], True)
 app.initQgis()
+assert os.path.commonpath([os.environ['QGIS_CUSTOM_CONFIG_PATH'], QgsApplication.qgisSettingsDirPath()]) == os.environ['QGIS_CUSTOM_CONFIG_PATH']
 from qgis_mcp_server.qgis_mcp_plugin.qgis_mcp_plugin import QgisMCPServer
 class Canvas:
     def size(self): return QSize(100, 100)
@@ -181,11 +191,14 @@ def test_real_qgis_processing_creates_new_shapefile_and_keeps_input(tmp_path):
     relative = 'shared/outputs/task-1/r1/output/result.shp'
     target = tmp_path / relative
     script = '''
+import os
+os.environ['QGIS_CUSTOM_CONFIG_PATH'] = os.path.join(os.environ['QWA_ROOT'], f'qgis-config-{os.getpid()}')
 import json, sys
 sys.path.append('/usr/share/qgis/python/plugins')
 from qgis.core import QgsApplication
 app = QgsApplication([], False)
 app.initQgis()
+assert os.path.commonpath([os.environ['QGIS_CUSTOM_CONFIG_PATH'], QgsApplication.qgisSettingsDirPath()]) == os.environ['QGIS_CUSTOM_CONFIG_PATH']
 from processing.core.Processing import Processing
 Processing.initialize()
 from qgis_mcp_server.qgis_mcp_plugin.qgis_mcp_plugin import QgisMCPServer
@@ -232,11 +245,14 @@ def test_plugin_processing_does_not_confirm_an_unverified_output(tmp_path, mode)
     target = tmp_path / 'shared/outputs/task-1/r1/output' / (
         'result.shp' if mode == 'missing_companion' else 'result.gpkg')
     script = '''
-import json, os, sys
+import os
+os.environ['QGIS_CUSTOM_CONFIG_PATH'] = os.path.join(os.environ['QWA_ROOT'], f'qgis-config-{os.getpid()}')
+import json, sys
 sys.path.append('/usr/share/qgis/python/plugins')
 from qgis.core import QgsApplication
 app = QgsApplication([], False)
 app.initQgis()
+assert os.path.commonpath([os.environ['QGIS_CUSTOM_CONFIG_PATH'], QgsApplication.qgisSettingsDirPath()]) == os.environ['QGIS_CUSTOM_CONFIG_PATH']
 from processing.core.Processing import Processing
 Processing.initialize()
 import processing
@@ -278,11 +294,14 @@ def test_processing_refuses_existing_shapefile_companion(tmp_path):
     companion.write_bytes(b'pre-existing companion must survive')
     before = hashlib.sha256(companion.read_bytes()).hexdigest()
     script = '''
+import os
+os.environ['QGIS_CUSTOM_CONFIG_PATH'] = os.path.join(os.environ['QWA_ROOT'], f'qgis-config-{os.getpid()}')
 import json, sys
 sys.path.append('/usr/share/qgis/python/plugins')
 from qgis.core import QgsApplication
 app = QgsApplication([], False)
 app.initQgis()
+assert os.path.commonpath([os.environ['QGIS_CUSTOM_CONFIG_PATH'], QgsApplication.qgisSettingsDirPath()]) == os.environ['QGIS_CUSTOM_CONFIG_PATH']
 from processing.core.Processing import Processing
 Processing.initialize()
 from qgis_mcp_server.qgis_mcp_plugin.qgis_mcp_plugin import QgisMCPServer

@@ -17,10 +17,10 @@ from threading import Lock
 from dotenv import load_dotenv
 try:
     from .qgis_mcp_plugin.processing_policy import validate_processing_request
-    from .qgis_mcp_plugin.artifact_paths import call_output_paths, new_output_path
+    from .qgis_mcp_plugin.artifact_paths import call_output_paths, new_output_path, new_project_output_path
 except ImportError:  # Support the documented `python qgis_mcp_server/qgis_mcp_server.py` entry.
     from qgis_mcp_plugin.processing_policy import validate_processing_request
-    from qgis_mcp_plugin.artifact_paths import call_output_paths, new_output_path
+    from qgis_mcp_plugin.artifact_paths import call_output_paths, new_output_path, new_project_output_path
 from mcp.server.fastmcp import FastMCP, Context
 
 
@@ -342,14 +342,23 @@ def capture_map_canvas(ctx: Context, path: str, width: int = 800, height: int = 
     return json.dumps(result, indent=2)
 
 
-@lru_cache(maxsize=8)
+@mcp.tool()
+def save_project(ctx: Context, path: str) -> str:
+    """Save a new QGZ copy of the current project in an owned artifact directory."""
+    path = str(new_project_output_path(path))
+    qgis = get_qgis_connection()
+    result = qgis.send_command("save_project", {"path": path})
+    return json.dumps(result, indent=2)
+
+
+@lru_cache(maxsize=9)
 def tool_argument_model(tool_name: str):
     """Return the same SDK argument contract used by the paired MCP server."""
     from mcp.server.fastmcp.utilities.func_metadata import func_metadata
 
     functions = {fn.__name__: fn for fn in (
         ping, get_qgis_info, get_project_info, get_layers, add_layer,
-        get_layer_features, execute_processing, capture_map_canvas,
+        get_layer_features, execute_processing, capture_map_canvas, save_project,
     )}
     function = functions.get(tool_name)
     if function is None:

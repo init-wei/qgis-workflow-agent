@@ -21,6 +21,8 @@ def test_build_risk_review_feedback_uses_pending_tool_call():
     )
     request = RiskReviewDecisionRequest(
         thread_id="thread-1",
+        task_id="task-1",
+        revision=1,
         review_id="review-1",
         status="approved",
         reviewer="tester",
@@ -72,6 +74,8 @@ def test_resolve_risk_review_tool_call_rejects_stale_review_id():
     )
     request = RiskReviewDecisionRequest(
         thread_id="thread-1",
+        task_id="task-1",
+        revision=1,
         review_id="stale-review",
         status="approved",
     )

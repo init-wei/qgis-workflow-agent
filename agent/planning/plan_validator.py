@@ -43,6 +43,7 @@ SUPPORTED_MCP_TOOLS = {
     "get_layer_features",
     "execute_processing",
     "capture_map_canvas",
+    "save_project",
 }
 
 
@@ -326,6 +327,13 @@ class PlanValidator:
                     )
                 )
 
+            if call.tool_name == 'save_project' and (call.risk_level != 'high' or not call.requires_review):
+                issues.append(PlanValidationIssue(
+                    code='project_save_requires_review',
+                    message='Saving a new project must be declared high risk and require separate review.',
+                    step_id=call.step_id, field='tool_calls',
+                ))
+
             if step is not None:
                 references = {item.input_id: item.path for item in task_plan.required_inputs}
                 references.update({item.output_id: item.path for item in task_plan.expected_outputs})
@@ -497,9 +505,11 @@ class PlanValidator:
                 return f"Unsupported processing algorithm '{algorithm}'."
             if not isinstance(parameters, dict) or not parameters:
                 return "execute_processing requires non-empty parameters."
-        elif tool_name == "capture_map_canvas":
+        elif tool_name in {"capture_map_canvas", "save_project"}:
             if not isinstance(arguments.get("path"), str) or not arguments["path"]:
-                return "capture_map_canvas requires a path."
+                return f"{tool_name} requires a path."
+            if tool_name == 'save_project' and Path(arguments['path']).suffix != '.qgz':
+                return "save_project requires a new .qgz project."
         elif arguments:
             return f"{tool_name} does not accept arguments."
         return None

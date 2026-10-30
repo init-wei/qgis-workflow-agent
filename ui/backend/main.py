@@ -16,7 +16,7 @@ import subprocess
 from contextlib import asynccontextmanager
 from functools import wraps
 from datetime import datetime
-from typing import Dict, Any, Optional, AsyncGenerator, List
+from typing import Dict, Any, Optional, AsyncGenerator, List, Literal
 from pathlib import Path
 
 # 添加项目根目录到 Python 路径
@@ -47,13 +47,15 @@ from agent.graph import get_graph
 from agent.state import AgentState, create_initial_state
 from agent.planning.plan_schema import TaskPlan
 from agent.planning.plan_validator import PlanValidator
-from agent.tools.execution_guard import ExecutionBusy, ExecutionSlot, ThreadRun
+from agent.tools.execution_guard import (ExecutionBusy, ExecutionSlot, ThreadRun,
+                                         reconciliation_slot, clear_reconciled_task, is_thread_active)
 from agent.tools.database import (
     confirm_task_execution,
     get_task_execution_record,
     get_uploaded_file_record,
     list_task_executions_for_session,
     list_uploaded_file_records,
+    reconcile_task_execution,
     save_task_execution_record,
     save_uploaded_file_record,
 )
@@ -64,7 +66,9 @@ from agent.tools.demo_cases import (
     summarize_demo_case,
 )
 from agent.tools.mcp_client import get_mcp_client
+from agent.tools.mcp_response_parser import MCPResponseParser
 from agent.tools.tool_contracts import HumanFeedback, RiskReviewStatus, ToolCallPlan
+from qgis_mcp_server.qgis_mcp_plugin.artifact_paths import WRITE_TOOLS
 
 # 加载环境变量
 load_dotenv()
@@ -275,6 +279,8 @@ class RiskReviewDecisionRequest(BaseModel):
     """High-risk tool call review decision."""
 
     thread_id: str
+    task_id: str
+    revision: int
     review_id: str
     status: RiskReviewStatus
     comment: Optional[str] = None
@@ -381,6 +387,20 @@ async def fetch_checkpoint_thread_ids(app_instance) -> List[str]:
     return [thread_id for (thread_id,) in rows if thread_id]
 
 
+def project_session(thread_id: str, state) -> dict[str, str]:
+    """Use checkpoint session facts; older checkpoints get stable fallbacks."""
+    values = state.values if state else {}
+    cached = sessions.get(thread_id, {})
+    query = values.get('input_query') or ''
+    name = values.get('session_name') or cached.get('name') or (
+        (query[:50] + '...') if len(query) > 50 else query
+    ) or f'Session {thread_id[:8]}'
+    metadata = state.metadata if state and state.metadata else {}
+    created_at = (values.get('session_created_at') or cached.get('created_at')
+                  or metadata.get('created_at') or '1970-01-01T00:00:00')
+    return {'thread_id': thread_id, 'name': name, 'created_at': created_at}
+
+
 async def preload_sessions_from_db() -> None:
     """启动时从数据库预加载会话列表"""
     try:
@@ -394,16 +414,7 @@ async def preload_sessions_from_db() -> None:
                 config = {"configurable": {"thread_id": thread_id}}
                 state = await app_instance.aget_state(config)
                 if state and state.values:
-                    input_query = state.values.get("input_query") or ""
-                    name = (input_query[:50] + "...") if len(input_query) > 50 else input_query
-                    if not name:
-                        name = f"Session {thread_id[:8]}"
-                    created_at = state.metadata.get("created_at") or datetime.now().isoformat()
-                    sessions[thread_id] = {
-                        "thread_id": thread_id,
-                        "name": name,
-                        "created_at": created_at
-                    }
+                    sessions[thread_id] = project_session(thread_id, state)
             except Exception as e:
                 logger.warning(f"预加载会话 {thread_id} 失败: {e}")
     except Exception as e:
@@ -591,6 +602,8 @@ def build_plan_review_update(
         "task_plan": task_plan.model_copy(update={"review_status": "rejected"}),
         "advise": revision_advice,
         "planning_error": None,
+        "planning_revision": task_plan.revision + 1,
+        "retry_count": 0,
     }
 
 
@@ -682,6 +695,8 @@ def build_chat_input_state(
             llm_config=llm_config,
             task_id=new_task_id,
             uploaded_files=uploaded_files or [],
+            session_name=sessions.get(thread_id, {}).get('name'),
+            session_created_at=sessions.get(thread_id, {}).get('created_at'),
         )
         return dict(initial_state)
 
@@ -693,6 +708,10 @@ def build_chat_input_state(
         "task_plan": None,
         "plan_validation": None,
         "planning_error": None,
+        "planning_revision": 1,
+        "last_plan_decision": None,
+        "last_result_decision": None,
+        "last_risk_decision": None,
         "retry_count": 0,
         "advise": None,
         "execution_trace": None,
@@ -843,8 +862,7 @@ async def stream_agent_execution(
             else None
         )
         messages = state_values.get("messages", [])
-        is_completed = state_values.get("is_completed")
-        pending_risk_review = state_values.get("pending_risk_review")
+        pause = checkpoint_pause(final_state)
 
         if state_values.get("planning_error"):
             yield format_sse_event("error", {
@@ -853,7 +871,7 @@ async def stream_agent_execution(
             })
             return
 
-        if task_plan and task_plan.review_status == "pending_review":
+        if pause and pause['kind'] == 'plan_review':
             validation_report = PlanValidator().validate(task_plan)
             if not validation_report.is_valid:
                 yield format_sse_event("error", {
@@ -868,15 +886,17 @@ async def stream_agent_execution(
             return
 
         # 情况 2：Executor → 风险审核
-        if pending_risk_review:
+        if pause and pause['kind'] == 'risk_review':
             logger.info("[SSE] CLI判定：需要风险审核")
             yield format_sse_event(
                 "risk_review_required",
-                serialize_risk_review_required(pending_risk_review),
+                pause,
             )
             return
 
-        if messages and is_completed is False and task_plan and task_plan.review_status == "approved":
+        trace = state_values.get('execution_trace')
+        trace_status = trace.get('status') if isinstance(trace, dict) else getattr(trace, 'status', None)
+        if trace is not None and trace_status != 'success' and 'reflector_node' in set(final_state.next or ()):
             yield format_sse_event("error", {
                 "message": str(getattr(messages[-1], "content", "执行未完成，请核查。")),
                 "timestamp": datetime.now().isoformat(),
@@ -884,12 +904,13 @@ async def stream_agent_execution(
             return
 
         # 情况 3：Executor → 结果确认
-        if messages and is_completed is None:
+        if pause and pause['kind'] == 'result_review':
             logger.info("[SSE] CLI判定：需要确认执行结果")
 
             execution_summary = build_execution_summary(messages, max_items=1)
 
             yield format_sse_event("result_review_required", {
+                **pause,
                 "execution_summary": execution_summary or "执行完成",
                 "messages_count": len(messages),
                 "timestamp": datetime.now().isoformat()
@@ -984,7 +1005,9 @@ async def create_session(request: SessionCreateRequest):
         # 创建一个初始空状态，这样会话就会在数据库中存在
         initial_state = create_initial_state(
             session_id=thread_id,
-            input_query=""
+            input_query="",
+            session_name=session_name,
+            session_created_at=sessions[thread_id]['created_at'],
         )
 
         # 更新状态以保存到数据库
@@ -994,6 +1017,8 @@ async def create_session(request: SessionCreateRequest):
 
     except Exception as e:
         logger.warning(f"初始化会话数据库记录失败: {e}")
+        sessions.pop(thread_id, None)
+        raise HTTPException(status_code=503, detail='无法保存新会话。') from e
 
     return {
         "thread_id": thread_id,
@@ -1023,24 +1048,10 @@ async def list_sessions():
                     state = await app_instance.aget_state(config)
 
                     if state and state.values:
-                        input_query = state.values.get("input_query") or ""
-                        name = (input_query[:50] + "...") if len(input_query) > 50 else input_query
-                        if not name:
-                            name = f"Session {thread_id[:8]}"
-
-                        created_at = state.metadata.get("created_at") or datetime.now().isoformat()
-                        all_sessions[thread_id] = {
-                            "thread_id": thread_id,
-                            "name": name,
-                            "created_at": created_at
-                        }
+                        all_sessions[thread_id] = project_session(thread_id, state)
                 except Exception as e:
                     logger.warning(f"获取会话 {thread_id} 详情失败: {e}")
-                    all_sessions[thread_id] = {
-                        "thread_id": thread_id,
-                        "name": f"Session {thread_id[:8]}",
-                        "created_at": datetime.now().isoformat()
-                    }
+                    all_sessions[thread_id] = project_session(thread_id, None)
         except Exception as e:
             logger.warning(f"从数据库获取会话列表失败: {e}")
 
@@ -1050,12 +1061,12 @@ async def list_sessions():
                 all_sessions[thread_id] = {
                     "thread_id": thread_id,
                     "name": data.get("name", f"Session {thread_id[:8]}"),
-                    "created_at": data.get("created_at", datetime.now().isoformat())
+                    "created_at": data.get("created_at", '1970-01-01T00:00:00')
                 }
 
         # 转换为列表并按创建时间排序（最新的在前）
         all_sessions_list = list(all_sessions.values())
-        all_sessions_list.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+        all_sessions_list.sort(key=lambda x: (x.get("created_at", ""), x['thread_id']), reverse=True)
 
         return all_sessions_list
 
@@ -1089,6 +1100,17 @@ async def get_session_history(thread_id: str):
     for entry in history:
         if entry.get("input_query"):
             chat_messages.append({"role": "user", "content": entry["input_query"]})
+        terminal_status = entry.get('terminal_status')
+        if terminal_status in {'failed', 'reconciled'}:
+            entry_plan = entry.get('task_plan') or {}
+            outcome = '执行失败' if terminal_status == 'failed' else '执行结果未知，已人工核查'
+            confirmed = entry.get('confirmed')
+            confirmation = '用户结果未确认' if confirmed is None else ('用户确认成功' if confirmed else '用户确认失败')
+            detail = (f"任务 {entry.get('task_id')} · 修订 {entry_plan.get('revision')} · "
+                      f"{entry_plan.get('task_summary')}：{outcome}；{confirmation}。")
+            if terminal_status == 'reconciled' and entry.get('reconciliation_note'):
+                detail += f" 核查记录：{entry['reconciliation_note']}"
+            chat_messages.append({'role': 'system', 'content': detail})
         if entry.get("executor_last_message"):
             chat_messages.append({"role": "assistant", "content": entry["executor_last_message"]})
         if entry.get("final_summary"):
@@ -1224,24 +1246,48 @@ async def chat_stream(request: ChatRequest):
         }
 
     try:
+        run = ThreadRun(thread_id)
+    except ExecutionBusy as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    try:
         uploaded_files = await asyncio.to_thread(resolve_selected_files, request.files)
         # 获取 Graph 实例
         app_instance = await get_app_with_checkpointer()
         config = {"configurable": {"thread_id": thread_id}}
 
         state_snapshot = await app_instance.aget_state(config)
+        allowed, terminal_execution = await can_start_new_chat(state_snapshot, thread_id)
+        if not allowed:
+            raise HTTPException(status_code=409, detail='当前会话有未完成的任务，请继续原任务或新建会话。')
         input_state = build_chat_input_state(
             request=request,
             thread_id=thread_id,
             existing_values=state_snapshot.values if state_snapshot else {},
             uploaded_files=uploaded_files,
         )
+        if terminal_execution is not None:
+            values = state_snapshot.values
+            raw_plan = values['task_plan']
+            plan = raw_plan if isinstance(raw_plan, TaskPlan) else TaskPlan.model_validate(raw_plan)
+            existing_history = values.get('history') or []
+            if not any((entry.get('task_id') or (entry.get('task_plan') or {}).get('task_id')) == plan.task_id
+                       for entry in existing_history):
+                reconciliation = terminal_execution.get('reconciliation') or {}
+                input_state['history'] = [{
+                    'input_query': values.get('input_query'),
+                    'task_id': plan.task_id,
+                    'task_plan': plan.model_dump(mode='json'),
+                    'terminal_status': terminal_execution['status'],
+                    'confirmed': terminal_execution.get('confirmed'),
+                    'reconciliation_note': reconciliation.get('note'),
+                }]
 
         logger.info(f"[Chat] 开始新一轮对话, thread_id: {thread_id}")
 
         # 返回 SSE 流
-        return start_owned_stream(
-            app_instance, input_state, thread_id, config,
+        response = start_owned_stream(
+            app_instance, input_state, thread_id, config, owner=run,
             media_type="text/event-stream",
             headers={
                 "Cache-Control": "no-cache",
@@ -1249,12 +1295,17 @@ async def chat_stream(request: ChatRequest):
                 "X-Accel-Buffering": "no"
             }
         )
+        run = None
+        return response
 
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"聊天执行失败: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"执行失败: {str(e)}")
+    finally:
+        if run is not None:
+            run.release()
 
 
 _checkpoint_decisions: set[asyncio.Task] = set()
@@ -1268,6 +1319,39 @@ def _checkpoint_decision_finished(task: asyncio.Task) -> None:
         task.exception()
 
 
+async def _existing_decision(request):
+    """Read an already saved decision without contending with its running graph."""
+    app_instance = await get_app_with_checkpointer()
+    snapshot = await app_instance.aget_state({'configurable': {'thread_id': request.thread_id}})
+    values = snapshot.values or {}
+    if values.get('task_id') != getattr(request, 'task_id', None):
+        return None
+    plan = values.get('task_plan')
+    revision = plan.get('revision') if isinstance(plan, dict) else getattr(plan, 'revision', None)
+    revision = revision if revision is not None else values.get('planning_revision')
+    if revision != request.revision:
+        return None
+    if isinstance(request, ReviewRequest):
+        decision = {'task_id': request.task_id, 'revision': request.revision, 'approved': request.approved,
+                    'advise': None if request.approved else (request.advise or '').strip()}
+        if values.get('last_plan_decision') == decision:
+            return {'status': 'success', 'approved': request.approved, 'message': '该审核决定已经保存。'}
+    elif isinstance(request, RiskReviewDecisionRequest):
+        decision = {'task_id': request.task_id, 'revision': request.revision, 'review_id': request.review_id,
+                    'status': request.status, 'comment': request.comment, 'reviewer': request.reviewer}
+        previous = values.get('last_risk_decision')
+        if not values.get('pending_risk_review') and previous and previous.get('decision') == decision:
+            return RiskReviewDecisionResponse(thread_id=request.thread_id, review_id=request.review_id,
+                                              status=request.status, feedback=previous['feedback'])
+    elif isinstance(request, ResultConfirmRequest):
+        decision = {'task_id': request.task_id, 'revision': request.revision, 'review_id': request.review_id,
+                    'is_completed': request.is_completed,
+                    'user_feedback': None if request.is_completed else (request.user_feedback or '').strip() or None}
+        if values.get('last_result_decision') == decision:
+            return {'status': 'success', 'is_completed': request.is_completed, 'message': '该结果确认已经保存。'}
+    return None
+
+
 def own_checkpoint_decision(handler):
     """Own a complete decision independently of the HTTP request subscriber."""
     @wraps(handler)
@@ -1275,6 +1359,9 @@ def own_checkpoint_decision(handler):
         try:
             run = ThreadRun(request.thread_id)
         except ExecutionBusy as exc:
+            duplicate = await _existing_decision(request)
+            if duplicate is not None:
+                return duplicate
             raise HTTPException(status_code=409, detail=str(exc)) from exc
 
         async def apply_decision():
@@ -1308,6 +1395,23 @@ async def review_plan(request: ReviewRequest):
         current_state = await app_instance.aget_state(config)
         state_values = current_state.values
 
+        previous = state_values.get('last_plan_decision')
+        current_plan = state_values.get('task_plan')
+        current_revision = (current_plan.get('revision') if isinstance(current_plan, dict)
+                            else getattr(current_plan, 'revision', None))
+        if current_revision is None:
+            current_revision = state_values.get('planning_revision')
+        decision = {'task_id': request.task_id, 'revision': request.revision,
+                    'approved': request.approved,
+                    'advise': None if request.approved else (request.advise or '').strip()}
+        if (previous == decision and state_values.get('task_id') == request.task_id
+                and current_revision == request.revision):
+            return {'status': 'success', 'approved': request.approved,
+                    'message': '该审核决定已经保存。'}
+        pause = checkpoint_pause(current_state)
+        if pause is None or pause['kind'] != 'plan_review':
+            raise HTTPException(status_code=409, detail='当前任务没有待审核的计划。')
+
         try:
             update_values = build_plan_review_update(
                 state_values,
@@ -1320,6 +1424,7 @@ async def review_plan(request: ReviewRequest):
             raise HTTPException(status_code=400, detail=str(e)) from e
 
         approved_plan = update_values["task_plan"]
+        update_values['last_plan_decision'] = decision
         try:
             await asyncio.to_thread(
                 save_task_execution_record,
@@ -1377,8 +1482,94 @@ async def get_execution(task_id: str):
             "artifacts": record["artifacts"],
             "confirmed": execution["confirmed"],
             "summary": execution["summary"],
+            "reconciliation": execution.get('reconciliation'),
         }
     }
+
+
+class QGISIdentity(BaseModel):
+    model_config = ConfigDict(extra='forbid', strict=True)
+    process_id: int
+    instance_id: str
+    profile_folder: str
+
+
+class ReconciliationRequest(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    thread_id: str
+    checked: Literal[True]
+    note: str
+    qgis: QGISIdentity
+
+
+async def _reconciliation_record(task_id: str):
+    record = await asyncio.to_thread(get_task_execution_record, task_id)
+    if not record:
+        raise HTTPException(status_code=404, detail='任务记录不存在。')
+    if record['execution']['status'] != 'needs_attention':
+        raise HTTPException(status_code=409, detail='任务没有待核查的未知结果。')
+    return record['execution']
+
+
+async def _probe_qgis_identity() -> QGISIdentity:
+    try:
+        client = await get_mcp_client()
+        raw = await client.call_tool('get_qgis_info', {})
+        observation = MCPResponseParser().parse('get_qgis_info', raw)
+        data = observation.data
+        if observation.status != 'success' or not isinstance(data, dict):
+            raise ValueError('QGIS 未返回有效探针。')
+        identity = QGISIdentity.model_validate({key: data.get(key) for key in
+                                                 ('process_id', 'instance_id', 'profile_folder')})
+        if identity.process_id <= 0 or not identity.instance_id.strip() or not identity.profile_folder.strip():
+            raise ValueError('QGIS 探针缺少进程、实例或 profile 身份。')
+        return identity
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail='无法取得新的 QGIS 身份探针，请先检查服务。') from exc
+
+
+@app.get('/api/executions/{task_id}/reconciliation/probe')
+async def probe_reconciliation(task_id: str):
+    await _reconciliation_record(task_id)
+    try:
+        with reconciliation_slot(task_id):
+            identity = await _probe_qgis_identity()
+    except ExecutionBusy as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {'task_id': task_id, 'qgis': identity.model_dump()}
+
+
+@app.post('/api/executions/{task_id}/reconciliation')
+async def reconcile_execution(task_id: str, request: ReconciliationRequest):
+    record = await _reconciliation_record(task_id)
+    if record['session_id'] != request.thread_id or not request.note.strip():
+        raise HTTPException(status_code=409, detail='请在对应会话填写实际检查结果。')
+    try:
+        run = ThreadRun(request.thread_id)
+    except ExecutionBusy as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    async def apply_reconciliation():
+        try:
+            with reconciliation_slot(task_id):
+                current = await _probe_qgis_identity()
+                if current != request.qgis:
+                    raise HTTPException(status_code=409, detail='QGIS 身份已改变，请重新检查。')
+                evidence = {'note': request.note.strip(), 'qgis': current.model_dump(),
+                            'checked_at': datetime.now().isoformat()}
+                if not await asyncio.to_thread(reconcile_task_execution, task_id, request.thread_id, evidence):
+                    raise HTTPException(status_code=409, detail='任务状态已改变，请重新查询。')
+                clear_reconciled_task(task_id)
+                return {'task_id': task_id, 'status': 'reconciled', 'reconciliation': evidence}
+        except ExecutionBusy as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        finally:
+            run.release()
+
+    owned_task = asyncio.create_task(apply_reconciliation())
+    _checkpoint_decisions.add(owned_task)
+    owned_task.add_done_callback(_checkpoint_decision_finished)
+    return await asyncio.shield(owned_task)
 
 
 @app.post("/api/risk-review", response_model=RiskReviewDecisionResponse)
@@ -1386,7 +1577,7 @@ async def get_execution(task_id: str):
 async def review_risky_tool_call(request: RiskReviewDecisionRequest):
     """Normalize a high-risk tool call review decision for resume flows."""
 
-    if request.status == "modified":
+    if request.status == "modified" or request.modified_arguments is not None:
         raise HTTPException(
             status_code=409,
             detail="修改调用参数需要生成并审核新版本 TaskPlan。",
@@ -1400,6 +1591,20 @@ async def review_risky_tool_call(request: RiskReviewDecisionRequest):
     state_values = current_state.values if current_state else {}
     pending_risk_review = state_values.get("pending_risk_review")
 
+    decision = {'task_id': request.task_id, 'revision': request.revision,
+                'review_id': request.review_id, 'status': request.status,
+                'comment': request.comment, 'reviewer': request.reviewer}
+    previous = state_values.get('last_risk_decision')
+    if (pending_risk_review is None and previous and previous.get('decision') == decision
+            and state_values.get('task_id') == request.task_id
+            and state_values.get('planning_revision') == request.revision):
+        return RiskReviewDecisionResponse(thread_id=request.thread_id, review_id=request.review_id,
+                                          status=request.status, feedback=previous['feedback'])
+    pause = checkpoint_pause(current_state)
+    if (pause is None or pause['kind'] != 'risk_review'
+            or any(pause[key] != decision[key] for key in ('task_id', 'revision', 'review_id'))):
+        raise HTTPException(status_code=409, detail="当前任务没有匹配的风险审核。")
+
     tool_call = resolve_risk_review_tool_call(request, pending_risk_review)
     if tool_call is None:
         raise HTTPException(
@@ -1411,6 +1616,7 @@ async def review_risky_tool_call(request: RiskReviewDecisionRequest):
     update_values = {
         "risk_review_feedback": feedback,
         "pending_risk_review": None,
+        "last_risk_decision": {'decision': decision, 'feedback': feedback.model_dump(mode='json')},
     }
     try:
         await app_instance.aupdate_state(
@@ -1471,6 +1677,9 @@ async def get_demo_case_trace(case_id: str):
 class ResultConfirmRequest(BaseModel):
     """执行结果确认请求"""
     thread_id: str
+    task_id: str
+    revision: int
+    review_id: str
     is_completed: bool  # True=成功, False=失败
     user_feedback: Optional[str] = None
 
@@ -1490,6 +1699,17 @@ async def confirm_result(request: ResultConfirmRequest):
 
         snapshot = await app_instance.aget_state(config)
         values = snapshot.values if snapshot else {}
+        feedback = None if request.is_completed else (request.user_feedback or '').strip() or None
+        decision = {'task_id': request.task_id, 'revision': request.revision,
+                    'review_id': request.review_id, 'is_completed': request.is_completed,
+                    'user_feedback': feedback}
+        if values.get('last_result_decision') == decision and values.get('task_id') == request.task_id:
+            return {'status': 'success', 'is_completed': request.is_completed,
+                    'message': '该结果确认已经保存。'}
+        pause = checkpoint_pause(snapshot)
+        if (pause is None or pause['kind'] != 'result_review'
+                or any(pause[key] != decision[key] for key in ('task_id', 'revision', 'review_id'))):
+            raise HTTPException(status_code=409, detail="当前任务没有匹配的待确认结果。")
         task_plan = values.get("task_plan")
         task_plan = (
             task_plan if isinstance(task_plan, TaskPlan)
@@ -1504,20 +1724,18 @@ async def confirm_result(request: ResultConfirmRequest):
         ):
             raise HTTPException(status_code=409, detail="当前任务没有待确认的执行结果。")
 
-        feedback = None
-        if not request.is_completed:
-            feedback = (request.user_feedback or "").strip() or None
         if not await asyncio.to_thread(
             confirm_task_execution, task_plan.task_id, request.is_completed, feedback
         ):
-            raise HTTPException(status_code=404, detail="任务业务记录不存在。")
+            raise HTTPException(status_code=409, detail="任务不存在或已有不同的结果确认。")
 
         # 更新状态，设置 is_completed 与 user_feedback
         await app_instance.aupdate_state(
             config,
             {
                 "is_completed": request.is_completed,
-                "user_feedback": feedback
+                "user_feedback": feedback,
+                "last_result_decision": decision,
             }
         )
 
@@ -1564,9 +1782,128 @@ def _resume_enters_gis(snapshot) -> bool:
     return 'human_review_node' in next_nodes and status == 'approved'
 
 
-def start_owned_stream(app_instance, initial_state, thread_id, config, *, slot=None, **kwargs):
+def checkpoint_pause(snapshot) -> dict[str, Any] | None:
+    """Project a human decision only from the checkpoint's actual next node."""
+    values = snapshot.values or {}
+    nodes = set(snapshot.next or ())
+    raw_plan = values.get('task_plan')
+    if raw_plan is None:
+        return None
+    plan = raw_plan if isinstance(raw_plan, TaskPlan) else TaskPlan.model_validate(raw_plan)
+    identity = {'task_id': plan.task_id, 'revision': plan.revision}
+    if 'human_review_node' in nodes and plan.review_status == 'pending_review':
+        return {'kind': 'plan_review', **identity}
+    pending = values.get('pending_risk_review')
+    if 'risk_review_node' in nodes and pending is not None:
+        risk = serialize_risk_review_required(pending)
+        return {'kind': 'risk_review', **identity, **risk}
+    trace = values.get('execution_trace')
+    status = trace.get('status') if isinstance(trace, dict) else getattr(trace, 'status', None)
+    if ('reflector_node' in nodes and status == 'success'
+            and values.get('last_result_decision') is None):
+        return {
+            'kind': 'result_review', **identity,
+            'review_id': f'result:{plan.task_id}:{plan.revision}',
+            'execution_summary': build_execution_summary(values.get('messages', []), max_items=1),
+        }
+    return None
+
+
+async def can_start_new_chat(snapshot, thread_id: str) -> tuple[bool, dict[str, Any] | None]:
+    if not snapshot or not snapshot.next:
+        return True, None
+    values = snapshot.values or {}
+    if (values.get('input_query') == '' and values.get('task_plan') is None
+            and values.get('execution_trace') is None and not values.get('history')):
+        return True, None
+    if checkpoint_pause(snapshot) is not None:
+        return False, None
+    raw_plan = values.get('task_plan')
+    trace = values.get('execution_trace')
+    trace_status = trace.get('status') if isinstance(trace, dict) else getattr(trace, 'status', None)
+    nodes = set(snapshot.next)
+    failed = (nodes == {'reflector_node'} and trace_status == 'failed') or nodes == {'executor_node'}
+    if raw_plan is None or not failed:
+        return False, None
+    plan = raw_plan if isinstance(raw_plan, TaskPlan) else TaskPlan.model_validate(raw_plan)
+    if values.get('session_id') != thread_id or values.get('task_id') != plan.task_id:
+        return False, None
+    trace_task = trace.get('task_id') if isinstance(trace, dict) else getattr(trace, 'task_id', None)
+    if trace is not None and trace_task != plan.task_id:
+        return False, None
     try:
-        run = ThreadRun(thread_id)
+        record = await asyncio.to_thread(get_task_execution_record, plan.task_id)
+    except Exception as exc:
+        logger.warning('无法核查终结任务: %s', exc)
+        return False, None
+    if not record:
+        return False, None
+    execution = record['execution']
+    matches = (
+        execution['task_id'] == plan.task_id
+        and execution['session_id'] == thread_id
+        and execution['plan_revision'] == plan.revision
+        and execution['plan'] == plan.model_dump(mode='json')
+    )
+    if not matches:
+        return False, None
+    if execution['status'] == 'reconciled':
+        evidence = execution.get('reconciliation')
+        if plan.review_status != 'approved' or not isinstance(evidence, dict):
+            return False, None
+        note = evidence.get('note')
+        try:
+            identity = QGISIdentity.model_validate(evidence.get('qgis'))
+        except ValueError:
+            return False, None
+        valid = (isinstance(note, str) and bool(note.strip()) and identity.process_id > 0
+                 and bool(identity.instance_id.strip()) and bool(identity.profile_folder.strip()))
+        return valid, execution if valid else None
+    def known_outcome(attempt):
+        outcome = (attempt.get('observation') or {}).get('outcome')
+        name = attempt.get('tool_name') or (attempt.get('tool_call') or {}).get('tool_name')
+        if not name or outcome == 'unknown':
+            return False
+        return (name not in WRITE_TOOLS or attempt.get('status') == 'blocked'
+                or outcome in {'completed', 'not_started'})
+
+    valid = (execution['status'] == 'failed' and execution.get('confirmed') is None
+             and execution.get('inflight_call') is None
+             and all(known_outcome(attempt) for attempt in record['attempts']))
+    return valid, execution if valid else None
+
+
+def checkpoint_continuation(snapshot) -> dict[str, Any] | None:
+    """Project a saved decision that can be continued by the user."""
+    if checkpoint_pause(snapshot) is not None:
+        return None
+    values = snapshot.values or {}
+    raw_plan = values.get('task_plan')
+    if raw_plan is None:
+        return None
+    plan = raw_plan if isinstance(raw_plan, TaskPlan) else TaskPlan.model_validate(raw_plan)
+    identity = {'task_id': plan.task_id, 'revision': plan.revision}
+    nodes = set(snapshot.next or ())
+
+    def matches(decision):
+        return isinstance(decision, dict) and all(decision.get(key) == value for key, value in identity.items())
+
+    plan_decision = values.get('last_plan_decision')
+    risk_decision = values.get('last_risk_decision') or {}
+    result_decision = values.get('last_result_decision')
+    if ('planner_node' in nodes and plan.review_status == 'rejected' and matches(plan_decision)):
+        return {'kind': 'resume', **identity}
+    if ('executor_node' in nodes and plan.review_status == 'approved'
+            and (matches(plan_decision) or matches(risk_decision.get('decision')))):
+        return {'kind': 'resume', **identity}
+    if 'reflector_node' in nodes and matches(result_decision):
+        return {'kind': 'resume', **identity}
+    return None
+
+
+def start_owned_stream(app_instance, initial_state, thread_id, config, *, slot=None, owner=None, **kwargs):
+    try:
+        run = owner or ThreadRun(thread_id)
     except ExecutionBusy as exc:
         if slot is not None:
             slot.release()
@@ -1632,22 +1969,46 @@ def start_owned_stream(app_instance, initial_state, thread_id, config, *, slot=N
 @app.post("/api/resume/{thread_id}")
 async def resume_execution(thread_id: str):
     """Start one owned graph producer and attach its SSE transport subscriber."""
-    app_instance = await get_app_with_checkpointer()
-    config = {"configurable": {"thread_id": thread_id}}
-    snapshot = await app_instance.aget_state(config)
+    try:
+        run = ThreadRun(thread_id)
+    except ExecutionBusy as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     slot = None
-    if _resume_enters_gis(snapshot):
-        plan = snapshot.values.get('task_plan')
-        task_id = plan.get('task_id') if isinstance(plan, dict) else getattr(plan, 'task_id', None)
-        try:
-            slot = ExecutionSlot(task_id)
-        except ExecutionBusy as exc:
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
-    return start_owned_stream(
-        app_instance, None, thread_id, config, slot=slot,
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
-    )
+    try:
+        app_instance = await get_app_with_checkpointer()
+        config = {"configurable": {"thread_id": thread_id}}
+        snapshot = await app_instance.aget_state(config)
+        if checkpoint_pause(snapshot) is not None:
+            raise HTTPException(status_code=409, detail="当前审核尚未决定，不能继续执行。")
+        if ('reflector_node' in set(snapshot.next or ())
+                and snapshot.values.get('last_result_decision') is None):
+            raise HTTPException(status_code=409, detail="执行未完成或结果需要核查，不能继续执行。")
+        if _resume_enters_gis(snapshot):
+            plan = snapshot.values.get('task_plan')
+            task_id = plan.get('task_id') if isinstance(plan, dict) else getattr(plan, 'task_id', None)
+            if task_id:
+                try:
+                    record = await asyncio.to_thread(get_task_execution_record, task_id)
+                except Exception as exc:
+                    raise HTTPException(status_code=503, detail='无法核查任务执行记录。') from exc
+                if record and record['execution']['status'] in {'failed', 'needs_attention', 'reconciled'}:
+                    raise HTTPException(status_code=409, detail='此任务已终止或结果需核查，请创建新任务。')
+            try:
+                slot = ExecutionSlot(task_id)
+            except ExecutionBusy as exc:
+                raise HTTPException(status_code=409, detail=str(exc)) from exc
+        response = start_owned_stream(
+            app_instance, None, thread_id, config, slot=slot, owner=run,
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
+        )
+        run = None
+        return response
+    finally:
+        if run is not None:
+            if slot is not None:
+                slot.release()
+            run.release()
 
 
 @app.get("/api/state/{thread_id}")
@@ -1677,10 +2038,30 @@ async def get_current_state(thread_id: str):
             else:
                 serialized[key] = value
 
+        continuation = checkpoint_continuation(state)
+        if continuation and _resume_enters_gis(state):
+            try:
+                record = await asyncio.to_thread(get_task_execution_record, continuation['task_id'])
+                if not record or record['execution']['status'] not in {'approved', 'needs_review'}:
+                    continuation = None
+            except Exception as exc:
+                logger.warning('无法核查可继续的任务: %s', exc)
+                continuation = None
+
+        running = is_thread_active(thread_id)
+        if running:
+            continuation = None
+        can_start = False
+        if not running:
+            can_start, _ = await can_start_new_chat(state, thread_id)
         return {
             "thread_id": thread_id,
             "state": serialized,
             "next": state.next,
+            "pause": checkpoint_pause(state),
+            "continuation": continuation,
+            "can_start_task": can_start,
+            "running": running,
             "metadata": state.metadata
         }
 

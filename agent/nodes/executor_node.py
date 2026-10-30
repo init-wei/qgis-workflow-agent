@@ -47,7 +47,7 @@ async def _execute_reviewed_plan(state: AgentState) -> dict[str, Any]:
     if task_plan is None:
         return {
             "messages": [AIMessage(content="受控执行未开始：没有可执行的 TaskPlan。")],
-            "is_completed": False,
+            "is_completed": None,
         }
 
     if isinstance(task_plan, dict):
@@ -56,7 +56,7 @@ async def _execute_reviewed_plan(state: AgentState) -> dict[str, Any]:
     if task_plan.review_status != "approved":
         return {
             "messages": [AIMessage(content="受控执行未开始：当前 TaskPlan 未批准。")],
-            "is_completed": False,
+            "is_completed": None,
         }
 
     tool_calls = compile_task_plan_to_tool_calls(task_plan)
@@ -87,9 +87,11 @@ async def _execute_reviewed_plan(state: AgentState) -> dict[str, Any]:
     validation_report = PlanValidator().validate(task_plan, completed_step_ids=completed_step_ids)
     if not validation_report.is_valid:
         await _persist_execution_record(task_plan, session_id, trace, "failed")
+        trace.status = 'failed'
         return {
+            "execution_trace": trace,
             "messages": [AIMessage(content="受控执行未开始：当前 TaskPlan 校验失败。 " + validation_report.summary)],
-            "is_completed": False,
+            "is_completed": None,
         }
     if not tool_calls:
         raise RuntimeError("Validated TaskPlan unexpectedly contains no tool calls.")
@@ -335,7 +337,7 @@ def _failure_response(
         "pending_risk_review": None,
         "risk_review_feedback": None,
         "execution_cursor": None,
-        "is_completed": False,
+        "is_completed": None,
     }
 
 
