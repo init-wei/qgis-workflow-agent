@@ -32,3 +32,7 @@
 `./scripts/dev.sh health --llm-live` 会实际使用 `.env` 的临时 key 调用模型。LangSmith 默认关闭；缺 LangSmith key 不阻塞 T01–T03。`./scripts/dev.sh db-stop` 停止本项目数据库，保留卷；不要为日常清理执行 `down -v`。
 
 前端当前产物在 ui/frontend/dist，而旧后端静态路径指向另一目录；本轮使用 Vite 入口。单地址生产构建和深链接由 T01/T08 验收，不把构建成功当成已可生产部署。
+
+## 可选测试素材
+
+用户提供的矢量与栅格已在本地解压并校验，见[测试数据说明](test-data.md)。原始数据不进入 Git 或默认 CI；后续派生样例和留出集按规格独立验收。

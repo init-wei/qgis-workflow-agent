@@ -6,7 +6,7 @@
 
 行为改动通过公开接口取得 Red，再实现最小 Green；数据、审核、执行和 UI 的同一切片一起验收。纯文档/配置运行适用检查；不编写镜像实现或低价值占位测试。例外和未验证条件必须报告。
 
-每项切片收尾运行[检查](testing.md)、审阅差异、Standards 与 Spec 两轴审查后提交。优先 gpt-6-luna/max 两个独立审查者；不可用时记录实际模型。修复后复核准确文件和证据。每次提交在任务评论记录 commit、检查和限制。
+每项切片收尾运行[检查](testing.md)、审阅差异、Standards 与 Spec 两轴审查后提交。Standards 核对仓库规范，相关简化改动按[项目补充规则](agents/simplification-review.md)审查；Spec 独立核对 issue/spec 与验收范围。优先 gpt-6-luna/max 两个独立审查者；不可用时记录实际模型。修复后复核准确文件和证据。每次提交在任务评论记录 commit、检查和限制。
 
 ## 环境和变更边界
 

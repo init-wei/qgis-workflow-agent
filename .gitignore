@@ -79,3 +79,7 @@ desktop.ini
 !.env.example
 !.env.*.example
 .ruff_cache/
+
+# User-supplied GIS test data; only catalog documentation is versioned.
+data/test-data/raw/
+data/test-data/derived/

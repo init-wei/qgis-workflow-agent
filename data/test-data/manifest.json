@@ -1,0 +1,2000 @@
+{
+  "schema_version": 1,
+  "imported_at": "2026-10-30",
+  "source": "User-supplied archives; original ZIPs retained in RS Harness research archive.",
+  "scope": "Local optional integration data; not the default CI fixtures or an annotated benchmark.",
+  "datasets": [
+    {
+      "id": "natural-earth",
+      "archive": "ne_10m_admin_1_states_provinces.zip",
+      "archive_bytes": 13440121,
+      "archive_sha256": "db8a9a5e09ce6372c74a09fc802d7dc74e192ecbc67f5cee5b6092b0a9845b01",
+      "raw_directory": "data/test-data/raw/natural-earth",
+      "file_count": 8,
+      "uncompressed_bytes": 22550861,
+      "zip_crc_verification": "passed while fully extracting every member",
+      "files": [
+        {
+          "path": "ne_10m_admin_1_states_provinces/ne_10m_admin_1_states_provinces.cpg",
+          "bytes": 5,
+          "sha256": "3ad3031f5503a4404af825262ee8232cc04d4ea6683d42c5dd0a2f2a27ac9824"
+        },
+        {
+          "path": "ne_10m_admin_1_states_provinces/ne_10m_admin_1_states_provinces.dbf",
+          "bytes": 1466638,
+          "sha256": "7dcac77ada1a4bd67b2b3b682cc1099512c045661c48a2810bfd652154c96268"
+        },
+        {
+          "path": "ne_10m_admin_1_states_provinces/ne_10m_admin_1_states_provinces.prj",
+          "bytes": 145,
+          "sha256": "a02a27b1d1982c8516d83398e85a3c8b1aef1713c13ef4d84d7bde17430c07c4"
+        },
+        {
+          "path": "ne_10m_admin_1_states_provinces/ne_10m_admin_1_states_provinces.README.html",
+          "bytes": 44181,
+          "sha256": "27d12def2c79a2ff3744abb27a3ba2783334f4dc1ec2dedc3ce3c00c4ea71e25"
+        },
+        {
+          "path": "ne_10m_admin_1_states_provinces/ne_10m_admin_1_states_provinces.shp",
+          "bytes": 20998780,
+          "sha256": "c6f5c8b4b1320d9417033762419c6df1eb423989cd880fba78ea0b1e3522cbe4"
+        },
+        {
+          "path": "ne_10m_admin_1_states_provinces/ne_10m_admin_1_states_provinces.shp.xml",
+          "bytes": 4237,
+          "sha256": "6d07a8d08623f1aefdc6922f55bb0b17621bfad38286e1605cd15a7ac61d382d"
+        },
+        {
+          "path": "ne_10m_admin_1_states_provinces/ne_10m_admin_1_states_provinces.shx",
+          "bytes": 36868,
+          "sha256": "37a9e2bc79ed31d3bdea3cb62d928f77281a1c88d645cd33430231c75dbcf350"
+        },
+        {
+          "path": "ne_10m_admin_1_states_provinces/ne_10m_admin_1_states_provinces.VERSION.txt",
+          "bytes": 7,
+          "sha256": "548358969090d629b41888f5fe664ac31b7203dfd849f7c1ef820ac055b62191"
+        }
+      ],
+      "layers": [
+        {
+          "path": "ne_10m_admin_1_states_provinces/ne_10m_admin_1_states_provinces.shp",
+          "kind": "vector",
+          "driver": "ESRI Shapefile",
+          "feature_count": 4596,
+          "geometry_type": "Polygon",
+          "crs": "EPSG:4326",
+          "extent": [
+            -179.99999999999991,
+            180.0,
+            -89.99999999999994,
+            83.63410065300008
+          ],
+          "fields": [
+            "featurecla",
+            "adm1_code",
+            "diss_me",
+            "iso_3166_2",
+            "iso_a2",
+            "adm0_sr",
+            "name",
+            "type_en",
+            "woe_id",
+            "adm0_a3",
+            "adm0_label",
+            "admin",
+            "geonunit",
+            "name_en",
+            "name_zh"
+          ],
+          "validation": "opened read-only; feature count and first geometry read; complete geometry validity not assessed"
+        }
+      ]
+    },
+    {
+      "id": "wsf-evolution",
+      "archive": "WSFevolution_v1_116_36.zip",
+      "archive_bytes": 129817148,
+      "archive_sha256": "8fb4e1b474f095af71b514499c6ce9caf63d38c15fa5e9d2935c261bf432c576",
+      "raw_directory": "data/test-data/raw/wsf-evolution",
+      "file_count": 8,
+      "uncompressed_bytes": 131224145,
+      "zip_crc_verification": "passed while fully extracting every member",
+      "files": [
+        {
+          "path": "WSFevolution_v1_116_36.tif",
+          "bytes": 13825979,
+          "sha256": "8b0838eca34258e57e60c6cdd7a015f14325451376dd1a1a5fe8fe8c2c728008"
+        },
+        {
+          "path": "WSFevolution_v1_120_30.tif",
+          "bytes": 26565620,
+          "sha256": "ad4e695c261441c281aa807a595eaffb1549dbb905975d206968d22fb3433d02"
+        },
+        {
+          "path": "WSFevolution_v1_116_38.tif",
+          "bytes": 16237369,
+          "sha256": "7e6fb60be9262a93bf200667bf3a37a8c1f7f5736ecd354fdf489e16bbbf2867"
+        },
+        {
+          "path": "WSFevolution_v1_118_32.tif",
+          "bytes": 15574665,
+          "sha256": "d1790d85b9205739814c840d024eea9ad56a39ba465135061d28a600a45ecb79"
+        },
+        {
+          "path": "WSFevolution_v1_116_34.tif",
+          "bytes": 15123552,
+          "sha256": "96f6dd11e6c8a732814c6331564beb3602367838c310628bb58ab65d46314b25"
+        },
+        {
+          "path": "WSFevolution_v1_112_22.tif",
+          "bytes": 15007701,
+          "sha256": "4d859f215cf24133678e185581e5cbadea8fc8e206aaed3cb2552cc67b917ebd"
+        },
+        {
+          "path": "WSFevolution_v1_114_34.tif",
+          "bytes": 14849843,
+          "sha256": "69b69e0364e43634aa39ac33303e6d6f8fd0d37e341b86d9930454a0cf047390"
+        },
+        {
+          "path": "WSFevolution_v1_114_32.tif",
+          "bytes": 14039416,
+          "sha256": "7bdd8f9e5b5904d648262fc097cd1c59b98089bd427411697527ca8f3c3c2034"
+        }
+      ],
+      "layers": [
+        {
+          "path": "WSFevolution_v1_112_22.tif",
+          "kind": "raster",
+          "driver": "GTiff",
+          "width": 7497,
+          "height": 7496,
+          "band_count": 1,
+          "crs": "EPSG:4326",
+          "geotransform": [
+            111.98982236768633,
+            0.00026949458523585647,
+            0.0,
+            24.01008108241816,
+            0.0,
+            -0.00026949458523585647
+          ],
+          "bounds": [
+            111.98982236768633,
+            21.98994967149018,
+            114.01022327319954,
+            24.01008108241816
+          ],
+          "bands": [
+            {
+              "band": 1,
+              "data_type": "Int32",
+              "nodata": null
+            }
+          ],
+          "validation": "opened read-only; decoded three one-pixel samples per band; full pixel scan not performed"
+        },
+        {
+          "path": "WSFevolution_v1_114_32.tif",
+          "kind": "raster",
+          "driver": "GTiff",
+          "width": 7497,
+          "height": 7497,
+          "band_count": 1,
+          "crs": "EPSG:4326",
+          "geotransform": [
+            113.98974168472162,
+            0.00026949458523585647,
+            0.0,
+            34.01021665676509,
+            0.0,
+            -0.00026949458523585647
+          ],
+          "bounds": [
+            113.98974168472162,
+            31.98981575125187,
+            116.01014259023484,
+            34.01021665676509
+          ],
+          "bands": [
+            {
+              "band": 1,
+              "data_type": "Int32",
+              "nodata": null
+            }
+          ],
+          "validation": "opened read-only; decoded three one-pixel samples per band; full pixel scan not performed"
+        },
+        {
+          "path": "WSFevolution_v1_114_34.tif",
+          "kind": "raster",
+          "driver": "GTiff",
+          "width": 7497,
+          "height": 7497,
+          "band_count": 1,
+          "crs": "EPSG:4326",
+          "geotransform": [
+            113.98974168472162,
+            0.00026949458523585647,
+            0.0,
+            36.01013597380038,
+            0.0,
+            -0.00026949458523585647
+          ],
+          "bounds": [
+            113.98974168472162,
+            33.98973506828717,
+            116.01014259023484,
+            36.01013597380038
+          ],
+          "bands": [
+            {
+              "band": 1,
+              "data_type": "Int32",
+              "nodata": null
+            }
+          ],
+          "validation": "opened read-only; decoded three one-pixel samples per band; full pixel scan not performed"
+        },
+        {
+          "path": "WSFevolution_v1_116_34.tif",
+          "kind": "raster",
+          "driver": "GTiff",
+          "width": 7496,
+          "height": 7497,
+          "band_count": 1,
+          "crs": "EPSG:4326",
+          "geotransform": [
+            115.98993049634215,
+            0.00026949458523585647,
+            0.0,
+            36.01013597380038,
+            0.0,
+            -0.00026949458523585647
+          ],
+          "bounds": [
+            115.98993049634215,
+            33.98973506828717,
+            118.01006190727013,
+            36.01013597380038
+          ],
+          "bands": [
+            {
+              "band": 1,
+              "data_type": "Int32",
+              "nodata": null
+            }
+          ],
+          "validation": "opened read-only; decoded three one-pixel samples per band; full pixel scan not performed"
+        },
+        {
+          "path": "WSFevolution_v1_116_36.tif",
+          "kind": "raster",
+          "driver": "GTiff",
+          "width": 7496,
+          "height": 7496,
+          "band_count": 1,
+          "crs": "EPSG:4326",
+          "geotransform": [
+            115.98993049634215,
+            0.00026949458523585647,
+            0.0,
+            38.010055290835666,
+            0.0,
+            -0.00026949458523585647
+          ],
+          "bounds": [
+            115.98993049634215,
+            35.989923879907685,
+            118.01006190727013,
+            38.010055290835666
+          ],
+          "bands": [
+            {
+              "band": 1,
+              "data_type": "Int32",
+              "nodata": null
+            }
+          ],
+          "validation": "opened read-only; decoded three one-pixel samples per band; full pixel scan not performed"
+        },
+        {
+          "path": "WSFevolution_v1_116_38.tif",
+          "kind": "raster",
+          "driver": "GTiff",
+          "width": 7496,
+          "height": 7497,
+          "band_count": 1,
+          "crs": "EPSG:4326",
+          "geotransform": [
+            115.98993049634215,
+            0.00026949458523585647,
+            0.0,
+            40.0102441024562,
+            0.0,
+            -0.00026949458523585647
+          ],
+          "bounds": [
+            115.98993049634215,
+            37.989843196942985,
+            118.01006190727013,
+            40.0102441024562
+          ],
+          "bands": [
+            {
+              "band": 1,
+              "data_type": "Int32",
+              "nodata": null
+            }
+          ],
+          "validation": "opened read-only; decoded three one-pixel samples per band; full pixel scan not performed"
+        },
+        {
+          "path": "WSFevolution_v1_118_32.tif",
+          "kind": "raster",
+          "driver": "GTiff",
+          "width": 7497,
+          "height": 7497,
+          "band_count": 1,
+          "crs": "EPSG:4326",
+          "geotransform": [
+            117.98984981337745,
+            0.00026949458523585647,
+            0.0,
+            34.01021665676509,
+            0.0,
+            -0.00026949458523585647
+          ],
+          "bounds": [
+            117.98984981337745,
+            31.98981575125187,
+            120.01025071889066,
+            34.01021665676509
+          ],
+          "bands": [
+            {
+              "band": 1,
+              "data_type": "Int32",
+              "nodata": null
+            }
+          ],
+          "validation": "opened read-only; decoded three one-pixel samples per band; full pixel scan not performed"
+        },
+        {
+          "path": "WSFevolution_v1_120_30.tif",
+          "kind": "raster",
+          "driver": "GTiff",
+          "width": 7497,
+          "height": 7496,
+          "band_count": 1,
+          "crs": "EPSG:4326",
+          "geotransform": [
+            119.98976913041274,
+            0.00026949458523585647,
+            0.0,
+            32.01002784514456,
+            0.0,
+            -0.00026949458523585647
+          ],
+          "bounds": [
+            119.98976913041274,
+            29.989896434216583,
+            122.01017003592595,
+            32.01002784514456
+          ],
+          "bands": [
+            {
+              "band": 1,
+              "data_type": "Int32",
+              "nodata": null
+            }
+          ],
+          "validation": "opened read-only; decoded three one-pixel samples per band; full pixel scan not performed"
+        }
+      ]
+    },
+    {
+      "id": "shakemap",
+      "archive": "ci10542525.zip",
+      "archive_bytes": 13983959,
+      "archive_sha256": "0da99aad1eb9aa3f0fdb2aa83347d993056ea0dce0a088705ead77ad34784f2b",
+      "raw_directory": "data/test-data/raw/shakemap",
+      "file_count": 180,
+      "uncompressed_bytes": 24695696,
+      "zip_crc_verification": "passed while fully extracting every member",
+      "files": [
+        {
+          "path": "ci10542525/mi.dbf",
+          "bytes": 54513,
+          "sha256": "7923a7ce4b3eb94ee1a1162a684acc2e935dbdf5b7bd5b9a6556929e7f56f49a"
+        },
+        {
+          "path": "ci10542525/mi.lyr",
+          "bytes": 9216,
+          "sha256": "13f2765843424b95488497dfe6a0a1a5831ce7b74febe0df6d5343bf70ffeef6"
+        },
+        {
+          "path": "ci10542525/mi.prj",
+          "bytes": 145,
+          "sha256": "a02a27b1d1982c8516d83398e85a3c8b1aef1713c13ef4d84d7bde17430c07c4"
+        },
+        {
+          "path": "ci10542525/mi.shp",
+          "bytes": 2122952,
+          "sha256": "62507fe22af6364ca70f047e965a50764e1ef98f8d4285eb09619228ad985a4a"
+        },
+        {
+          "path": "ci10542525/mi.shp.xml",
+          "bytes": 7236,
+          "sha256": "e9f3e48b046a99382c5149e12415ada6c1657643ac196df8a3aa4c64c8620480"
+        },
+        {
+          "path": "ci10542525/mi.shx",
+          "bytes": 5668,
+          "sha256": "58b197ad3d71b9d67205a8d34faa294467add7355bf930424a1db430966151c8"
+        },
+        {
+          "path": "ci10542525/pga.dbf",
+          "bytes": 3111,
+          "sha256": "a7dcf3ea645d546b71ebc76c2b90279c7b2d714c1dd3db9e9ed7b3b1ff222b9c"
+        },
+        {
+          "path": "ci10542525/pga.lyr",
+          "bytes": 10240,
+          "sha256": "8dfdcb7ad776d6ad6d04cefb00b65f7b0c97ba58851ff989fef25a4bcfd7777c"
+        },
+        {
+          "path": "ci10542525/pga.prj",
+          "bytes": 145,
+          "sha256": "a02a27b1d1982c8516d83398e85a3c8b1aef1713c13ef4d84d7bde17430c07c4"
+        },
+        {
+          "path": "ci10542525/pga.shp",
+          "bytes": 74268,
+          "sha256": "90a475454fe10d867b4ad1ee99c49981f7db5f4ebb170c1ccef75589ade19ed2"
+        },
+        {
+          "path": "ci10542525/pga.shp.xml",
+          "bytes": 7216,
+          "sha256": "2ab588f6f984a5f3725532e5cf14577f3692530c60344e8c7eef606f637c05a8"
+        },
+        {
+          "path": "ci10542525/pga.shx",
+          "bytes": 396,
+          "sha256": "a0c6f0e8469bed37ff682bc910d7fbe7f8c558cfc9e5d2ddceeb2cbe3bc8e326"
+        },
+        {
+          "path": "ci10542525/pgv.dbf",
+          "bytes": 1239,
+          "sha256": "9705f4aa14d21e00f370391588b33d3c6fa937d82b7a7b164b713c9788d3c8c8"
+        },
+        {
+          "path": "ci10542525/pgv.lyr",
+          "bytes": 10240,
+          "sha256": "9166b6ff86cadbf1be78e3a9fbf912929c673558ff4c5a65904554df97aac2d4"
+        },
+        {
+          "path": "ci10542525/pgv.prj",
+          "bytes": 145,
+          "sha256": "a02a27b1d1982c8516d83398e85a3c8b1aef1713c13ef4d84d7bde17430c07c4"
+        },
+        {
+          "path": "ci10542525/pgv.shp",
+          "bytes": 32508,
+          "sha256": "1f6ea99d01a48084cce21133cf200742de5da2147e55aba00ad8fb3ce3d3f39c"
+        },
+        {
+          "path": "ci10542525/pgv.shp.xml",
+          "bytes": 7226,
+          "sha256": "319b89bb70fc1f708e2de3fbfa2bab82b11ebcc6e8fe3272e026ea3dff38d1c2"
+        },
+        {
+          "path": "ci10542525/pgv.shx",
+          "bytes": 204,
+          "sha256": "e72dde8bb777b7b73f719290f00e1721cbf3bbef53bf6addbe512ad6001be97d"
+        },
+        {
+          "path": "ci10542525/psa03.dbf",
+          "bytes": 2643,
+          "sha256": "894eb957906e48e23a2d137e60436b6c34ed48701ff1c94c11937ffde897e152"
+        },
+        {
+          "path": "ci10542525/psa03.lyr",
+          "bytes": 10240,
+          "sha256": "e5dd9d0b5308da25b114cdbd701417de68506e929e9ca67cbb06b94a94f4a273"
+        },
+        {
+          "path": "ci10542525/psa03.prj",
+          "bytes": 145,
+          "sha256": "a02a27b1d1982c8516d83398e85a3c8b1aef1713c13ef4d84d7bde17430c07c4"
+        },
+        {
+          "path": "ci10542525/psa03.shp",
+          "bytes": 54324,
+          "sha256": "6b85c6695563e9201685ef80083ad3231d7e6364def116cabc2c6ce36a0da69e"
+        },
+        {
+          "path": "ci10542525/psa03.shp.xml",
+          "bytes": 7278,
+          "sha256": "4cd04c716c49329e1a2804337a527d1643612a5b829ee878956abfaa0baa77ac"
+        },
+        {
+          "path": "ci10542525/psa03.shx",
+          "bytes": 348,
+          "sha256": "e7350c08ef098aff066e76925dec26c3e6160439f5dab266c99d933c465d11cc"
+        },
+        {
+          "path": "ci10542525/psa10.dbf",
+          "bytes": 537,
+          "sha256": "b8bd6752f82adb8c3050a43460474d83728b21464d3e39c89c76c49067a05ad0"
+        },
+        {
+          "path": "ci10542525/psa10.lyr",
+          "bytes": 10240,
+          "sha256": "b8822ae855da370821c7b381ef2d1e4135c9b6ac4db0f3a8535da9f2d76cc8f0"
+        },
+        {
+          "path": "ci10542525/psa10.prj",
+          "bytes": 145,
+          "sha256": "a02a27b1d1982c8516d83398e85a3c8b1aef1713c13ef4d84d7bde17430c07c4"
+        },
+        {
+          "path": "ci10542525/psa10.shp",
+          "bytes": 1984,
+          "sha256": "3aff0a0ffff2c2f2df1f9e54066b11ea909fc73791c6973d81e6ec1db0cd9e56"
+        },
+        {
+          "path": "ci10542525/psa10.shp.xml",
+          "bytes": 7536,
+          "sha256": "61582f0f220d087c02290a4d3a70de93ac2267b6f89a3fd7e9816e9ca4a67604"
+        },
+        {
+          "path": "ci10542525/psa10.shx",
+          "bytes": 132,
+          "sha256": "ce64aacea8db9002a44a6299d5666cc26cbfb9fac3dcd87b12c5a6278e3381c9"
+        },
+        {
+          "path": "ci10542525/psa30.dbf",
+          "bytes": 303,
+          "sha256": "b611621bf9ac66e03d96b2941273ce6a403ce8e63f797eb867ed775b7ee0fd18"
+        },
+        {
+          "path": "ci10542525/psa30.lyr",
+          "bytes": 9728,
+          "sha256": "f3fdf7e3ed82814f198a226989afa3487f41efd664f0933f843707580f872970"
+        },
+        {
+          "path": "ci10542525/psa30.prj",
+          "bytes": 145,
+          "sha256": "a02a27b1d1982c8516d83398e85a3c8b1aef1713c13ef4d84d7bde17430c07c4"
+        },
+        {
+          "path": "ci10542525/psa30.shp",
+          "bytes": 236,
+          "sha256": "b7e61a7d8f29b5c5a4f992d2766877358b5916781b829a71edda829f36fa5fb8"
+        },
+        {
+          "path": "ci10542525/psa30.shp.xml",
+          "bytes": 7536,
+          "sha256": "3be5e07814cbf9bf3bc3cfbcab831610a4fef34b5e2c7d19171bc51edabe7b44"
+        },
+        {
+          "path": "ci10542525/psa30.shx",
+          "bytes": 108,
+          "sha256": "3cbc59a1d7ce91fe6d56745cfaec90949b567eab36bddeefa42f5ef8757fcf03"
+        },
+        {
+          "path": "ci10148002/mi.dbf",
+          "bytes": 337809,
+          "sha256": "446fcf8a92e94faedefab9006541af5ef95477e458c97eaa3fee84ea33e34691"
+        },
+        {
+          "path": "ci10148002/mi.lyr",
+          "bytes": 9216,
+          "sha256": "13f2765843424b95488497dfe6a0a1a5831ce7b74febe0df6d5343bf70ffeef6"
+        },
+        {
+          "path": "ci10148002/mi.prj",
+          "bytes": 145,
+          "sha256": "a02a27b1d1982c8516d83398e85a3c8b1aef1713c13ef4d84d7bde17430c07c4"
+        },
+        {
+          "path": "ci10148002/mi.shp",
+          "bytes": 4654648,
+          "sha256": "6d4804aba64b3c88c18f30daf4f24546470af23c8826e9c78e5a490c305e24ab"
+        },
+        {
+          "path": "ci10148002/mi.shp.xml",
+          "bytes": 7236,
+          "sha256": "e9f3e48b046a99382c5149e12415ada6c1657643ac196df8a3aa4c64c8620480"
+        },
+        {
+          "path": "ci10148002/mi.shx",
+          "bytes": 34724,
+          "sha256": "a894d2a120f1bcd27b3544ed74cfd7e83997c1edb20e2f56d854c0720c750cae"
+        },
+        {
+          "path": "ci10148002/pga.dbf",
+          "bytes": 39927,
+          "sha256": "8b0363ed22867bf4370cf72173cd45b934c1c6bd00fafa712021551c5a38746e"
+        },
+        {
+          "path": "ci10148002/pga.lyr",
+          "bytes": 10240,
+          "sha256": "8dfdcb7ad776d6ad6d04cefb00b65f7b0c97ba58851ff989fef25a4bcfd7777c"
+        },
+        {
+          "path": "ci10148002/pga.prj",
+          "bytes": 145,
+          "sha256": "a02a27b1d1982c8516d83398e85a3c8b1aef1713c13ef4d84d7bde17430c07c4"
+        },
+        {
+          "path": "ci10148002/pga.shp",
+          "bytes": 464060,
+          "sha256": "1db93d46a047ca98c371ac983aea60e14edab1949f8ca40392a56667aec2795d"
+        },
+        {
+          "path": "ci10148002/pga.shp.xml",
+          "bytes": 7216,
+          "sha256": "2ab588f6f984a5f3725532e5cf14577f3692530c60344e8c7eef606f637c05a8"
+        },
+        {
+          "path": "ci10148002/pga.shx",
+          "bytes": 4172,
+          "sha256": "9b52d8eb22b287b858e844831d8371b9aa960c083f751e6de01e27460f801383"
+        },
+        {
+          "path": "ci10148002/pgv.dbf",
+          "bytes": 50301,
+          "sha256": "4eaec9a7ea4e9699a45d41b28a9aeb5e939dea086f03ede4748cdb55ad40006f"
+        },
+        {
+          "path": "ci10148002/pgv.lyr",
+          "bytes": 10240,
+          "sha256": "9166b6ff86cadbf1be78e3a9fbf912929c673558ff4c5a65904554df97aac2d4"
+        },
+        {
+          "path": "ci10148002/pgv.prj",
+          "bytes": 145,
+          "sha256": "a02a27b1d1982c8516d83398e85a3c8b1aef1713c13ef4d84d7bde17430c07c4"
+        },
+        {
+          "path": "ci10148002/pgv.shp",
+          "bytes": 587592,
+          "sha256": "5f58614592ab0cb564d4851eb8012d39d25f9238c2a6a29389ef32341b5f6315"
+        },
+        {
+          "path": "ci10148002/pgv.shp.xml",
+          "bytes": 7226,
+          "sha256": "319b89bb70fc1f708e2de3fbfa2bab82b11ebcc6e8fe3272e026ea3dff38d1c2"
+        },
+        {
+          "path": "ci10148002/pgv.shx",
+          "bytes": 5236,
+          "sha256": "90f964692e2a103f1c18dde541c5b49aa13ac607bcb57c0f215dade0f80e3e40"
+        },
+        {
+          "path": "ci10148002/psa03.dbf",
+          "bytes": 113403,
+          "sha256": "31a482a6d5ef4ee3174b1a61ebb62881093b19a7d3aa463fe468f9923a0398ea"
+        },
+        {
+          "path": "ci10148002/psa03.lyr",
+          "bytes": 10240,
+          "sha256": "e5dd9d0b5308da25b114cdbd701417de68506e929e9ca67cbb06b94a94f4a273"
+        },
+        {
+          "path": "ci10148002/psa03.prj",
+          "bytes": 145,
+          "sha256": "a02a27b1d1982c8516d83398e85a3c8b1aef1713c13ef4d84d7bde17430c07c4"
+        },
+        {
+          "path": "ci10148002/psa03.shp",
+          "bytes": 1157916,
+          "sha256": "13a05b81072693caf2b60503f61618f91adec7167239d31013dab8fe56b9afa0"
+        },
+        {
+          "path": "ci10148002/psa03.shp.xml",
+          "bytes": 7278,
+          "sha256": "4cd04c716c49329e1a2804337a527d1643612a5b829ee878956abfaa0baa77ac"
+        },
+        {
+          "path": "ci10148002/psa03.shx",
+          "bytes": 11708,
+          "sha256": "8259b7fc45cd941c276591fa8e7443ebba6d1d06aa50f93efdde046f3948adee"
+        },
+        {
+          "path": "ci10148002/psa10.dbf",
+          "bytes": 12081,
+          "sha256": "9d11ac889a882fcce42a0ac4ebfa8b883dc026c64f84af9aeb8f3007099f0bfc"
+        },
+        {
+          "path": "ci10148002/psa10.lyr",
+          "bytes": 10240,
+          "sha256": "b8822ae855da370821c7b381ef2d1e4135c9b6ac4db0f3a8535da9f2d76cc8f0"
+        },
+        {
+          "path": "ci10148002/psa10.prj",
+          "bytes": 145,
+          "sha256": "a02a27b1d1982c8516d83398e85a3c8b1aef1713c13ef4d84d7bde17430c07c4"
+        },
+        {
+          "path": "ci10148002/psa10.shp",
+          "bytes": 143792,
+          "sha256": "4acec6f1cd6c603628f353026e308ac446fde78853efe4802146da73233cbc8c"
+        },
+        {
+          "path": "ci10148002/psa10.shp.xml",
+          "bytes": 7536,
+          "sha256": "61582f0f220d087c02290a4d3a70de93ac2267b6f89a3fd7e9816e9ca4a67604"
+        },
+        {
+          "path": "ci10148002/psa10.shx",
+          "bytes": 1316,
+          "sha256": "f3092093e27e74fd717b53b6be4e17796d9b7c3eb599b9f08667dc434935e5be"
+        },
+        {
+          "path": "ci10148002/psa30.dbf",
+          "bytes": 303,
+          "sha256": "b611621bf9ac66e03d96b2941273ce6a403ce8e63f797eb867ed775b7ee0fd18"
+        },
+        {
+          "path": "ci10148002/psa30.lyr",
+          "bytes": 9728,
+          "sha256": "f3fdf7e3ed82814f198a226989afa3487f41efd664f0933f843707580f872970"
+        },
+        {
+          "path": "ci10148002/psa30.prj",
+          "bytes": 145,
+          "sha256": "a02a27b1d1982c8516d83398e85a3c8b1aef1713c13ef4d84d7bde17430c07c4"
+        },
+        {
+          "path": "ci10148002/psa30.shp",
+          "bytes": 236,
+          "sha256": "bf00d55cc74127f94ff51c92ff8bd8df12342178ccf514cbf2f8f5c0cbef812c"
+        },
+        {
+          "path": "ci10148002/psa30.shp.xml",
+          "bytes": 7536,
+          "sha256": "3be5e07814cbf9bf3bc3cfbcab831610a4fef34b5e2c7d19171bc51edabe7b44"
+        },
+        {
+          "path": "ci10148002/psa30.shx",
+          "bytes": 108,
+          "sha256": "c5a8b11e3435c97abbee63d9e40ad301b08cce00c60f0c4b33f41dd0661db1a7"
+        },
+        {
+          "path": "ci10169094/mi.dbf",
+          "bytes": 82515,
+          "sha256": "231f1e8060b218d7eda1049c2d98eee9b22dbfc4906d8541515985e07ec78074"
+        },
+        {
+          "path": "ci10169094/mi.lyr",
+          "bytes": 9216,
+          "sha256": "13f2765843424b95488497dfe6a0a1a5831ce7b74febe0df6d5343bf70ffeef6"
+        },
+        {
+          "path": "ci10169094/mi.prj",
+          "bytes": 145,
+          "sha256": "a02a27b1d1982c8516d83398e85a3c8b1aef1713c13ef4d84d7bde17430c07c4"
+        },
+        {
+          "path": "ci10169094/mi.shp",
+          "bytes": 1600436,
+          "sha256": "1eeaab6a925e05db1d77f54401c8e3983238f0e3bcb6ba8691f6487143ca9c88"
+        },
+        {
+          "path": "ci10169094/mi.shp.xml",
+          "bytes": 7236,
+          "sha256": "e9f3e48b046a99382c5149e12415ada6c1657643ac196df8a3aa4c64c8620480"
+        },
+        {
+          "path": "ci10169094/mi.shx",
+          "bytes": 8540,
+          "sha256": "403370b4a996e371935ad485dde66045f8657464a217095df48da93b81158080"
+        },
+        {
+          "path": "ci10169094/pga.dbf",
+          "bytes": 5529,
+          "sha256": "0b1459fa6d1869795d37852071b9700bf35807bff921b5b3d158c23280692114"
+        },
+        {
+          "path": "ci10169094/pga.lyr",
+          "bytes": 10240,
+          "sha256": "8dfdcb7ad776d6ad6d04cefb00b65f7b0c97ba58851ff989fef25a4bcfd7777c"
+        },
+        {
+          "path": "ci10169094/pga.prj",
+          "bytes": 145,
+          "sha256": "a02a27b1d1982c8516d83398e85a3c8b1aef1713c13ef4d84d7bde17430c07c4"
+        },
+        {
+          "path": "ci10169094/pga.shp",
+          "bytes": 65856,
+          "sha256": "4b1b226ed88d97440e12c7c63026f7358928c4c7177df27da027168c67056278"
+        },
+        {
+          "path": "ci10169094/pga.shp.xml",
+          "bytes": 7216,
+          "sha256": "2ab588f6f984a5f3725532e5cf14577f3692530c60344e8c7eef606f637c05a8"
+        },
+        {
+          "path": "ci10169094/pga.shx",
+          "bytes": 644,
+          "sha256": "2ec611f689d9a11b2ba645d26c779bd193d856868750db8d499343b45a651050"
+        },
+        {
+          "path": "ci10169094/pgv.dbf",
+          "bytes": 4593,
+          "sha256": "da7635ebfde67105ad74d6003450897ffa01c24cacd905b962fba3d40816a11b"
+        },
+        {
+          "path": "ci10169094/pgv.lyr",
+          "bytes": 10240,
+          "sha256": "9166b6ff86cadbf1be78e3a9fbf912929c673558ff4c5a65904554df97aac2d4"
+        },
+        {
+          "path": "ci10169094/pgv.prj",
+          "bytes": 145,
+          "sha256": "a02a27b1d1982c8516d83398e85a3c8b1aef1713c13ef4d84d7bde17430c07c4"
+        },
+        {
+          "path": "ci10169094/pgv.shp",
+          "bytes": 59760,
+          "sha256": "bccbc7b92ca008cc96de977d76fcb9306c4cf075ff7af1b1326f05a4dab0fc7d"
+        },
+        {
+          "path": "ci10169094/pgv.shp.xml",
+          "bytes": 7226,
+          "sha256": "319b89bb70fc1f708e2de3fbfa2bab82b11ebcc6e8fe3272e026ea3dff38d1c2"
+        },
+        {
+          "path": "ci10169094/pgv.shx",
+          "bytes": 548,
+          "sha256": "e9eae23318ee501f123f65c95389c906a9e93655c29e10efb10e710a4458b5fa"
+        },
+        {
+          "path": "ci10169094/psa03.dbf",
+          "bytes": 13563,
+          "sha256": "74d5938910bfe23338543600d5fc978c294c4786ee7a410d9c120f39e0c2c290"
+        },
+        {
+          "path": "ci10169094/psa03.lyr",
+          "bytes": 10240,
+          "sha256": "e5dd9d0b5308da25b114cdbd701417de68506e929e9ca67cbb06b94a94f4a273"
+        },
+        {
+          "path": "ci10169094/psa03.prj",
+          "bytes": 145,
+          "sha256": "a02a27b1d1982c8516d83398e85a3c8b1aef1713c13ef4d84d7bde17430c07c4"
+        },
+        {
+          "path": "ci10169094/psa03.shp",
+          "bytes": 159684,
+          "sha256": "5cc0669943b5d8e3b6bfa455489f487c26f487431039390ece5daf70485cb1bf"
+        },
+        {
+          "path": "ci10169094/psa03.shp.xml",
+          "bytes": 7278,
+          "sha256": "4cd04c716c49329e1a2804337a527d1643612a5b829ee878956abfaa0baa77ac"
+        },
+        {
+          "path": "ci10169094/psa03.shx",
+          "bytes": 1468,
+          "sha256": "508edfd3c5a3a565d77a6efde622a56f4f6544b41716eda798c556ccec4565d8"
+        },
+        {
+          "path": "ci10169094/psa10.dbf",
+          "bytes": 459,
+          "sha256": "e7394aa34e261a95b5445c289fd8dd4c2eeb17acf15fc36b0e2958902d727e02"
+        },
+        {
+          "path": "ci10169094/psa10.lyr",
+          "bytes": 10240,
+          "sha256": "b8822ae855da370821c7b381ef2d1e4135c9b6ac4db0f3a8535da9f2d76cc8f0"
+        },
+        {
+          "path": "ci10169094/psa10.prj",
+          "bytes": 145,
+          "sha256": "a02a27b1d1982c8516d83398e85a3c8b1aef1713c13ef4d84d7bde17430c07c4"
+        },
+        {
+          "path": "ci10169094/psa10.shp",
+          "bytes": 6692,
+          "sha256": "71bfd947b0b766903ecc29f9c5973265758a0052dbe9fc128749cfca14d417e0"
+        },
+        {
+          "path": "ci10169094/psa10.shp.xml",
+          "bytes": 7536,
+          "sha256": "61582f0f220d087c02290a4d3a70de93ac2267b6f89a3fd7e9816e9ca4a67604"
+        },
+        {
+          "path": "ci10169094/psa10.shx",
+          "bytes": 124,
+          "sha256": "719053df8fd6bd095266eb297fd2bb5bcdb245694ccc8624055e89a6ca3cfaff"
+        },
+        {
+          "path": "ci10169094/psa30.dbf",
+          "bytes": 303,
+          "sha256": "b611621bf9ac66e03d96b2941273ce6a403ce8e63f797eb867ed775b7ee0fd18"
+        },
+        {
+          "path": "ci10169094/psa30.lyr",
+          "bytes": 9728,
+          "sha256": "f3fdf7e3ed82814f198a226989afa3487f41efd664f0933f843707580f872970"
+        },
+        {
+          "path": "ci10169094/psa30.prj",
+          "bytes": 145,
+          "sha256": "a02a27b1d1982c8516d83398e85a3c8b1aef1713c13ef4d84d7bde17430c07c4"
+        },
+        {
+          "path": "ci10169094/psa30.shp",
+          "bytes": 236,
+          "sha256": "44ad3ddba28d94421d20aa85c83ab9b9429cdde2350feeb178bb16ec7126bcb8"
+        },
+        {
+          "path": "ci10169094/psa30.shp.xml",
+          "bytes": 7536,
+          "sha256": "3be5e07814cbf9bf3bc3cfbcab831610a4fef34b5e2c7d19171bc51edabe7b44"
+        },
+        {
+          "path": "ci10169094/psa30.shx",
+          "bytes": 108,
+          "sha256": "e3c535e84607404f5c0ba9a421a6218a1823b2bc41a736ad2fe155fe473d1a3e"
+        },
+        {
+          "path": "ci10184394/mi.dbf",
+          "bytes": 403251,
+          "sha256": "3d15d5114eb8ad62b7bcc30d7a82236bbd7311c2144f862e2a6ec517c4be327f"
+        },
+        {
+          "path": "ci10184394/mi.lyr",
+          "bytes": 9216,
+          "sha256": "13f2765843424b95488497dfe6a0a1a5831ce7b74febe0df6d5343bf70ffeef6"
+        },
+        {
+          "path": "ci10184394/mi.prj",
+          "bytes": 145,
+          "sha256": "a02a27b1d1982c8516d83398e85a3c8b1aef1713c13ef4d84d7bde17430c07c4"
+        },
+        {
+          "path": "ci10184394/mi.shp",
+          "bytes": 5084156,
+          "sha256": "25dd681ce0f4bdc1540ccf0cabf62b97077a31ce7791c2619adb1f2bfdebf884"
+        },
+        {
+          "path": "ci10184394/mi.shp.xml",
+          "bytes": 7236,
+          "sha256": "e9f3e48b046a99382c5149e12415ada6c1657643ac196df8a3aa4c64c8620480"
+        },
+        {
+          "path": "ci10184394/mi.shx",
+          "bytes": 41436,
+          "sha256": "b22af50f52b391fd08f773f0208ee08ee643787cea6375f9285571c831250eba"
+        },
+        {
+          "path": "ci10184394/pga.dbf",
+          "bytes": 71517,
+          "sha256": "b6cf6447e86e147df11607168e121b3dde99460ac2b8dcccbe4afcc645a1287d"
+        },
+        {
+          "path": "ci10184394/pga.lyr",
+          "bytes": 10240,
+          "sha256": "8dfdcb7ad776d6ad6d04cefb00b65f7b0c97ba58851ff989fef25a4bcfd7777c"
+        },
+        {
+          "path": "ci10184394/pga.prj",
+          "bytes": 145,
+          "sha256": "a02a27b1d1982c8516d83398e85a3c8b1aef1713c13ef4d84d7bde17430c07c4"
+        },
+        {
+          "path": "ci10184394/pga.shp",
+          "bytes": 720520,
+          "sha256": "9e8067879d252fcfb3cddf78e002c2502ceb806ee95e7b60dae130472dc5cd17"
+        },
+        {
+          "path": "ci10184394/pga.shp.xml",
+          "bytes": 7216,
+          "sha256": "2ab588f6f984a5f3725532e5cf14577f3692530c60344e8c7eef606f637c05a8"
+        },
+        {
+          "path": "ci10184394/pga.shx",
+          "bytes": 7412,
+          "sha256": "abca25974d4bf4656dd34cd4ff992b77ebdf7bded42c88dffb460d2ec866c5e7"
+        },
+        {
+          "path": "ci10184394/pgv.dbf",
+          "bytes": 91797,
+          "sha256": "ae4598ea8c853ef0cd7cf3fc271651c25eaf5e85bf8679950ed4e0bdd459b21b"
+        },
+        {
+          "path": "ci10184394/pgv.lyr",
+          "bytes": 10240,
+          "sha256": "9166b6ff86cadbf1be78e3a9fbf912929c673558ff4c5a65904554df97aac2d4"
+        },
+        {
+          "path": "ci10184394/pgv.prj",
+          "bytes": 145,
+          "sha256": "a02a27b1d1982c8516d83398e85a3c8b1aef1713c13ef4d84d7bde17430c07c4"
+        },
+        {
+          "path": "ci10184394/pgv.shp",
+          "bytes": 960292,
+          "sha256": "84060baf51ba33f427cb31c67a7576c14316b4e06862131990081f523ac97042"
+        },
+        {
+          "path": "ci10184394/pgv.shp.xml",
+          "bytes": 7226,
+          "sha256": "319b89bb70fc1f708e2de3fbfa2bab82b11ebcc6e8fe3272e026ea3dff38d1c2"
+        },
+        {
+          "path": "ci10184394/pgv.shx",
+          "bytes": 9492,
+          "sha256": "15eeb76a57fdc78f72686096b502ac0d768d8a0b56e035d74f672c029e4fa0f0"
+        },
+        {
+          "path": "ci10184394/psa03.dbf",
+          "bytes": 147177,
+          "sha256": "b76bf2e0f87f14c1d2f3c5328821145a677a23f5c0c6ce73a28ca8078a41904d"
+        },
+        {
+          "path": "ci10184394/psa03.lyr",
+          "bytes": 10240,
+          "sha256": "e5dd9d0b5308da25b114cdbd701417de68506e929e9ca67cbb06b94a94f4a273"
+        },
+        {
+          "path": "ci10184394/psa03.prj",
+          "bytes": 145,
+          "sha256": "a02a27b1d1982c8516d83398e85a3c8b1aef1713c13ef4d84d7bde17430c07c4"
+        },
+        {
+          "path": "ci10184394/psa03.shp",
+          "bytes": 1555316,
+          "sha256": "1390308f9d6843aee089fe4a374aa0fd618c281343d674f59bd69588a8ae43fa"
+        },
+        {
+          "path": "ci10184394/psa03.shp.xml",
+          "bytes": 7278,
+          "sha256": "4cd04c716c49329e1a2804337a527d1643612a5b829ee878956abfaa0baa77ac"
+        },
+        {
+          "path": "ci10184394/psa03.shx",
+          "bytes": 15172,
+          "sha256": "4adf489c8e243fa52e89ea3de0a81575ea13854a3086e8c5a27adc7c05207545"
+        },
+        {
+          "path": "ci10184394/psa10.dbf",
+          "bytes": 17853,
+          "sha256": "7c6903011fd90865847551b1570e7161099b0bf413fe0ae356fdaa6a4e6e5e66"
+        },
+        {
+          "path": "ci10184394/psa10.lyr",
+          "bytes": 10240,
+          "sha256": "b8822ae855da370821c7b381ef2d1e4135c9b6ac4db0f3a8535da9f2d76cc8f0"
+        },
+        {
+          "path": "ci10184394/psa10.prj",
+          "bytes": 145,
+          "sha256": "a02a27b1d1982c8516d83398e85a3c8b1aef1713c13ef4d84d7bde17430c07c4"
+        },
+        {
+          "path": "ci10184394/psa10.shp",
+          "bytes": 211528,
+          "sha256": "e5be0a83b813d47f8bb7599be2c1986ab4484fbd9e8178b3238ecc9a300ccf5c"
+        },
+        {
+          "path": "ci10184394/psa10.shp.xml",
+          "bytes": 7536,
+          "sha256": "61582f0f220d087c02290a4d3a70de93ac2267b6f89a3fd7e9816e9ca4a67604"
+        },
+        {
+          "path": "ci10184394/psa10.shx",
+          "bytes": 1908,
+          "sha256": "701a80193efc302d8c40c20631b47dfac5245e825764aa3203ea99194d247299"
+        },
+        {
+          "path": "ci10184394/psa30.dbf",
+          "bytes": 303,
+          "sha256": "b611621bf9ac66e03d96b2941273ce6a403ce8e63f797eb867ed775b7ee0fd18"
+        },
+        {
+          "path": "ci10184394/psa30.lyr",
+          "bytes": 9728,
+          "sha256": "f3fdf7e3ed82814f198a226989afa3487f41efd664f0933f843707580f872970"
+        },
+        {
+          "path": "ci10184394/psa30.prj",
+          "bytes": 145,
+          "sha256": "a02a27b1d1982c8516d83398e85a3c8b1aef1713c13ef4d84d7bde17430c07c4"
+        },
+        {
+          "path": "ci10184394/psa30.shp",
+          "bytes": 236,
+          "sha256": "93a725296dcf0cbccd8b89966570f920caad85bec71373bba0b887d7a80470ce"
+        },
+        {
+          "path": "ci10184394/psa30.shp.xml",
+          "bytes": 7536,
+          "sha256": "3be5e07814cbf9bf3bc3cfbcab831610a4fef34b5e2c7d19171bc51edabe7b44"
+        },
+        {
+          "path": "ci10184394/psa30.shx",
+          "bytes": 108,
+          "sha256": "3dfd936dd5b58ce9db9554dfdf4ee94d2c5e5df253084396edfa5e38427ad165"
+        },
+        {
+          "path": "ci10537093/mi.dbf",
+          "bytes": 147177,
+          "sha256": "6db8b2f3e888f45e520cc097647b1dd35dda9d836aaf275f007622579b67cd07"
+        },
+        {
+          "path": "ci10537093/mi.lyr",
+          "bytes": 9216,
+          "sha256": "13f2765843424b95488497dfe6a0a1a5831ce7b74febe0df6d5343bf70ffeef6"
+        },
+        {
+          "path": "ci10537093/mi.prj",
+          "bytes": 145,
+          "sha256": "a02a27b1d1982c8516d83398e85a3c8b1aef1713c13ef4d84d7bde17430c07c4"
+        },
+        {
+          "path": "ci10537093/mi.shp",
+          "bytes": 2456904,
+          "sha256": "0b349519ec900dc8eead347338225d2eafccc364e7072bdc652c21e865edbe0b"
+        },
+        {
+          "path": "ci10537093/mi.shp.xml",
+          "bytes": 7236,
+          "sha256": "e9f3e48b046a99382c5149e12415ada6c1657643ac196df8a3aa4c64c8620480"
+        },
+        {
+          "path": "ci10537093/mi.shx",
+          "bytes": 15172,
+          "sha256": "adfb20f3e0bf1a7b6038fa73e06e4432b2976178d0b6fd7835659cbfcbf31a4b"
+        },
+        {
+          "path": "ci10537093/pga.dbf",
+          "bytes": 693,
+          "sha256": "acf4d7bbaf5b036f0d77d9c29ccad518336fe9b4bd67b8bfc809ac1ff964cb99"
+        },
+        {
+          "path": "ci10537093/pga.lyr",
+          "bytes": 10240,
+          "sha256": "8dfdcb7ad776d6ad6d04cefb00b65f7b0c97ba58851ff989fef25a4bcfd7777c"
+        },
+        {
+          "path": "ci10537093/pga.prj",
+          "bytes": 145,
+          "sha256": "a02a27b1d1982c8516d83398e85a3c8b1aef1713c13ef4d84d7bde17430c07c4"
+        },
+        {
+          "path": "ci10537093/pga.shp",
+          "bytes": 47800,
+          "sha256": "e7fad5ca07f27a26688ee81dd546cee36c8aa7111542c2d5379b13228958958e"
+        },
+        {
+          "path": "ci10537093/pga.shp.xml",
+          "bytes": 7216,
+          "sha256": "2ab588f6f984a5f3725532e5cf14577f3692530c60344e8c7eef606f637c05a8"
+        },
+        {
+          "path": "ci10537093/pga.shx",
+          "bytes": 148,
+          "sha256": "ff634a864db925f5cbbd8744d118206f759d9bc0c976c645f9bde2f25812740e"
+        },
+        {
+          "path": "ci10537093/pgv.dbf",
+          "bytes": 615,
+          "sha256": "c3388765e95972cd7596f6e19cb9d6fabfdd05d67778d3dc9e3f142c6a7d6c38"
+        },
+        {
+          "path": "ci10537093/pgv.lyr",
+          "bytes": 10240,
+          "sha256": "9166b6ff86cadbf1be78e3a9fbf912929c673558ff4c5a65904554df97aac2d4"
+        },
+        {
+          "path": "ci10537093/pgv.prj",
+          "bytes": 145,
+          "sha256": "a02a27b1d1982c8516d83398e85a3c8b1aef1713c13ef4d84d7bde17430c07c4"
+        },
+        {
+          "path": "ci10537093/pgv.shp",
+          "bytes": 36828,
+          "sha256": "0682e9df0e6709ca5672cd9c29248a063ebf2731f6a69a71f0548f61854c929b"
+        },
+        {
+          "path": "ci10537093/pgv.shp.xml",
+          "bytes": 7226,
+          "sha256": "319b89bb70fc1f708e2de3fbfa2bab82b11ebcc6e8fe3272e026ea3dff38d1c2"
+        },
+        {
+          "path": "ci10537093/pgv.shx",
+          "bytes": 140,
+          "sha256": "935332458d95c18ffdc1f5f6fe0ea4fb6226a8f3e3a4f205b1174a544bcc63fc"
+        },
+        {
+          "path": "ci10537093/psa03.dbf",
+          "bytes": 5295,
+          "sha256": "10e27722964fc4144dc223aafbce89346c19b857a7c09c62b3657c11f66d177f"
+        },
+        {
+          "path": "ci10537093/psa03.lyr",
+          "bytes": 10240,
+          "sha256": "e5dd9d0b5308da25b114cdbd701417de68506e929e9ca67cbb06b94a94f4a273"
+        },
+        {
+          "path": "ci10537093/psa03.prj",
+          "bytes": 145,
+          "sha256": "a02a27b1d1982c8516d83398e85a3c8b1aef1713c13ef4d84d7bde17430c07c4"
+        },
+        {
+          "path": "ci10537093/psa03.shp",
+          "bytes": 127084,
+          "sha256": "01b302a1ff2cea3c6ee9d1f37dd5a22169f6b615bf96ad523109a8ec30187252"
+        },
+        {
+          "path": "ci10537093/psa03.shp.xml",
+          "bytes": 7278,
+          "sha256": "4cd04c716c49329e1a2804337a527d1643612a5b829ee878956abfaa0baa77ac"
+        },
+        {
+          "path": "ci10537093/psa03.shx",
+          "bytes": 620,
+          "sha256": "c35cf2ac267144c1d83d55b23f97668fe9b78e6b5e5928573478c2f1eb5aef55"
+        },
+        {
+          "path": "ci10537093/psa10.dbf",
+          "bytes": 381,
+          "sha256": "5c341be211996915e6e1dd6dc81b09a44b69762f0b5048c27d97fb1fbcceac03"
+        },
+        {
+          "path": "ci10537093/psa10.lyr",
+          "bytes": 10240,
+          "sha256": "b8822ae855da370821c7b381ef2d1e4135c9b6ac4db0f3a8535da9f2d76cc8f0"
+        },
+        {
+          "path": "ci10537093/psa10.prj",
+          "bytes": 145,
+          "sha256": "a02a27b1d1982c8516d83398e85a3c8b1aef1713c13ef4d84d7bde17430c07c4"
+        },
+        {
+          "path": "ci10537093/psa10.shp",
+          "bytes": 6728,
+          "sha256": "cc8909a1977072af2aeed63c7e2920fb173c17cbad675f59a682fd0e1bcefee4"
+        },
+        {
+          "path": "ci10537093/psa10.shp.xml",
+          "bytes": 7536,
+          "sha256": "61582f0f220d087c02290a4d3a70de93ac2267b6f89a3fd7e9816e9ca4a67604"
+        },
+        {
+          "path": "ci10537093/psa10.shx",
+          "bytes": 116,
+          "sha256": "1ad80e2c529b97c282dbde102e4e9e2cf0a93154b75101534e852f4baf068cd5"
+        },
+        {
+          "path": "ci10537093/psa30.dbf",
+          "bytes": 303,
+          "sha256": "b611621bf9ac66e03d96b2941273ce6a403ce8e63f797eb867ed775b7ee0fd18"
+        },
+        {
+          "path": "ci10537093/psa30.lyr",
+          "bytes": 9728,
+          "sha256": "f3fdf7e3ed82814f198a226989afa3487f41efd664f0933f843707580f872970"
+        },
+        {
+          "path": "ci10537093/psa30.prj",
+          "bytes": 145,
+          "sha256": "a02a27b1d1982c8516d83398e85a3c8b1aef1713c13ef4d84d7bde17430c07c4"
+        },
+        {
+          "path": "ci10537093/psa30.shp",
+          "bytes": 236,
+          "sha256": "de8dd62bbb1a9c80b73a29abc675c77b9381af4927bdaf9f50dced67cb0a720c"
+        },
+        {
+          "path": "ci10537093/psa30.shp.xml",
+          "bytes": 7536,
+          "sha256": "3be5e07814cbf9bf3bc3cfbcab831610a4fef34b5e2c7d19171bc51edabe7b44"
+        },
+        {
+          "path": "ci10537093/psa30.shx",
+          "bytes": 108,
+          "sha256": "12b76ba11a6b80953e6cb700386079d0b4eef2b4331e663465f5342dfb0d3f62"
+        }
+      ],
+      "layers": [
+        {
+          "path": "ci10148002/mi.shp",
+          "kind": "vector",
+          "driver": "ESRI Shapefile",
+          "feature_count": 4328,
+          "geometry_type": "Polygon",
+          "crs": "EPSG:4326",
+          "extent": [
+            -116.3842,
+            -113.8842,
+            31.145466,
+            32.812133
+          ],
+          "fields": [
+            "AREA",
+            "PERIMETER",
+            "PGAPOL_",
+            "PGAPOL_ID",
+            "GRID_CODE",
+            "PARAMVALUE"
+          ],
+          "validation": "opened read-only; feature count and first geometry read; complete geometry validity not assessed"
+        },
+        {
+          "path": "ci10148002/pga.shp",
+          "kind": "vector",
+          "driver": "ESRI Shapefile",
+          "feature_count": 509,
+          "geometry_type": "Polygon",
+          "crs": "EPSG:4326",
+          "extent": [
+            -116.3842,
+            -113.8842,
+            31.14546625,
+            32.8121329166667
+          ],
+          "fields": [
+            "AREA",
+            "PERIMETER",
+            "PGAPOL_",
+            "PGAPOL_ID",
+            "GRID_CODE",
+            "PARAMVALUE"
+          ],
+          "validation": "opened read-only; feature count and first geometry read; complete geometry validity not assessed"
+        },
+        {
+          "path": "ci10148002/pgv.shp",
+          "kind": "vector",
+          "driver": "ESRI Shapefile",
+          "feature_count": 642,
+          "geometry_type": "Polygon",
+          "crs": "EPSG:4326",
+          "extent": [
+            -116.3842,
+            -113.8842,
+            31.14546625,
+            32.8121329166667
+          ],
+          "fields": [
+            "AREA",
+            "PERIMETER",
+            "PGAPOL_",
+            "PGAPOL_ID",
+            "GRID_CODE",
+            "PARAMVALUE"
+          ],
+          "validation": "opened read-only; feature count and first geometry read; complete geometry validity not assessed"
+        },
+        {
+          "path": "ci10148002/psa03.shp",
+          "kind": "vector",
+          "driver": "ESRI Shapefile",
+          "feature_count": 1451,
+          "geometry_type": "Polygon",
+          "crs": "EPSG:4326",
+          "extent": [
+            -116.3842,
+            -113.8842,
+            31.14546625,
+            32.8121329166667
+          ],
+          "fields": [
+            "AREA",
+            "PERIMETER",
+            "PGAPOL_",
+            "PGAPOL_ID",
+            "GRID_CODE",
+            "PARAMVALUE"
+          ],
+          "validation": "opened read-only; feature count and first geometry read; complete geometry validity not assessed"
+        },
+        {
+          "path": "ci10148002/psa10.shp",
+          "kind": "vector",
+          "driver": "ESRI Shapefile",
+          "feature_count": 152,
+          "geometry_type": "Polygon",
+          "crs": "EPSG:4326",
+          "extent": [
+            -116.3842,
+            -113.8842,
+            31.14546625,
+            32.8121329166667
+          ],
+          "fields": [
+            "AREA",
+            "PERIMETER",
+            "PGAPOL_",
+            "PGAPOL_ID",
+            "GRID_CODE",
+            "PARAMVALUE"
+          ],
+          "validation": "opened read-only; feature count and first geometry read; complete geometry validity not assessed"
+        },
+        {
+          "path": "ci10148002/psa30.shp",
+          "kind": "vector",
+          "driver": "ESRI Shapefile",
+          "feature_count": 1,
+          "geometry_type": "Polygon",
+          "crs": "EPSG:4326",
+          "extent": [
+            -116.3842,
+            -113.8842,
+            31.14546625,
+            32.8121329166667
+          ],
+          "fields": [
+            "AREA",
+            "PERIMETER",
+            "PGAPOL_",
+            "PGAPOL_ID",
+            "GRID_CODE",
+            "PARAMVALUE"
+          ],
+          "validation": "opened read-only; feature count and first geometry read; complete geometry validity not assessed"
+        },
+        {
+          "path": "ci10169094/mi.shp",
+          "kind": "vector",
+          "driver": "ESRI Shapefile",
+          "feature_count": 1055,
+          "geometry_type": "Polygon",
+          "crs": "EPSG:4326",
+          "extent": [
+            -116.5407,
+            -114.0407,
+            31.387866,
+            33.054533
+          ],
+          "fields": [
+            "AREA",
+            "PERIMETER",
+            "PGAPOL_",
+            "PGAPOL_ID",
+            "GRID_CODE",
+            "PARAMVALUE"
+          ],
+          "validation": "opened read-only; feature count and first geometry read; complete geometry validity not assessed"
+        },
+        {
+          "path": "ci10169094/pga.shp",
+          "kind": "vector",
+          "driver": "ESRI Shapefile",
+          "feature_count": 68,
+          "geometry_type": "Polygon",
+          "crs": "EPSG:4326",
+          "extent": [
+            -116.5407,
+            -114.0407,
+            31.38786625,
+            33.0545329166667
+          ],
+          "fields": [
+            "AREA",
+            "PERIMETER",
+            "PGAPOL_",
+            "PGAPOL_ID",
+            "GRID_CODE",
+            "PARAMVALUE"
+          ],
+          "validation": "opened read-only; feature count and first geometry read; complete geometry validity not assessed"
+        },
+        {
+          "path": "ci10169094/pgv.shp",
+          "kind": "vector",
+          "driver": "ESRI Shapefile",
+          "feature_count": 56,
+          "geometry_type": "Polygon",
+          "crs": "EPSG:4326",
+          "extent": [
+            -116.5407,
+            -114.0407,
+            31.38786625,
+            33.0545329166667
+          ],
+          "fields": [
+            "AREA",
+            "PERIMETER",
+            "PGAPOL_",
+            "PGAPOL_ID",
+            "GRID_CODE",
+            "PARAMVALUE"
+          ],
+          "validation": "opened read-only; feature count and first geometry read; complete geometry validity not assessed"
+        },
+        {
+          "path": "ci10169094/psa03.shp",
+          "kind": "vector",
+          "driver": "ESRI Shapefile",
+          "feature_count": 171,
+          "geometry_type": "Polygon",
+          "crs": "EPSG:4326",
+          "extent": [
+            -116.5407,
+            -114.0407,
+            31.38786625,
+            33.0545329166667
+          ],
+          "fields": [
+            "AREA",
+            "PERIMETER",
+            "PGAPOL_",
+            "PGAPOL_ID",
+            "GRID_CODE",
+            "PARAMVALUE"
+          ],
+          "validation": "opened read-only; feature count and first geometry read; complete geometry validity not assessed"
+        },
+        {
+          "path": "ci10169094/psa10.shp",
+          "kind": "vector",
+          "driver": "ESRI Shapefile",
+          "feature_count": 3,
+          "geometry_type": "Polygon",
+          "crs": "EPSG:4326",
+          "extent": [
+            -116.5407,
+            -114.0407,
+            31.38786625,
+            33.0545329166667
+          ],
+          "fields": [
+            "AREA",
+            "PERIMETER",
+            "PGAPOL_",
+            "PGAPOL_ID",
+            "GRID_CODE",
+            "PARAMVALUE"
+          ],
+          "validation": "opened read-only; feature count and first geometry read; complete geometry validity not assessed"
+        },
+        {
+          "path": "ci10169094/psa30.shp",
+          "kind": "vector",
+          "driver": "ESRI Shapefile",
+          "feature_count": 1,
+          "geometry_type": "Polygon",
+          "crs": "EPSG:4326",
+          "extent": [
+            -116.5407,
+            -114.0407,
+            31.38786625,
+            33.0545329166667
+          ],
+          "fields": [
+            "AREA",
+            "PERIMETER",
+            "PGAPOL_",
+            "PGAPOL_ID",
+            "GRID_CODE",
+            "PARAMVALUE"
+          ],
+          "validation": "opened read-only; feature count and first geometry read; complete geometry validity not assessed"
+        },
+        {
+          "path": "ci10184394/mi.shp",
+          "kind": "vector",
+          "driver": "ESRI Shapefile",
+          "feature_count": 5167,
+          "geometry_type": "Polygon",
+          "crs": "EPSG:4326",
+          "extent": [
+            -116.882,
+            -114.382,
+            31.619966,
+            33.286633
+          ],
+          "fields": [
+            "AREA",
+            "PERIMETER",
+            "PGAPOL_",
+            "PGAPOL_ID",
+            "GRID_CODE",
+            "PARAMVALUE"
+          ],
+          "validation": "opened read-only; feature count and first geometry read; complete geometry validity not assessed"
+        },
+        {
+          "path": "ci10184394/pga.shp",
+          "kind": "vector",
+          "driver": "ESRI Shapefile",
+          "feature_count": 914,
+          "geometry_type": "Polygon",
+          "crs": "EPSG:4326",
+          "extent": [
+            -116.882,
+            -114.382,
+            31.61996625,
+            33.2866329166667
+          ],
+          "fields": [
+            "AREA",
+            "PERIMETER",
+            "PGAPOL_",
+            "PGAPOL_ID",
+            "GRID_CODE",
+            "PARAMVALUE"
+          ],
+          "validation": "opened read-only; feature count and first geometry read; complete geometry validity not assessed"
+        },
+        {
+          "path": "ci10184394/pgv.shp",
+          "kind": "vector",
+          "driver": "ESRI Shapefile",
+          "feature_count": 1174,
+          "geometry_type": "Polygon",
+          "crs": "EPSG:4326",
+          "extent": [
+            -116.882,
+            -114.382,
+            31.61996625,
+            33.2866329166667
+          ],
+          "fields": [
+            "AREA",
+            "PERIMETER",
+            "PGAPOL_",
+            "PGAPOL_ID",
+            "GRID_CODE",
+            "PARAMVALUE"
+          ],
+          "validation": "opened read-only; feature count and first geometry read; complete geometry validity not assessed"
+        },
+        {
+          "path": "ci10184394/psa03.shp",
+          "kind": "vector",
+          "driver": "ESRI Shapefile",
+          "feature_count": 1884,
+          "geometry_type": "Polygon",
+          "crs": "EPSG:4326",
+          "extent": [
+            -116.882,
+            -114.382,
+            31.61996625,
+            33.2866329166667
+          ],
+          "fields": [
+            "AREA",
+            "PERIMETER",
+            "PGAPOL_",
+            "PGAPOL_ID",
+            "GRID_CODE",
+            "PARAMVALUE"
+          ],
+          "validation": "opened read-only; feature count and first geometry read; complete geometry validity not assessed"
+        },
+        {
+          "path": "ci10184394/psa10.shp",
+          "kind": "vector",
+          "driver": "ESRI Shapefile",
+          "feature_count": 226,
+          "geometry_type": "Polygon",
+          "crs": "EPSG:4326",
+          "extent": [
+            -116.882,
+            -114.382,
+            31.61996625,
+            33.2866329166667
+          ],
+          "fields": [
+            "AREA",
+            "PERIMETER",
+            "PGAPOL_",
+            "PGAPOL_ID",
+            "GRID_CODE",
+            "PARAMVALUE"
+          ],
+          "validation": "opened read-only; feature count and first geometry read; complete geometry validity not assessed"
+        },
+        {
+          "path": "ci10184394/psa30.shp",
+          "kind": "vector",
+          "driver": "ESRI Shapefile",
+          "feature_count": 1,
+          "geometry_type": "Polygon",
+          "crs": "EPSG:4326",
+          "extent": [
+            -116.882,
+            -114.382,
+            31.61996625,
+            33.2866329166667
+          ],
+          "fields": [
+            "AREA",
+            "PERIMETER",
+            "PGAPOL_",
+            "PGAPOL_ID",
+            "GRID_CODE",
+            "PARAMVALUE"
+          ],
+          "validation": "opened read-only; feature count and first geometry read; complete geometry validity not assessed"
+        },
+        {
+          "path": "ci10537093/mi.shp",
+          "kind": "vector",
+          "driver": "ESRI Shapefile",
+          "feature_count": 1884,
+          "geometry_type": "Polygon",
+          "crs": "EPSG:4326",
+          "extent": [
+            -118.7755,
+            -116.2755,
+            31.215966,
+            32.882633
+          ],
+          "fields": [
+            "AREA",
+            "PERIMETER",
+            "PGAPOL_",
+            "PGAPOL_ID",
+            "GRID_CODE",
+            "PARAMVALUE"
+          ],
+          "validation": "opened read-only; feature count and first geometry read; complete geometry validity not assessed"
+        },
+        {
+          "path": "ci10537093/pga.shp",
+          "kind": "vector",
+          "driver": "ESRI Shapefile",
+          "feature_count": 6,
+          "geometry_type": "Polygon",
+          "crs": "EPSG:4326",
+          "extent": [
+            -118.7755,
+            -116.2755,
+            31.21596625,
+            32.8826329166667
+          ],
+          "fields": [
+            "AREA",
+            "PERIMETER",
+            "PGAPOL_",
+            "PGAPOL_ID",
+            "GRID_CODE",
+            "PARAMVALUE"
+          ],
+          "validation": "opened read-only; feature count and first geometry read; complete geometry validity not assessed"
+        },
+        {
+          "path": "ci10537093/pgv.shp",
+          "kind": "vector",
+          "driver": "ESRI Shapefile",
+          "feature_count": 5,
+          "geometry_type": "Polygon",
+          "crs": "EPSG:4326",
+          "extent": [
+            -118.7755,
+            -116.2755,
+            31.21596625,
+            32.8826329166667
+          ],
+          "fields": [
+            "AREA",
+            "PERIMETER",
+            "PGAPOL_",
+            "PGAPOL_ID",
+            "GRID_CODE",
+            "PARAMVALUE"
+          ],
+          "validation": "opened read-only; feature count and first geometry read; complete geometry validity not assessed"
+        },
+        {
+          "path": "ci10537093/psa03.shp",
+          "kind": "vector",
+          "driver": "ESRI Shapefile",
+          "feature_count": 65,
+          "geometry_type": "Polygon",
+          "crs": "EPSG:4326",
+          "extent": [
+            -118.7755,
+            -116.2755,
+            31.21596625,
+            32.8826329166667
+          ],
+          "fields": [
+            "AREA",
+            "PERIMETER",
+            "PGAPOL_",
+            "PGAPOL_ID",
+            "GRID_CODE",
+            "PARAMVALUE"
+          ],
+          "validation": "opened read-only; feature count and first geometry read; complete geometry validity not assessed"
+        },
+        {
+          "path": "ci10537093/psa10.shp",
+          "kind": "vector",
+          "driver": "ESRI Shapefile",
+          "feature_count": 2,
+          "geometry_type": "Polygon",
+          "crs": "EPSG:4326",
+          "extent": [
+            -118.7755,
+            -116.2755,
+            31.21596625,
+            32.8826329166667
+          ],
+          "fields": [
+            "AREA",
+            "PERIMETER",
+            "PGAPOL_",
+            "PGAPOL_ID",
+            "GRID_CODE",
+            "PARAMVALUE"
+          ],
+          "validation": "opened read-only; feature count and first geometry read; complete geometry validity not assessed"
+        },
+        {
+          "path": "ci10537093/psa30.shp",
+          "kind": "vector",
+          "driver": "ESRI Shapefile",
+          "feature_count": 1,
+          "geometry_type": "Polygon",
+          "crs": "EPSG:4326",
+          "extent": [
+            -118.7755,
+            -116.2755,
+            31.21596625,
+            32.8826329166667
+          ],
+          "fields": [
+            "AREA",
+            "PERIMETER",
+            "PGAPOL_",
+            "PGAPOL_ID",
+            "GRID_CODE",
+            "PARAMVALUE"
+          ],
+          "validation": "opened read-only; feature count and first geometry read; complete geometry validity not assessed"
+        },
+        {
+          "path": "ci10542525/mi.shp",
+          "kind": "vector",
+          "driver": "ESRI Shapefile",
+          "feature_count": 696,
+          "geometry_type": "Polygon",
+          "crs": "EPSG:4326",
+          "extent": [
+            -117.8412,
+            -115.3412,
+            31.408666,
+            33.075333
+          ],
+          "fields": [
+            "AREA",
+            "PERIMETER",
+            "PGAPOL_",
+            "PGAPOL_ID",
+            "GRID_CODE",
+            "PARAMVALUE"
+          ],
+          "validation": "opened read-only; feature count and first geometry read; complete geometry validity not assessed"
+        },
+        {
+          "path": "ci10542525/pga.shp",
+          "kind": "vector",
+          "driver": "ESRI Shapefile",
+          "feature_count": 37,
+          "geometry_type": "Polygon",
+          "crs": "EPSG:4326",
+          "extent": [
+            -117.8412,
+            -115.3412,
+            31.40866625,
+            33.0753329166667
+          ],
+          "fields": [
+            "AREA",
+            "PERIMETER",
+            "PGAPOL_",
+            "PGAPOL_ID",
+            "GRID_CODE",
+            "PARAMVALUE"
+          ],
+          "validation": "opened read-only; feature count and first geometry read; complete geometry validity not assessed"
+        },
+        {
+          "path": "ci10542525/pgv.shp",
+          "kind": "vector",
+          "driver": "ESRI Shapefile",
+          "feature_count": 13,
+          "geometry_type": "Polygon",
+          "crs": "EPSG:4326",
+          "extent": [
+            -117.8412,
+            -115.3412,
+            31.40866625,
+            33.0753329166667
+          ],
+          "fields": [
+            "AREA",
+            "PERIMETER",
+            "PGAPOL_",
+            "PGAPOL_ID",
+            "GRID_CODE",
+            "PARAMVALUE"
+          ],
+          "validation": "opened read-only; feature count and first geometry read; complete geometry validity not assessed"
+        },
+        {
+          "path": "ci10542525/psa03.shp",
+          "kind": "vector",
+          "driver": "ESRI Shapefile",
+          "feature_count": 31,
+          "geometry_type": "Polygon",
+          "crs": "EPSG:4326",
+          "extent": [
+            -117.8412,
+            -115.3412,
+            31.40866625,
+            33.0753329166667
+          ],
+          "fields": [
+            "AREA",
+            "PERIMETER",
+            "PGAPOL_",
+            "PGAPOL_ID",
+            "GRID_CODE",
+            "PARAMVALUE"
+          ],
+          "validation": "opened read-only; feature count and first geometry read; complete geometry validity not assessed"
+        },
+        {
+          "path": "ci10542525/psa10.shp",
+          "kind": "vector",
+          "driver": "ESRI Shapefile",
+          "feature_count": 4,
+          "geometry_type": "Polygon",
+          "crs": "EPSG:4326",
+          "extent": [
+            -117.8412,
+            -115.3412,
+            31.40866625,
+            33.0753329166667
+          ],
+          "fields": [
+            "AREA",
+            "PERIMETER",
+            "PGAPOL_",
+            "PGAPOL_ID",
+            "GRID_CODE",
+            "PARAMVALUE"
+          ],
+          "validation": "opened read-only; feature count and first geometry read; complete geometry validity not assessed"
+        },
+        {
+          "path": "ci10542525/psa30.shp",
+          "kind": "vector",
+          "driver": "ESRI Shapefile",
+          "feature_count": 1,
+          "geometry_type": "Polygon",
+          "crs": "EPSG:4326",
+          "extent": [
+            -117.8412,
+            -115.3412,
+            31.40866625,
+            33.0753329166667
+          ],
+          "fields": [
+            "AREA",
+            "PERIMETER",
+            "PGAPOL_",
+            "PGAPOL_ID",
+            "GRID_CODE",
+            "PARAMVALUE"
+          ],
+          "validation": "opened read-only; feature count and first geometry read; complete geometry validity not assessed"
+        }
+      ]
+    }
+  ]
+}

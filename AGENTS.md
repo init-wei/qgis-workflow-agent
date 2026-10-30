@@ -24,5 +24,6 @@
 ## Agent skills
 
 - ask-matt：已确认的决定直接继承，按规格 → 纵向切片 → 行为测试/实现 → Standards 与 Spec 审查，不重复访谈。
+- 审查删除、合并、状态收敛或依赖替换，以及调查简化候选时，读取[简化审查补充规则](docs/agents/simplification-review.md)，由 Standards 轴核对证据。
 - GitHub 是正式 issue tracker，见[tracker 规则](docs/agents/issue-tracker.md)；已发布本地票据只作范围参考，不维护第二份进度。
 - 标签映射见[triage](docs/agents/triage-labels.md)；单一领域上下文与根级 ADR 见[领域规则](docs/agents/domain.md)。
