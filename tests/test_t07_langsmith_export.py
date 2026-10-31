@@ -298,7 +298,7 @@ def test_runtime_source_change_cannot_reuse_reviewed_export(tmp_path):
     assert cli('--manifest', tmp_path / 'manifest.json', '--output', output).returncode != 0
 
 
-@pytest.mark.parametrize('failure_at', [None, 'example_write', 'feedback_readback'])
+@pytest.mark.parametrize('failure_at', [None, 'lookup', 'example_write', 'feedback_readback'])
 def test_locked_sdk_evaluate_serializes_only_safe_facts_and_business_ids(
         tmp_path, monkeypatch, failure_at, isolated_sdk_runtime):
     """Exercise actual SDK Dataset/Experiment/Run/Feedback serialization at HTTP."""
@@ -338,6 +338,7 @@ def test_locked_sdk_evaluate_serializes_only_safe_facts_and_business_ids(
 
     def transport(session, method, url, **kwargs):
         method, path = method.upper(), urlsplit(url).path
+        assert kwargs.get('timeout') == (3, 15), 'Export must override the business trace client timeout'
         data = kwargs.get('data') or b'{}'
         if isinstance(data, str):
             data = data.encode()
@@ -352,6 +353,8 @@ def test_locked_sdk_evaluate_serializes_only_safe_facts_and_business_ids(
             payload = json.loads(data)
         sent.append((method, path, payload))
         if path == '/datasets' and method == 'GET':
+            if failure_at == 'lookup':
+                raise requests.ConnectionError('Fake naming lookup failure')
             result = []
         elif path == '/sessions' and method == 'GET':
             result = []
@@ -417,6 +420,15 @@ def test_locked_sdk_evaluate_serializes_only_safe_facts_and_business_ids(
     monkeypatch.setattr(subprocess, 'Popen', forbidden_external)
     monkeypatch.setattr(socket.socket, 'connect', forbidden_external)
     try:
+        if failure_at == 'lookup':
+            from langsmith.utils import LangSmithConnectionError
+            with pytest.raises(LangSmithConnectionError):
+                module.execute(artifact, tmp_path / 'safe.json')
+            assert not (tmp_path / 'safe.receipt.json').exists()
+            assert not datasets and not projects and len(sent) == 1
+            assert 'request_with_retries' not in telemetry.configure_langsmith().__dict__
+            assert 'update_project' not in telemetry.configure_langsmith().__dict__
+            return
         if failure_at:
             with pytest.raises(RuntimeError, match='retained receipt'):
                 module.execute(artifact, tmp_path / 'safe.json')
@@ -430,8 +442,12 @@ def test_locked_sdk_evaluate_serializes_only_safe_facts_and_business_ids(
                 module.execute(artifact, tmp_path / 'safe.json')
             assert len(sent) == before
             assert 'update_project' not in telemetry.configure_langsmith().__dict__
+            assert 'request_with_retries' not in telemetry.configure_langsmith().__dict__
             return
-        receipt = module.execute(artifact, tmp_path / 'safe.json')
+        arguments = ['--manifest', str(tmp_path / 'manifest.json'), '--output', str(tmp_path / 'safe.json')]
+        assert module.main(arguments) == 0
+        assert module.main([*arguments, '--execute']) == 0
+        receipt = json.loads((tmp_path / 'safe.receipt.json').read_text())
         assert receipt['state'] == 'complete'
         assert {arm: item['imported_runs'] for arm, item in receipt['experiments'].items()} == {'A0': 48, 'A1': 48}
         assert len(examples) == 48
@@ -461,6 +477,12 @@ def test_locked_sdk_evaluate_serializes_only_safe_facts_and_business_ids(
                    for item in feedbacks if item['key'] == 'human_change')
         assert all(item['score'] == 250.5 for item in feedbacks if item['key'] == 'execution_ms')
         body = json.dumps(sent)
+        routes = {(method, '/sessions/ID' if path.startswith('/sessions/') else path)
+                  for method, path, payload in sent}
+        assert {('GET', '/datasets'), ('GET', '/sessions'), ('POST', '/datasets'),
+                ('POST', '/examples/bulk'), ('GET', '/examples'), ('POST', '/sessions'),
+                ('PATCH', '/sessions/ID'), ('POST', '/runs/multipart'),
+                ('POST', '/runs/query'), ('GET', '/feedback')} <= routes
         for forbidden in ('PRIVATE-', 'fake-export-key', 'geometry', 'evidence_dir', 'human_change_rate'):
             assert forbidden not in body
         for method, path, payload in sent:
@@ -470,6 +492,7 @@ def test_locked_sdk_evaluate_serializes_only_safe_facts_and_business_ids(
                 assert set(payload['extra']['metadata']) == set(artifact['binding']) | {'runtime'}
                 assert payload['extra']['metadata']['runtime']['sdk_version'] == '0.6.4'
         assert 'update_project' not in telemetry.configure_langsmith().__dict__
+        assert 'request_with_retries' not in telemetry.configure_langsmith().__dict__
         with pytest.raises(ValueError, match='receipt already exists'):
             module.execute(artifact, tmp_path / 'safe.json')
     finally:
@@ -489,3 +512,65 @@ def test_sdk_runtime_still_rejects_host_release_metadata(release_env, isolated_s
     assert get_runtime_environment()[release_env] == 'fake-unreviewed-release-sha'
     with pytest.raises(RuntimeError, match='STOP: unreviewed SDK runtime metadata'):
         exporter().sdk_runtime()
+
+
+@pytest.mark.parametrize('transport_fails', [False, True])
+def test_export_timeout_scope_restores_existing_overrides_without_more_retries(monkeypatch, transport_fails):
+    import requests
+    from agent.observability import _SafeClient
+    from langsmith.utils import LangSmithConnectionError
+
+    observed = []
+    fail_next = False
+
+    def transport(session, method, url, **kwargs):
+        observed.append(kwargs['timeout'])
+        if fail_next:
+            raise requests.ConnectionError('Fake transport failure')
+        response = requests.Response()
+        response.status_code, response._content, response.url = 200, b'{}', url
+        return response
+
+    monkeypatch.setattr(requests.Session, 'request', transport)
+    client = _SafeClient(api_key='fake-scope-key', api_url='https://api.smith.langchain.com',
+                         timeout_ms=(1000, 2000), auto_batch_tracing=False,
+                         info={'instance_flags': {'zstd_compression_enabled': False}})
+    original_request = client.request_with_retries
+
+    def existing_request(*args, **kwargs):
+        return original_request(*args, **kwargs)
+
+    def existing_update(project_id, **kwargs):
+        return kwargs
+
+    client.request_with_retries, client.update_project = existing_request, existing_update
+    original_timeout_ms = client.timeout_ms
+    module = exporter()
+    try:
+        client.request_with_retries('GET', '/datasets')
+        baseline = observed[-1]
+        try:
+            with module.safe_project_updates(client, {'sha256': 'a' * 64}):
+                # Public override wins over both SDK's cached timeout and caller kwargs.
+                client.request_with_retries('GET', '/datasets', request_kwargs={'timeout': (99, 99)},
+                                            timeout=(100, 100))
+                assert observed[-1] == (3, 15)
+                assert client.update_project('fake-id', metadata={'git': 'PRIVATE'})['metadata'] == {'sha256': 'a' * 64}
+                if transport_fails:
+                    fail_next = True
+                    count = len(observed)
+                    client.request_with_retries('GET', '/datasets', stop_after_attempt=99)
+        except LangSmithConnectionError:
+            assert transport_fails
+            assert len(observed) == count + 1  # SafeClient's one-attempt policy remains.
+            assert observed[-1] == (3, 15)
+        else:
+            assert not transport_fails
+        assert client.request_with_retries is existing_request
+        assert client.update_project is existing_update
+        assert client.timeout_ms == original_timeout_ms
+        fail_next = False
+        client.request_with_retries('GET', '/datasets')
+        assert observed[-1] == baseline
+    finally:
+        client.cleanup()

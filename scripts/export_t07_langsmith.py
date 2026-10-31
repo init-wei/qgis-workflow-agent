@@ -310,21 +310,31 @@ def sdk_runtime():
 
 @contextmanager
 def safe_project_updates(client, binding):
-    """Keep SDK evaluation mechanics; discard its automatic Git identity metadata.
+    """Bound export requests and discard the SDK's automatic Git metadata.
 
     The existing SafeClient owns trace masking. Only this export's single client
-    instance is wrapped, and its original attribute is restored on every exit.
+    instance is wrapped, and its original methods are restored on every exit.
     """
     original = client.update_project
     had_override = 'update_project' in client.__dict__
     previous = client.__dict__.get('update_project')
+    original_request = client.request_with_retries
+    had_request_override = 'request_with_retries' in client.__dict__
+    previous_request = client.__dict__.get('request_with_retries')
 
     def update_project(project_id, **kwargs):
         kwargs['metadata'] = dict(binding)
         kwargs.pop('project_extra', None)
         return original(project_id, **kwargs)
 
+    def request_with_retries(method, pathname, *, request_kwargs=None, **kwargs):
+        # Official SDK merges these public kwargs after its cached default and
+        # request_kwargs. Keep SafeClient's existing one-attempt retry policy.
+        kwargs['timeout'] = (3, 15)  # connect/read seconds, only during import
+        return original_request(method, pathname, request_kwargs=request_kwargs, **kwargs)
+
     client.update_project = update_project
+    client.request_with_retries = request_with_retries
     try:
         yield
     finally:
@@ -332,6 +342,10 @@ def safe_project_updates(client, binding):
             client.update_project = previous
         else:
             del client.update_project
+        if had_request_override:
+            client.request_with_retries = previous_request
+        else:
+            del client.request_with_retries
 
 
 def verify_platform(client, project, facts, uploaded):
@@ -382,10 +396,16 @@ def execute(artifact, output):
             or not artifact['binding'].get('runtime_sha256')):
         raise ValueError('STOP: incomplete or unverified comparison; see safe artifact blockers')
     from agent.observability import configure_langsmith
-    from langsmith import tracing_context
     client = configure_langsmith()
     if client is None:
         raise RuntimeError('STOP: explicit LangSmith configuration is unavailable or unsafe')
+    with safe_project_updates(client, artifact['binding']):
+        return _import_facts(client, artifact, output)
+
+
+def _import_facts(client, artifact, output):
+    from langsmith import tracing_context
+
     artifact_sha = sha(canonical(artifact))
     receipt_path = output.with_suffix('.receipt.json')
     name = f"t07-{artifact['experiment_id'][:40]}-{artifact_sha[:16]}"
@@ -419,8 +439,7 @@ def execute(artifact, output):
                                             metadata=artifact['binding'])
             receipt['experiments'][arm].update(id=str(project.id), url=official_url(project.url), state='evaluating')
             write(receipt_path, receipt)
-            with safe_project_updates(client, artifact['binding']), tracing_context(
-                    enabled=False, client=client, parent=False, replicas=[]):
+            with tracing_context(enabled=False, client=client, parent=False, replicas=[]):
                 result = client.evaluate(target_for(artifact['arms'][arm]), data=uploaded,
                                          experiment=project, evaluators=[factual_scores],
                                          max_concurrency=0, num_repetitions=1, blocking=True,
