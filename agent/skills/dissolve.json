@@ -134,5 +134,13 @@
     }
   ],
   "curation_status": "agent_curated",
-  "review_status": "pending_human_review"
+  "review_status": "human_reviewed",
+  "human_review": {
+    "reviewer": "项目维护者（本次 Codex 对话用户）",
+    "reviewed_at": "2026-10-31T13:31:04+08:00",
+    "evidence": "https://github.com/init-wei/qgis-workflow-agent/issues/26#issuecomment-6539587420",
+    "skill_id": "qwa-dissolve",
+    "version": "1.0.0",
+    "content_sha256": "a936a3b67a7b28f0fa95a2511fe37331594752d99281e537b0d6d0fc2689c6fb"
+  }
 }

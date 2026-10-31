@@ -102,7 +102,9 @@ def test_matching_candidate_is_a_reference_for_a_new_pending_plan(monkeypatch, t
     assert '"task_plan"' in prompts[0] and '"new-file"' in prompts[0]
     candidate_facts = plan['metadata']['skill_candidates']
     assert candidate_facts['enabled'] is True
-    assert any(item['family'] == 'load' and item['review_status'] == 'pending_human_review'
+    assert any(item['family'] == 'load' and item['review_status'] == 'human_reviewed'
+               and item['human_review']['skill_id'] == item['skill_id']
+               and item['human_review']['version'] == item['version']
                and item['skill_id'] and item['version'] and item['provenance']
                for item in candidate_facts['provided'])
     assert gis_calls == []

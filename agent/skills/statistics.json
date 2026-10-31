@@ -127,5 +127,13 @@
     }
   ],
   "curation_status": "agent_curated",
-  "review_status": "pending_human_review"
+  "review_status": "human_reviewed",
+  "human_review": {
+    "reviewer": "项目维护者（本次 Codex 对话用户）",
+    "reviewed_at": "2026-10-31T13:31:04+08:00",
+    "evidence": "https://github.com/init-wei/qgis-workflow-agent/issues/26#issuecomment-6539587420",
+    "skill_id": "qwa-statistics",
+    "version": "1.0.0",
+    "content_sha256": "739ca499b7021cc4d4beea4c0a34da2caa87a402906868e7154d3cf8a1147bb4"
+  }
 }

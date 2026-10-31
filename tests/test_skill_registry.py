@@ -94,8 +94,10 @@ def test_catalog_candidates_are_real_taskplan_examples_bound_to_selected_files(q
     candidate = next(item for item in examples if item["family"] == family)
     assert set(candidate) == {"skill_id", "version", "family", "name", "summary", "review_status", "human_review", "task_plan", "provenance"}
     assert candidate["version"] and candidate["skill_id"]
-    assert candidate["review_status"] == "pending_human_review"
-    assert candidate["human_review"] is None
+    assert candidate["review_status"] == "human_reviewed"
+    assert candidate["human_review"]["skill_id"] == candidate["skill_id"]
+    assert candidate["human_review"]["version"] == candidate["version"]
+    assert candidate["human_review"]["evidence"].startswith("https://github.com/init-wei/qgis-workflow-agent/issues/26#issuecomment-")
     assert candidate["provenance"][0]["task_id"]
     assert candidate["provenance"][0]["evidence_url"].startswith("https://github.com/")
     plan = TaskPlan.model_validate(candidate["task_plan"])
@@ -171,7 +173,11 @@ def _pending_skill_data():
     import json
     from pathlib import Path
 
-    return json.loads((Path(__file__).resolve().parents[1] / "agent/skills/load.json").read_text())
+    data = json.loads((Path(__file__).resolve().parents[1] / "agent/skills/load.json").read_text())
+    # Pending state is a test fixture, independent of current catalog reviews.
+    data["review_status"] = "pending_human_review"
+    data.pop("human_review", None)
+    return data
 
 
 def _reviewed_skill_data():
