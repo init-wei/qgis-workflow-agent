@@ -9,10 +9,7 @@ import type {
   CurrentStateResponse,
   QGISIdentity,
   SessionHistory,
-  QGISStatus,
-  DemoCaseDetail,
-  DemoCaseListResponse,
-  DemoCaseTraceResponse
+  QGISStatus
 } from '../types'
 
 // 配置基础URL - 开发环境使用代理，生产环境使用真实地址
@@ -229,20 +226,6 @@ export const getFiles = (): Promise<{ files: UploadedFile[] }> => {
  */
 export const getCurrentState = async (thread_id: string): Promise<CurrentStateResponse> => {
   return api.get(`/state/${encodeURIComponent(thread_id)}`)
-}
-
-export const getDemoCases = (): Promise<DemoCaseListResponse> => {
-  return api.get('/demo-cases')
-}
-
-export const getDemoCase = (case_id: string): Promise<DemoCaseDetail> => {
-  return api.get(`/demo-cases/${case_id}`)
-}
-
-export const getDemoCaseTrace = (
-  case_id: string
-): Promise<DemoCaseTraceResponse> => {
-  return api.get(`/demo-cases/${case_id}/trace`)
 }
 
 export default api

@@ -1814,6 +1814,14 @@ def test_approved_task_remains_resumable_after_gis_busy(execution_app):
 
 def test_saved_risk_and_result_decisions_project_continuation(risk_execution_app, monkeypatch):
     from agent.nodes import reflector_node as reflector_module
+
+    summary_messages = []
+
+    class SummaryModel:
+        async def ainvoke(self, messages):
+            summary_messages.extend(messages)
+            return SimpleNamespace(content='已确认的任务摘要')
+
     env = risk_execution_app
     thread = 'continue-decisions'
     plan = env.approve(thread)
@@ -1837,7 +1845,8 @@ def test_saved_risk_and_result_decisions_project_continuation(risk_execution_app
     }).status_code == 409
     assert env.client.get(f'/api/state/{thread}').json()['pause'] == pause
     monkeypatch.setattr(backend, 'confirm_task_execution', lambda *args: True)
-    monkeypatch.setattr(reflector_module, '_get_llm', lambda state: FakeModel())
+    monkeypatch.setattr(backend, 'list_task_executions_for_session', lambda session: [])
+    monkeypatch.setattr(reflector_module, '_get_llm', lambda state: SummaryModel())
     assert env.client.post('/api/confirm-result', json={
         'thread_id': thread, 'task_id': plan['task_id'], 'revision': plan['revision'],
         'review_id': pause['review_id'], 'is_completed': True,
@@ -1846,8 +1855,19 @@ def test_saved_risk_and_result_decisions_project_continuation(risk_execution_app
     assert env.client.post('/api/chat/stream', json={
         'thread_id': thread, 'message': 'Replace', 'files': ['file-1'],
     }).status_code == 409
-    _sse_event(env.client.post(f'/api/resume/{thread}'), 'complete')
-    assert env.client.get(f'/api/state/{thread}').json()['continuation'] is None
+    complete = _sse_event(env.client.post(f'/api/resume/{thread}'), 'complete')
+    assert complete['summary'] == '已确认的任务摘要'
+    assert '用户确认结果: 成功' in summary_messages[-1].content
+    snapshot = env.client.get(f'/api/state/{thread}').json()
+    assert snapshot['continuation'] is None
+    assert snapshot['state']['is_completed'] is True
+    assert snapshot['state']['input_query'] is None
+    assert snapshot['state']['task_plan'] is None
+    history = env.client.get(f'/api/sessions/{thread}/history').json()
+    assert history['final_summary'] == '已确认的任务摘要'
+    assert history['history'][0]['task_plan']['task_id'] == plan['task_id']
+    assert history['history'][0]['input_query'] == 'Load'
+    assert history['history'][0]['final_summary'] == '已确认的任务摘要'
     assert len(env.calls) == 3
 
 

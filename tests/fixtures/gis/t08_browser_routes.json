@@ -1,0 +1,114 @@
+{
+  "schema_version": 1,
+  "suite_id": "t08-current-ui-v2",
+  "purpose": "Current UI checks after retiring the static Trace Demo; reported separately from the frozen T07 v1 browser denominator",
+  "historical_suite": {
+    "definition": "tests/fixtures/gis/t07_benchmark.json",
+    "definition_sha256": "f183210a21e06149f0393fcc2972355f9229570faee1d9b53900ef9f6874d01f",
+    "code_commit": "c2d5a59658fff61b55b6a1f3fb78ffe71231f442",
+    "retired_case_id_for_current_ui": "browser-existing-deep-link",
+    "disposition": "The original /trace-demo expectation belongs to the frozen v1 UI and is not a current-version pass. Keep its historical result unchanged; do not substitute this v2 result in that denominator."
+  },
+  "cases": [
+    {
+      "id": "current-deep-links",
+      "input": [
+        "http://127.0.0.1:9000/",
+        "http://127.0.0.1:9000/settings"
+      ],
+      "actions": [
+        "Open each URL directly in the production build and refresh",
+        "Check the corresponding chat or settings page and required static assets"
+      ],
+      "expected": "Both real Vue routes render after direct navigation and refresh; no page errors or failed required assets."
+    },
+    {
+      "id": "retired-static-demo",
+      "input": [
+        "/api/demo-cases",
+        "/api/demo-cases/simple_success",
+        "/api/demo-cases/simple_success/trace"
+      ],
+      "actions": [
+        "Inspect the chat navigation and router",
+        "Request each retired API while the SPA build is present"
+      ],
+      "expected": "No default Trace Demo control or Vue route; retired API requests return JSON 404 rather than SPA HTML. A generic SPA shell response alone is not evidence of a valid Vue route."
+    },
+    {
+      "id": "current-real-workflow",
+      "input": {
+        "source": "tests/fixtures/gis/phase11_points.geojson",
+        "sha256": "bee3424d61d00f88e25ce8a123ec0062abc65a7d8dc9189823f4e975327c8b5d",
+        "message": "加载已选择的 phase11_points.geojson 图层，显示名为 T08 当前真实加载。只做这一次加载，不截图、不保存工程。"
+      },
+      "actions": [
+        "Create a fresh session and upload/select the fixed source; verify its server file ID and checksum",
+        "Collect independent transport evidence for the dedicated backend MCP connection, keyed by request ID and the selected source; forward real requests without fabricating responses",
+        "Inspect exactly one add_layer call bound to this selected file and the requested display name; before approval require unchanged layer count, no attempts and no output files",
+        "Approve the same task/revision; read the actual QGIS layer and business record",
+        "Compare the loaded layer with the fixed source and the explicit expectations; only then confirm the result and resume to the final state"
+      ],
+      "expected": {
+        "algorithm_or_tool_sequence": [
+          "add_layer"
+        ],
+        "display_name": "T08 当前真实加载",
+        "crs": "EPSG:4326",
+        "geometry": "Point",
+        "feature_count": 3,
+        "fields": [
+          "id",
+          "group",
+          "value"
+        ],
+        "coordinates": [
+          [
+            116.38,
+            39.9
+          ],
+          [
+            116.39,
+            39.91
+          ],
+          [
+            116.4,
+            39.92
+          ]
+        ],
+        "attributes": [
+          {
+            "id": 1,
+            "group": "a",
+            "value": 10
+          },
+          {
+            "id": 2,
+            "group": "a",
+            "value": 20
+          },
+          {
+            "id": 3,
+            "group": "b",
+            "value": 30
+          }
+        ],
+        "coordinate_tolerance_degrees": 1e-10,
+        "new_file_artifacts": 0,
+        "new_layers": 1,
+        "original_and_uploaded_bytes": "SHA unchanged before and after",
+        "business_facts": "Same task/revision; one completed attempt; confirmation null before the independent check and true afterward; no extra attempts after final resume",
+        "expectation_sources": [
+          "tests/fixtures/gis/README.md",
+          "docs/testing.md"
+        ],
+        "actual_mcp_add_layer_calls": {
+          "before_approval": 0,
+          "after_execution_and_final_resume_total": 1,
+          "evidence": "Independent MCP transport/server call records tied to this backend connection and source, distinct from business attempts",
+          "missing_evidence": "unknown or not_run; do not infer transport counts from the attempt list"
+        }
+      }
+    }
+  ]
+}

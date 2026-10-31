@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Reflector Node - 反思与归档节点
-负责执行结果总结、价值判断与归档、状态清理
+Reflector Node - 任务总结节点
+负责执行结果总结和状态清理
 """
 
 from typing import Dict, Any
@@ -80,15 +80,12 @@ def _get_last_executor_message(messages) -> str:
 
 async def reflector_node(state: AgentState) -> Dict[str, Any]:
     """
-    反思与归档节点 - 总结任务并归档成功案例
+    总结任务并清理临时状态。
     
     工作流程:
-    1. 分析执行日志，判断任务是否成功
-    2. 生成任务总结
-    3. 评估任务价值（质量评分）
-    4. 如果值得归档，保存到Cookbook
-    5. 生成截图（如果需要）
-    6. 清理临时状态
+    1. 根据用户确认结果和执行日志生成任务总结
+    2. 保留总结、确认结果和历史
+    3. 清理下一轮不应复用的临时状态
     
     Args:
         state: 当前Agent状态
@@ -97,7 +94,7 @@ async def reflector_node(state: AgentState) -> Dict[str, Any]:
         更新后的状态字段
     """
     logger.info("=" * 60)
-    logger.info("Reflector Node: 开始反思与归档")
+    logger.info("Reflector Node: 开始总结任务")
     logger.info("=" * 60)
     
     llm = _get_llm(state)
@@ -112,8 +109,6 @@ async def reflector_node(state: AgentState) -> Dict[str, Any]:
     is_success = is_completed is True
     result_label = '未确认' if is_completed is None else ('成功' if is_success else '失败')
 
-    error_count = 0 if is_success else 1
-    
     # 2. 生成任务总结
     logger.info("生成任务总结...")
     
@@ -184,34 +179,10 @@ async def reflector_node(state: AgentState) -> Dict[str, Any]:
         logger.error(f"生成总结失败: {e}")
         final_summary = f"用户确认结果: {result_label} (总步骤: {total_steps})"
     
-    # 3. 评估任务价值
-    quality_score = 0.0
-    
-    if is_success:
-        # 成功任务基础分 0.6
-        quality_score = 0.6
-        
-        # 根据复杂度加分
-        if total_steps >= 5:
-            quality_score += 0.2
-        elif total_steps >= 3:
-            quality_score += 0.1
-        
-        # 如果有重试但最终成功，加分（说明有纠错能力）
-        if error_count > 0:
-            quality_score += 0.1
-        
-        quality_score = min(quality_score, 1.0)
-    else:
-        # 失败任务
-        quality_score = max(0.0, 0.3 - (error_count * 0.1))
-    
-    logger.info(f"质量评分: {quality_score:.2f}")
-    
-    # 4. Preserve the user's separate result-confirmation decision.
+    # 3. Preserve the user's separate result-confirmation decision.
     logger.info("Execution success=%s; result confirmation=%s", is_success, is_completed)
 
-    # 5. State cleanup
+    # 4. State cleanup
     # 保留最终摘要、截图和历史；清理下一轮不应复用的计划与执行状态。
     logger.info("执行状态清理...")
 

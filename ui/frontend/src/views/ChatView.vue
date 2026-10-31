@@ -48,15 +48,6 @@
         + 新建会话
       </el-button>
 
-      <el-button
-        class="mx-4 mb-4"
-        style="width: calc(100% - 2rem)"
-        :icon="DataAnalysis"
-        @click="handleOpenTraceDemo"
-      >
-        Trace Demo
-      </el-button>
-
       <!-- 会话列表 -->
       <div class="flex-1 overflow-y-auto px-4 min-h-0">
         <div
@@ -607,7 +598,7 @@
 import { ref, computed, onMounted, onUnmounted, toRefs } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElButton, ElInput, ElDialog, ElMessage, ElMessageBox } from 'element-plus'
-import { Delete, Promotion, Setting, DataAnalysis } from '@element-plus/icons-vue'
+import { Delete, Promotion, Setting } from '@element-plus/icons-vue'
 import { useChatStore } from '../stores/chat'
 import { useSSE, getNodeDisplayName, formatTime } from '../composables/useSSE'
 import {
@@ -931,10 +922,6 @@ async function handleCreateSession() {
 
 function handleOpenSettings() {
   void router.push('/settings')
-}
-
-function handleOpenTraceDemo() {
-  void router.push('/trace-demo')
 }
 
 let sessionEpoch = 0
