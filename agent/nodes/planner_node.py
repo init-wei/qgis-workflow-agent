@@ -96,6 +96,12 @@ _DISTANCE_EXPRESSIONS = [
     re.compile(rf"buffer\s+(?:(?!(?:and|then|or|display|show|view|reproject|scale)\b)[A-Za-z][A-Za-z'_-]*\s+){{1,6}}(?:by|with\s+(?:(?:a|the)\s+)?(?:distance|radius)(?:\s+of)?|at\s+a\s+distance\s+of)\s*{_DISTANCE_VALUE}", re.I),
     re.compile(rf'(?<![A-Za-z0-9_./\\-]){_DISTANCE_VALUE}\s*(?:的\s*)?(?:buffer|缓冲)', re.I),
     re.compile(rf'{_DISTANCE_CUE}\s*(?:为|是|:|：|=)?\s*(?P<number>{_NUMBER})\s*[,，;；]?\s*(?:unit|单位)\s*(?:为|是|:|：|=)?\s*(?P<unit>{_UNIT}){_LINEAR_UNIT_END}', re.I),
+    # Explicit Chinese option lists may precede the operation, e.g.
+    # “以60米、每象限8段、不融合制作缓冲区”. Keep the grammar finite and
+    # require a clause/command boundary so a range's final number cannot win.
+    re.compile(rf'(?:^|[，;；。!?！？\n]|以|按|半径|距离|然后|接着|随后)\s*{_DISTANCE_VALUE}'
+               r'(?:\s*、\s*(?:每(?:个)?象限\s*\d+\s*段|(?:不|禁止|不要|无需)?融合))+'
+               r'\s*(?:的\s*)?(?:制作|生成|创建)?\s*(?:(?:不|禁止|不要|无需)融合的?)?\s*缓冲(?:区)?', re.I),
 ]
 _DISTANCE_REVISION = re.compile(
     rf'(?:改成|改为|改到|换成|换为|调整为|调整到|设为|change(?:\s+it)?\s+to|set(?:\s+it)?\s+to)\s*{_DISTANCE_VALUE}', re.I,
@@ -185,26 +191,36 @@ def _reviewed_buffer_distances(plan, request: str, advice: str | None, previous_
 # Unknown phrasing asks for clarification rather than guessing a business value.
 _FIELD = r'''(?:`[^`\n]+`|"[^"\n]+"|'[^'\n]+'|“[^”\n]+”|‘[^’\n]+’|[A-Za-z_][A-Za-z0-9_]*|[\u4e00-\u9fff]+?)'''
 _FIELDS = rf'{_FIELD}(?:\s*(?:、|,|\band\b)\s*{_FIELD})*'
-_FIELD_END = r'(?=\s*(?:字段|分组|分类|融合|统计|的|[,，;；。.!?！？]|$|\b(?:fields?|statistics|stats|dissolve|then|and|count)\b))'
+_FIELD_END = r'(?=\s*(?:字段|分组|分类|融合|统计|的|[:,：，;；。.!?！？]|$|\b(?:fields?|statistics|stats|dissolve|then|and|count)\b))'
 _GROUP_FIELDS = re.compile(
-    rf'(?:按\s*(?:字段\s*)?|\b(?:group(?:ed)?\s+by|by|using)\s+(?:fields?\s+)?)'
+    rf'(?:按\s*(?:字段\s*)?|以(?=\s*{_FIELDS}\s*分组\s*融合)\s*|'
+    rf'\b(?:group(?:ed)?\s+by|by|using)\s+(?:fields?\s+)?)'
     rf'(?P<fields>{_FIELDS}){_FIELD_END}', re.I,
 )
 _ALL_DISSOLVE = re.compile(
-    r'(?:全部|所有)(?:要素)?\s*融合|融合\s*(?:全部|所有)(?:要素)?|'
+    r'(?:全部|所有|整体)(?:要素)?\s*融合|融合\s*(?:全部|所有)(?:要素)?|'
     r'\bdissolve\s+all\b|\bdissolve\b[^，;；。.!?！？]*\ball\s+features\b', re.I,
 )
+_ALL_DISSOLVE_OPTIONS = re.compile(
+    r'(?<!\w)(?:不按字段分组|不拆分不相连部分|'
+    r'不指定分组字段(?:且保持不相连部分在同一要素中)?)(?!\w)', re.I,
+)
 _TARGET_CRS = re.compile(
-    r'(?:重投影|reproject)[^，,;；。.!?！？\n]*?(?:到|为|\bto\b|\binto\b)\s*'
+    r'(?:转成|(?:重投影|投影|转换|reproject)[^，,;；。.!?！？\n]*?(?:到|至|为|\bto\b|\binto\b))\s*'
     r'(?:(?:目标\s*)?(?:CRS|坐标系)\s*[:：=]?\s*)?(EPSG\s*:\s*\d+)(?![\w:]|\.\d|\s*[/|±~])'
     r'|(?:目标\s*(?:CRS|坐标系)?|target\s+(?:CRS)?)\s*(?:改为|改成|改到|换成|换为|调整到|设为|为|是|:|：|=|to)?\s*'
-    r'(EPSG\s*:\s*\d+)(?![\w:]|\.\d|\s*[/|±~])', re.I,
+    r'(EPSG\s*:\s*\d+)(?![\w:]|\.\d|\s*[/|±~])'
+    r'|(?:^|[，,;；。!?！？\n]|做|进行)\s*(EPSG\s*:\s*\d+)\s*重投影(?!\s*(?:到|至|为|\bto\b|\binto\b))', re.I,
 )
+_INVERSE_TARGET_CRS = re.compile(r'EPSG\s*:\s*\d+\s*重投影(?!\s*(?:到|至|为|\bto\b|\binto\b))', re.I)
 _STAT_VALUE = [
     re.compile(rf'对\s*(?P<fields>{_FIELDS})\s*字段\s*(?:计算|统计)', re.I),
     re.compile(rf'(?:统计|\b(?:statistics|stats)\s+(?:for|of|on)|\b(?:sum|mean|average|minimum|maximum)\s+of)'
-               rf'\s*(?:同一个\s*|同一\s*)?(?:字段\s*|(?:the\s+)?field\s+)?(?P<fields>{_FIELDS}){_FIELD_END}', re.I),
+               rf'\s*(?:的\s*)?(?:同一个\s*|同一\s*)?(?:字段\s*|(?:the\s+)?field\s+)?(?P<fields>{_FIELDS}){_FIELD_END}', re.I),
     re.compile(rf'(?P<fields>{_FIELDS})\s*(?:字段)?\s*(?:的)?(?:基础)?(?:统计|\bstatistics\b|\bstats\b)', re.I),
+    re.compile(rf'(?P<fields>{_FIELDS})\s*(?:数值\s*)?字段\s*'
+               r'(?:(?:做|进行)\s*统计|求\s*(?:sum|min|max)\b)', re.I),
+    re.compile(r'统计\s*(?P<fields>面积)(?=总和\s*(?:[、,，;；。.!?！？]|$))', re.I),
 ]
 _FIELD_REVISION = re.compile(
     rf'(?:将|把)?(?P<role>融合字段|分组字段|统计字段|数值字段|值字段|'
@@ -216,7 +232,7 @@ _FIELD_REVISION = re.compile(
 _PARAMETER_CLAUSE = r'[，;；。!?！？\n]|(?<!\d)\.|\.(?!\d)|,\s*(?:and\s+)?(?=clip\b|dissolve\b|calculate\b|statistics\b|reproject\b)|\bthen\b|然后|再(?=对)|接着|随后|再(?=将|把|全部|融合|缓冲|统计|重投影)|再(?=按)|并(?=统计|计数|计算)'
 _NEGATIVE_OPERATION = re.compile(
     r'(?:不|不要|不能|别|勿|禁止|无需|\b(?:no|not|never|without|don[’\']t)\b)[^,，;；。.!?！？]{0,40}'
-    r'(?:重投影|融合|统计|缓冲|字段|分组|目标|距离|半径|按|'
+    r'(?:重投影|投影|(?:转换|转成)(?=[^,，;；。.!?！？]{0,40}EPSG\s*:)|融合|统计|缓冲|字段|分组|目标|距离|半径|按|'
     r'\b(?:reproject|dissolve|statistics|stats|buffer|fields?|grouping|target|distance|radius|by)\b)', re.I,
 )
 
@@ -271,7 +287,7 @@ def _operation_text(text: str) -> str:
                 spans.append((start + quoted.start(), start + quoted.end()))
             prefix = text[match.start():start]
             suffix = text[end:match.end()] + text[match.end():match.end() + 8]
-            if re.search(r'字段|\bfields?\b', prefix, re.I) or re.match(r'\s*(?:字段|fields?\b)', suffix, re.I):
+            if re.search(r'字段|\bfields?\b', prefix, re.I) or re.match(r'\s*(?:(?:数值\s*)?字段|fields?\b)', suffix, re.I):
                 spans.append((start, end))
     for start, end in sorted(set(spans), reverse=True):
         # Equal-length blanks keep overlapping recognized operand spans stable.
@@ -306,6 +322,29 @@ def _previous_parameters(context, task_id: str, revision: int) -> dict:
     return {}
 
 
+def _dissolve_no_split_choice(text: str) -> bool | None:
+    """Consume only explicit no-split options; ask about unsupported splitting."""
+    # Chinese conjunctions are word characters in Python; only ASCII identifier
+    # characters can extend this literal parameter name.
+    key = r'(?<![A-Za-z0-9_])SEPARATE_DISJOINT(?![A-Za-z0-9_])'
+    tokens = list(re.finditer(key, text, re.I))
+    false_options = list(re.finditer(
+        key + r'\s*[:：=]\s*false(?=\s*(?:[,，;；。)）]|$))', text, re.I,
+    ))
+    if len(tokens) != len(false_options):
+        raise _RequestRejected('请澄清融合的拆分选项；当前只接受明确不拆分，不能代选 true 或冲突值。')
+    no_split = list(re.finditer(r'不拆分不相连部分|保持不相连部分在同一要素中', text))
+    for option in [*false_options, *no_split]:
+        # Mask earlier positive qualifiers, never an outer negation of them.
+        prefix = re.sub(r'不按字段分组|不指定分组字段|不拆分不相连部分|保持不相连部分在同一要素中',
+                        ' ', text[:option.start()])
+        if re.search(r'不要|不能|禁止|无需|别|勿|不(?!相连)|\b(?:no|not|never|without|don[’\']t)\b', prefix, re.I):
+            raise _RequestRejected('不拆分选项包含否定或反向要求，请明确融合的拆分选择。')
+    if re.search(r'拆分不相连部分', re.sub(r'不拆分不相连部分', ' ', text)):
+        raise _RequestRejected('请澄清融合的拆分选项；明确拆分不能静默改成不拆分。')
+    return False if false_options or no_split else None
+
+
 def _parameter_requirements(request: str, advice: str | None, context, task_id: str, revision: int) -> dict:
     """Keep explicit choices in request order, never infer unknown edits as no edit."""
     carry = _previous_parameters(context, task_id, revision)
@@ -314,8 +353,9 @@ def _parameter_requirements(request: str, advice: str | None, context, task_id: 
         if index == 1:
             choices.update(carry)
         text = _parameter_text(raw)
-        instruction_text = ' '.join(_operation_text(part) for part, _ in _parameter_clauses(text)
-                                    if not _REFERENCE_CLAUSE.search(part))
+        instructions = [_operation_text(part) for part, _ in _parameter_clauses(text)
+                        if not _REFERENCE_CLAUSE.search(part)]
+        instruction_text = ' '.join(instructions)
         # A step summary can still carry an explicit call-count restriction.
         processing_text = ' '.join(_operation_text(part) for part, _ in _parameter_clauses(text))
         processing_only = list(_PROCESSING_ONLY.finditer(processing_text))
@@ -332,15 +372,19 @@ def _parameter_requirements(request: str, advice: str | None, context, task_id: 
               or (index == 1 and choices.get('processing_only_count') is not None and re.search(
                   r'(?:取消|不再|改为|改成|允许|增加).{0,20}(?:Processing|add_layer|capture_map_canvas)', processing_text, re.I))):
             raise _RequestRejected('请明确 Processing-only 调用要求及数量；无法可靠解释的修改不能沿用旧约束。')
+        inverse_targets = list(_INVERSE_TARGET_CRS.finditer(instruction_text))
         target_matches = list(_TARGET_CRS.finditer(instruction_text))
-        operations = [re.sub(r'\s+', '', match.group(1)).upper()
-                      for match in target_matches if match.group(1)]
+        if (len(inverse_targets) > 1
+                or len(inverse_targets) != sum(bool(match.group(3)) for match in target_matches)):
+            raise _RequestRejected('逆序重投影目标无法完整对应，请按步骤重述为重投影到目标 CRS。')
+        operations = [re.sub(r'\s+', '', match.group(1) or match.group(3)).upper()
+                      for match in target_matches if match.group(1) or match.group(3)]
         declarations = [re.sub(r'\s+', '', match.group(2)).upper()
                         for match in target_matches if match.group(2)]
         if operations and all(target in operations for target in declarations):
             targets = operations
         else:
-            targets = [re.sub(r'\s+', '', match.group(1) or match.group(2)).upper()
+            targets = [re.sub(r'\s+', '', match.group(1) or match.group(2) or match.group(3)).upper()
                        for match in target_matches]
         if targets:
             if index == 1 and len(choices.get('targets', [])) > 1 and len(targets) != len(choices['targets']):
@@ -349,6 +393,10 @@ def _parameter_requirements(request: str, advice: str | None, context, task_id: 
                                   else targets)
         elif index == 1 and re.search(r'目标|坐标系|\b(?:target|CRS|EPSG)\b', instruction_text, re.I):
             raise _RequestRejected('请明确修改后的目标 CRS，例如目标 CRS 改为 EPSG:32651。')
+        if choices.get('targets') and any(re.search(
+            r'(?:不|不要|不能|别|勿|禁止|无需)[^,，;；。.!?！？]{0,40}(?:转换|转成|重投影|投影)', part,
+        ) for part in instructions):
+            raise _RequestRejected('转换的否定要求与目标 CRS 冲突，请明确是否执行重投影。')
         revisions = list(_FIELD_REVISION.finditer(text))
         if index == 1 and not revisions and re.search(r'(?:字段|\bfields?\b).*(?:改|换|change|set|switch)', text, re.I):
             raise _RequestRejected('请明确修改后的融合、分组或统计字段原名。')
@@ -361,15 +409,30 @@ def _parameter_requirements(request: str, advice: str | None, context, task_id: 
         ):
             raise _RequestRejected('无法可靠对应必要参数的修改，请明确目标 CRS 或按步骤重述融合、统计字段。')
         active_buffer = bool(index == 1 and choices.get('buffer_distances'))
-        statistics, dissolves, buffer_modes, buffer_segments = [], [], [], []
+        active_dissolve = bool(index == 1 and len(choices.get('dissolves', [])) == 1)
+        active_all_dissolve = bool(index == 1 and choices.get('dissolves') == [[]])
+        statistics, dissolves, buffer_modes, buffer_segments, dissolve_no_split = [], [], [], [], []
         for raw_clause, separate_step in _parameter_clauses(text):
             if _REFERENCE_CLAUSE.search(raw_clause):
                 continue
             if separate_step:
                 active_buffer = False
+                active_dissolve = False
+                active_all_dissolve = False
             # Check the original clause before consuming positive edit syntax;
             # "do not change the field" must never become a positive assignment.
             clause = _FIELD_REVISION.sub(' ', raw_clause)
+            operation_negation = _operation_text(raw_clause)
+            if _ALL_DISSOLVE.search(operation_negation):
+                active_all_dissolve = True
+            elif re.search(r'重投影|投影|转换|缓冲|统计|\b(?:reproject|buffer|statistics|stats)\b', operation_negation, re.I):
+                active_dissolve = False
+                active_all_dissolve = False
+            if active_all_dissolve:
+                # Only these literal qualifiers of an explicit all-dissolve
+                # request are options; unrelated negated operations stay visible.
+                clause = _ALL_DISSOLVE_OPTIONS.sub(' ', clause)
+                operation_negation = _operation_text(_ALL_DISSOLVE_OPTIONS.sub(' ', raw_clause))
             groups = list(_GROUP_FIELDS.finditer(clause))
             operation_clause = _operation_text(clause)
             distances = {match.span('number') for expression in _DISTANCE_EXPRESSIONS
@@ -395,14 +458,21 @@ def _parameter_requirements(request: str, advice: str | None, context, task_id: 
                     raise _RequestRejected('缓冲每象限段数 SEGMENTS 有冲突，请明确一个整数。')
             elif segment_cue:
                 raise _RequestRejected('请用明确整数给出缓冲每象限段数，例如每象限12段或 SEGMENTS=12。')
-            negative = bool(_NEGATIVE_OPERATION.search(_operation_text(raw_clause)))
+            negative = bool(_NEGATIVE_OPERATION.search(operation_negation))
             buffer_option = active_buffer and not groups and bool(re.search(r'融合|\bdissolv', operation_clause, re.I))
-            if negative and not (buffer_option and not re.search(
-                r'(?:不|不要|别|勿|禁止|无需|\b(?:no|not|never|without|don[’\']t)\b)[^,，;；。.!?！？]{0,40}'
-                r'(?:重投影|统计|缓冲|\b(?:reproject|statistics|stats|buffer)\b)', operation_clause, re.I,
-            )):
+            # A finite no-dissolve option does not negate a later buffer verb.
+            # Still check any remaining operation negation (e.g. 不融合且不要缓冲).
+            operation_negation = re.sub(
+                r'(?:(?:不能|不要|禁止|无需|不|别|勿)\s*融合|'
+                r'\b(?:no|not|never|without|don[’\']t)\s+dissolv(?:e|ing)\b)'
+                r'(?!\s*(?:和|与|及|且|并|以及|and\b)[^,，;；。.!?！？]{0,40}'
+                r'(?:缓冲|重投影|投影|转换|转成|统计|融合|裁剪|buffer\b|reproject\b|statistics\b|dissolve\b|clip\b))',
+                ' ', operation_clause, flags=re.I,
+            ) if buffer_option else operation_clause
+            if negative and (not buffer_option or _NEGATIVE_OPERATION.search(operation_negation)):
                 raise _RequestRejected('必要参数包含否定要求，请明确要执行的目标 CRS、融合或统计步骤。')
             ambiguous = (re.search(r'EPSG\s*:\s*\d+\s*(?:或|\bor\b)', operation_clause, re.I)
+                         or re.search(r'EPSG\s*:\s*\d+\s*重投影\s*(?:或|\bor\b|[/|±~～–—-])', operation_clause, re.I)
                          or (re.search(r'融合|统计|\b(?:dissolve|statistics|stats)\b', operation_clause, re.I)
                              and re.search(r'或(?:者)?|\bor\b', operation_clause, re.I)))
             if ambiguous:
@@ -418,6 +488,18 @@ def _parameter_requirements(request: str, advice: str | None, context, task_id: 
             elif re.search(r'融合|\bdissolve\b', operation_clause, re.I):
                 dissolves.append([] if _ALL_DISSOLVE.search(operation_clause)
                                  else _field_names(groups[0].group('fields')) if len(groups) == 1 else None)
+                dissolve_no_split.append(None)
+                active_dissolve = True
+            split_choice = _dissolve_no_split_choice(_operation_text(raw_clause))
+            if active_dissolve and re.search(r'(?:为|作为|输出)(?:一|1)(?:个|条)要素', _operation_text(raw_clause)):
+                split_choice = False
+            if split_choice is False:
+                if not active_dissolve:
+                    raise _RequestRejected('请按步骤明确不拆分选项属于哪个融合调用。')
+                if dissolve_no_split:
+                    dissolve_no_split[-1] = False
+                else:
+                    choices['dissolve_no_split'] = [False]
             count_only = not groups and bool(_FEATURE_COUNT.search(operation_clause))
             if count_only:
                 choices['feature_count'] = True
@@ -439,7 +521,7 @@ def _parameter_requirements(request: str, advice: str | None, context, task_id: 
                     prefix = values_text[match.start():match.start('fields')]
                     suffix = values_text[match.end('fields'):match.end('fields') + 8]
                     marked = bool(re.search(r'字段|\bfields?\b', prefix, re.I)
-                                  or re.match(r'\s*(?:字段|fields?\b)', suffix, re.I)
+                                  or re.match(r'\s*(?:(?:数值\s*)?字段|fields?\b)', suffix, re.I)
                                   or _QUOTED_FIELD.search(literal))
                     if (literal.lower() in {'calculate', 'basic', 'category'}
                             or (re.search(r'[\u4e00-\u9fff]', literal) and not marked and literal != '面积')):
@@ -454,6 +536,19 @@ def _parameter_requirements(request: str, advice: str | None, context, task_id: 
         if dissolves:
             if index == 1 and len(choices.get('dissolves', [])) > 1 and len(dissolves) != len(choices['dissolves']):
                 raise _RequestRejected('请按顺序重述每个融合步骤，不能静默丢弃未提及的步骤。')
+            prior_no_split = choices.get('dissolve_no_split') if index == 1 else None
+            if prior_no_split is not None and len(prior_no_split) != len(dissolves):
+                raise _RequestRejected('融合调用数量已变化，请按顺序重述每个调用的不拆分约束。')
+            if prior_no_split is not None and choices.get('dissolves') != dissolves:
+                if not all(flag is False for flag in dissolve_no_split):
+                    raise _RequestRejected('融合调用顺序或字段已变化，请按新顺序重述每个调用的不拆分约束。')
+                # Every new call has its own explicit fact; nothing is inherited
+                # from the previous ordering in this complete restatement.
+                prior_no_split = None
+            no_split = [False if flag is False else prior_no_split[i] if prior_no_split else None
+                        for i, flag in enumerate(dissolve_no_split)]
+            if any(flag is False for flag in no_split):
+                choices['dissolve_no_split'] = no_split
             choices['dissolves'] = dissolves
         if statistics:
             if index == 1 and len(choices.get('statistics', [])) > 1 and len(statistics) != len(choices['statistics']):
@@ -529,6 +624,12 @@ def _reviewed_parameters(plan, requirements: dict) -> None:
                              and values == ([params['VALUES_FIELD_NAME']] if params.get('VALUES_FIELD_NAME') else []))
             if not valid:
                 raise ValueError('计划目标 CRS、融合 FIELD 或统计字段与用户明确给出的有序参数不一致，请补充或修正。')
+    no_split = choices.get('dissolve_no_split')
+    if no_split is not None and (len(no_split) != len(families['dissolves']) or any(
+        desired is False and call.arguments.get('parameters', {}).get('SEPARATE_DISJOINT') is not False
+        for call, desired in zip(families['dissolves'], no_split)
+    )):
+        raise ValueError('计划融合 SEPARATE_DISJOINT 与明确的不拆分约束不一致，请按调用顺序修正。')
     if choices.get('feature_count'):
         steps = {step.step_id: step for step in plan.steps}
         statistic_sources = {tuple(steps[call.step_id].input_refs) for call in families['statistics']}
