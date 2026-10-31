@@ -6,6 +6,7 @@
 
 - [Agent 开发入口](AGENTS.md)与[自主编排交接](docs/agents/orchestration.md)
 - [环境安装与运行](docs/onboarding/README.md)
+- [浏览器演示与复验](docs/onboarding/v1-demo.md)、[AC01–AC16 证据入口](docs/onboarding/acceptance.md)
 - [目标架构](docs/architecture/README.md)、[规格](docs/specs/0001-qgis-workflow-agent-v1.md)与[阶段计划](docs/implementation-plan.md)
 - [任务索引](docs/tickets/README.md)、[实测基线与已知限制](docs/onboarding/baseline-2026-10-30.md)
 - [完整文档](docs/README.md)

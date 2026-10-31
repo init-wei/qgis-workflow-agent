@@ -1,10 +1,13 @@
-> 原型历史/基线说明。V1 当前范围和开发入口见[文档索引](README.md)，不可据此宣称重构已完成。
+> **历史原型演示，以下命令和路线不是当前操作指南。** 当前启动和浏览器审核步骤见[环境入口](onboarding/README.md)及[V1 演示](onboarding/v1-demo.md)，实际范围与证据见[验收入口](onboarding/acceptance.md)。
 >
-> T06 已移除下文的自动 Skill 注册、`run_skill_reuse_smoke.py` 和对应预检选项。保留本页作为历史，不按旧快速执行路径验证 V1；当前模板复用须经[正式规划与审核](onboarding/skills.md)。
+> 下文的自动 Skill 注册、`run_skill_reuse_smoke.py` 和对应预检选项已移除；Trace Demo 的默认按钮、Vue 路由和相关 `/api/demo-cases` 接口也已退役，旧静态页面不能再作为备用演示。通用 SPA shell 响应不证明旧 Vue 路由可用。模板复用须经[正式规划与审核](onboarding/skills.md)，实际当前版本验收见 [T08](https://github.com/init-wei/qgis-workflow-agent/issues/28)。
 
-# Demo Runbook
+<details>
+<summary>原型时期的旧演示记录（归档，勿按当前版本操作）</summary>
 
-This runbook prepares the current demo story:
+# Historical Demo Runbook
+
+The prototype runbook described the following demo story:
 
 ```text
 QGIS Agent controlled execution
@@ -227,3 +230,5 @@ uv run pytest -q
 uv run ruff check .
 uv run mypy geotool_core data_pipeline evals
 ```
+
+</details>

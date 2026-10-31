@@ -4,8 +4,9 @@
 
 | 命令 | 证明的范围 |
 | --- | --- |
-| `./scripts/dev.sh check` | 编译、现有 Ruff、当前文档链接、离线 pytest、Vue/TS 类型检查和前端构建 |
+| `./scripts/dev.sh check` | 编译、现有 Ruff、当前文档链接、离线 pytest、Vue/TS 类型检查和前端构建；不含浏览器回归 |
 | `./scripts/dev.sh typecheck` | Vue/TS 静态类型；CI 的必过门禁 |
+| `npm --prefix ui/frontend run test:browser` | 用已构建的前端、真实 Chromium 和本地替身 API 检查完成会话的结果恢复；不调用真实后台、模型、GIS 或数据库 |
 | `./scripts/dev.sh test-db` | 项目专用 PostgreSQL 的数据库边界测试，包含执行声明和恢复事实比较 |
 | `uv run --locked pytest -o addopts= -q tests/test_execution_persistence.py` | 生产 SQL 在 PostgreSQL 临时表中验证 claim、孤儿执行查询与暂停事实匹配；需先初始化 schema，不修改已有任务或 checkpoint |
 | `uv run --locked pytest -o addopts= -q tests/test_vector_inspection.py` | 系统 Python/GDAL 只读输入检查；需发行版 GDAL，属于 external，不是任务产物正确性验收 |
@@ -16,6 +17,10 @@
 | `./scripts/dev.sh health --llm-live` | 配置/数据库/桌面桥接/MCP/真实模型连通；不能证明 GIS 任务正确 |
 
 T00 的类型错误与 advisory 是历史基线，见[当次记录](onboarding/baseline-2026-10-30.md)，不能作为当前门禁豁免。不要删除断言、扩大忽略或将失败悄悄标成通过。原型测试通过也不代表新的审核语义满足 AC。
+
+浏览器回归前需按[环境入口](onboarding/README.md)安装锁定前端依赖并执行 `./scripts/dev.sh build`，还需 Playwright 对应的 Chromium 和系统库。在支持该安装方式的 Linux 上首次准备可执行 `npm --prefix ui/frontend exec -- playwright install --with-deps chromium`；安装系统依赖可能需要管理员权限。随后单独运行上表的 `test:browser`。CI 的 Frontend build job 配置为构建后安装 Chromium 与系统依赖，再运行该回归；`./scripts/dev.sh check` 本身不会运行它。
+
+[完成会话浏览器回归](../ui/frontend/tests/finished-session.test.cjs)使用 Node 内置测试工具和锁定的 Playwright，读取本地构建产物、拦截 API 和外网请求。它检查已批准修订及结果卡恢复、缺失或错误记录不伪造、确认状态与阻止执行的审核记录，以及切换会话时过期响应隔离。这是替身数据下的页面行为测试；真实浏览器、业务库与 QGIS 的只读复验另按 [#30](https://github.com/init-wei/qgis-workflow-agent/issues/30) 记录。
 
 运行离线全库并覆盖 `addopts` 时，必须显式保留 `-m 'not external and not database'`；空 `DATABASE_URL` 不能代替测试筛选。外部检查逐文件选择并说明所需服务。持久化 SQL 的测试 fixture 另行拒绝 libpq 默认连接与非项目端口，避免缺配置时落到其他本地 PostgreSQL。
 
@@ -34,6 +39,12 @@ GeoPackage 只接受可独立读取的文件。原始输入、产物取证及消
 在待审计划中核对具体调用、文件引用与参数。拒绝并填写新名称后，确认同一 task_id 的新修订使用新名称；批准前 QGIS 图层数保持不变。批准后读回 QGIS 的来源、CRS、字段、属性和坐标，与[样例依据](../tests/fixtures/gis/README.md)核对，确认只新增一个图层。对原始文件及受控上传副本复核 SHA-256。
 
 使用页面中的 task_id 查询 `GET /api/executions/{task_id}`，核对批准计划、实际 attempt 和图层 ID；确认前 confirmed 为 null，提交结果确认后为对应布尔值。加载既有输入不生成新空间文件，其图层引用由步骤结果中的实际 ID 和 source 表达。审核恢复与 Processing 按各自正式切片另行验收。
+
+[当前 T08 浏览器专项](../tests/fixtures/gis/t08_browser_routes.json)单独定义生产构建根页面及 `/settings`、退役静态演示 API、固定三点真实加载三项检查。旧 `/trace-demo` 的 Vue 路由和默认入口已移除；`/api/demo-cases`、`/api/demo-cases/simple_success`、`/api/demo-cases/simple_success/trace` 应返回 JSON 404。通用 SPA shell 响应本身不证明存在有效 Vue 路由，也不要求 `/trace-demo` 的 HTTP 响应是 404。实际复验结果以 [T08](https://github.com/init-wei/qgis-workflow-agent/issues/28) 为准。
+
+该固定加载的 `add_layer` 实际 MCP 调用计数须来自与专用后台连接、请求和来源关联的独立传输或服务端证据：批准前 0、执行及最终恢复后累计 1。业务 attempt 是另一个事实，不能据此推算传输计数；缺失独立证据时记 unknown 或 not_run。T07 在冻结版本的七项浏览器专项及其 7/7 历史结果原样保留，不能用当前 v2 结果填入旧分母；新批次中未执行的退役旧例记 not_run，已执行失败保留 failed，详细口径见[评测入口](onboarding/benchmark.md)。
+
+任务结束后刷新、重选会话及重启后台，核对从会话历史的执行列表与任务业务查询恢复的结果卡：task/revision、已批准调用、实际尝试、图层名称和来源、空间验证及用户确认应与实际业务记录一致。历史模型摘要可能使用旧修订，只作参考；无记录或查询失败时不凭历史文字编造结果。风险调用被阻止时，相关项目是尝试或审核记录，须显示“未发送”，不能计成实际 MCP 写入。只读复验不得新建任务或重放 GIS 调用；独立 MCP 计数继续单列。原始失败及修复复验由 [#30](https://github.com/init-wei/qgis-workflow-agent/issues/30) 保留。
 
 ## 重投影与缓冲复验
 

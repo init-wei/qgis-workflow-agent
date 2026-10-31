@@ -22,4 +22,4 @@
 
 使用新的受控数据、距离或字段发起请求，在计划审核中查看参考候选及实际调用，批准前检查没有输出或图层变化。执行后核对新输入与产物、实际类型和参数、独立数值预期，再单独确认结果。测试命令与证据见[测试规范](../testing.md)和[正式 T06](https://github.com/init-wei/qgis-workflow-agent/issues/26)。
 
-旧 `/trace-demo` 只保留历史静态 trace 与草稿诊断，不能作为真实执行或模板审阅证据。直接构造已批准计划的 `run_skill_reuse_smoke.py` 已退出；V1 从浏览器主页面进入同一业务流程。
+旧 Trace Demo 的默认入口、Vue 路由和 `/api/demo-cases` 系列接口已退役；历史静态案例及离线工具仅作历史参考，不能作为真实执行或模板审阅证据。直接构造已批准计划的 `run_skill_reuse_smoke.py` 已退出；V1 从浏览器主页面进入同一业务流程，参见[演示](v1-demo.md)和[验收证据](acceptance.md)。

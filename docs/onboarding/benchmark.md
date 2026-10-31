@@ -6,6 +6,10 @@
 
 [输入与请求定义](../../tests/fixtures/gis/t07_benchmark.json)包含六类任务的十二个留出场景，每场景两种中文表述，共二十四个请求；另列六个开发样例引用、十九个异常子例与七个浏览器专项。专项定义并不表示已执行，未取证的条目保持 `not_run`。
 
+T07 冻结版本 `c2d5a59658fff61b55b6a1f3fb78ffe71231f442` 的浏览器七项及其 [7/7 实际记录](https://github.com/init-wei/qgis-workflow-agent/issues/27#issuecomment-6541786672)保持原有定义和分母，其中旧 `/trace-demo` 深链接属于当时的 UI。该 Vue 路由及默认入口现已退役；当前版本另按 [T08 v2 定义](../../tests/fixtures/gis/t08_browser_routes.json)检查，不以 v2 的结果替代 v1 旧例或改写原七项、96 次任务、定义与 oracle。若在新批次遇到尚未执行的退役旧例，记 `not_run`；已经执行的失败保留 `failed`，既有历史通过结果也不改写。当前复验结果以 [T08](https://github.com/init-wei/qgis-workflow-agent/issues/28)为准。
+
+后续 [#30](https://github.com/init-wei/qgis-workflow-agent/issues/30) 将反思节点从模型自由总结改为业务事实投影，并修复完成会话结果卡恢复；这不改变 T07 原始 96 次的记录、分母、用量或 Cloud 导入。用后续版本运行的实验必须重新冻结并标注实际版本和配置，不能把新运行改写为原批次或把旧模型调用当作新版本的调用事实。
+
 [冻结 oracle](../../tests/fixtures/gis/t07_benchmark_oracle.json)使用 Snyder 投影级数、正三十二边形公式、鞋带面积与固定属性手算。GDAL 写入输入并读取实际产物，不重跑 Processing 制作预期；实际多边形覆盖比较仍使用 OGR/GEOS，与 QGIS 可能共享几何库，这项依赖不能称为完全独立实现。预期仅适用于这些固定输入和参数。
 
 在项目根目录检查定义；用系统 GDAL 物化到新的忽略目录，不覆盖已存在目录：

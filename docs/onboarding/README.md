@@ -1,6 +1,6 @@
 # 开发环境
 
-环境建立时的实测和限制见[基线报告](baseline-2026-10-30.md)。完成环境后从[任务交接](../agents/orchestration.md)查询正式任务前沿；业务验收证据由 GitHub issue 拥有。
+原始环境实测见[基线报告](baseline-2026-10-30.md)，V1 独立克隆与新数据卷的实测见[干净重建记录](clean-rebuild-2026-10-31.md)。完成环境后从[任务交接](../agents/orchestration.md)查询正式任务前沿；业务验收证据由 GitHub issue 拥有。
 
 ## 干净环境
 
@@ -32,6 +32,8 @@
 `./scripts/dev.sh health --llm-live` 会实际使用 `.env` 的临时 key 调用模型。LangSmith 默认关闭；配置与真实平台复验见[可选观测](langsmith.md)，缺 key 不阻塞核心 GIS 开发。`./scripts/dev.sh db-stop` 停止本项目数据库，保留卷；不要为日常清理执行 `down -v`。
 
 生产构建使用 `./scripts/dev.sh build`，产物在 ui/frontend/dist，后端从同一目录提供页面和静态资源。构建后访问 `http://127.0.0.1:9000/` 或 `/settings`；此入口无需 Vite 进程。开发热更新继续使用 5173。
+
+使用固定合成数据和真实浏览器审核的步骤见[V1 演示](v1-demo.md)，验收证据及未覆盖范围见[AC 证据入口](acceptance.md)。历史静态 Trace Demo 不再是默认页面或真实工作流入口；当前浏览器检查与历史专项分母的区别见[测试规范](../testing.md)。
 
 方案模板的候选提示、类型与审阅边界见[模板说明](skills.md)。模板与每次任务的执行批准分别记录。固定留出集、对照运行和证据汇总见[评测复验](benchmark.md)。
 
