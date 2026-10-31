@@ -12,7 +12,7 @@ import subprocess
 import sys
 from pathlib import PurePosixPath
 
-EXTENSIONS = {'.py', '.vue', '.ts', '.js', '.css'}
+EXTENSIONS = {'.py', '.vue', '.ts', '.js', '.css', '.cjs'}
 BUILD_CONFIGS = {
     'ui/frontend/postcss.config.js',
     'ui/frontend/tailwind.config.js',
@@ -47,7 +47,7 @@ def classify(path):
         return 'qgis_bridge'
     if path.startswith('ui/frontend/src/'):
         return 'frontend'
-    if path.startswith('tests/'):
+    if path.startswith(('tests/', 'ui/frontend/tests/')):
         return 'tests'
     if path.startswith('scripts/'):
         return 'scripts'

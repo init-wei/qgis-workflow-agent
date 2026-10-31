@@ -259,6 +259,9 @@
 
         <!-- 输入区域 -->
         <div class="chat-input p-5 border-t border-dark-border flex-shrink-0 bg-dark-bgDark/80">
+          <div v-if="executionLoadError" role="status" class="mb-3 p-3 border border-yellow-500 rounded-lg text-sm">
+            {{ executionLoadError }}
+          </div>
           <div v-if="executionSkillCandidates.length" class="mb-3 p-3 border border-dark-border rounded-lg text-sm" aria-label="任务业务记录中的参考示例">
             <p>业务计划记录中的参考条目；每次生成的计划仍需批准。</p>
             <p class="break-all">记录任务：{{ executionCandidateRecord?.taskId ?? '未记录' }} · 修订：{{ executionCandidateRecord?.revisionLabel ?? '未记录' }} · 状态：{{ executionCandidateRecord?.status ?? '未记录' }}</p>
@@ -273,15 +276,35 @@
               <span v-if="candidate.catalogUrl"> · <a :href="candidate.catalogUrl" target="_blank" rel="noopener noreferrer" class="underline">查看目录当前版本与审阅记录</a></span>
             </p>
           </div>
-          <div v-if="executionStatus === 'success' || executionStatus === 'failed'" class="mb-3 max-h-[40vh] overflow-y-auto p-3 border border-dark-border rounded-lg text-sm">
+          <div v-if="executionStatus === 'success' || executionStatus === 'failed'" aria-label="业务执行记录" class="mb-3 max-h-[40vh] overflow-y-auto p-3 border border-dark-border rounded-lg text-sm">
+            <p class="break-all">记录任务：{{ executionIdentity.taskId }} · 修订：{{ executionIdentity.revision }}</p>
             <p>任务状态：{{ executionStatus === 'success' ? '执行结束' : '执行失败' }}</p>
-            <p v-if="executionStatus === 'failed'" class="whitespace-pre-wrap">失败原因：{{ executionSummary }}</p>
+            <p v-if="executionStatus === 'failed'" class="whitespace-pre-wrap">记录摘要（仅供参考）：{{ executionSummary }}</p>
             <p>工具执行：{{ toolCompletionSummary }}</p>
             <p>文件完整性：{{ fileEvidenceSummary }}</p>
             <p>空间验证：{{ spatialEvidenceSummary }}</p>
             <p>用户确认：{{ userConfirmationSummary }}</p>
+            <div class="mt-2">
+              <p>已批准调用：</p>
+              <p v-if="!approvedExecutionCalls.length">无法从记录确认批准的调用</p>
+              <div v-for="(call, index) in approvedExecutionCalls" :key="index" class="mt-1 break-all">
+                <p>步骤 {{ call.stepId }} · {{ call.toolName }}</p>
+                <pre class="whitespace-pre-wrap break-all">{{ formatJson(call.arguments) }}</pre>
+              </div>
+            </div>
+            <div class="mt-2">
+              <p>尝试与审核记录：</p>
+              <p v-if="!executionAttempts.length">{{ executionAttemptsAvailable ? '暂无尝试或审核记录' : '尝试与审核记录未提供' }}</p>
+              <div v-for="(attempt, index) in executionAttempts" :key="index" class="mt-1 break-all">
+                <p>步骤 {{ attempt.stepId }} · {{ attempt.toolName }} · {{ attempt.status }} · 结果 {{ attempt.outcome }}</p>
+                <pre v-if="attempt.arguments" class="whitespace-pre-wrap break-all">{{ formatJson(attempt.arguments) }}</pre>
+                <p v-if="attempt.name">实际名称：{{ attempt.name }}</p>
+                <p v-if="attempt.source">实际来源：{{ attempt.source }}</p>
+              </div>
+            </div>
             <div v-for="(detail, index) in spatialArtifactDetails" :key="`${detail.kind}-${detail.path}-${index}`" class="mt-2 break-all">
               <p>{{ detail.kind === 'layer' ? '加载图层来源' : detail.kind === 'path' ? '文件产物' : '结果引用' }}：{{ detail.path }} · {{ detail.status === 'passed' ? '空间验证通过' : '空间验证未通过' }} · {{ detail.deliverable ? '可交付' : '不可交付，仅供诊断' }}</p>
+              <p v-if="detail.layerId">图层 ID：{{ detail.layerId }}</p>
               <p v-for="error in detail.errors" :key="error">{{ error }}</p>
               <details v-if="detail.checks.length || detail.facts">
                 <summary>{{ detail.deliverable ? '查看空间验证依据' : '查看诊断依据（不代表可交付结果）' }}</summary>
@@ -693,6 +716,7 @@ const currentContinuation = ref<{ kind: 'resume'; task_id: string; revision: num
 const canStartTask = ref(true)
 const currentRunActive = ref(false)
 const snapshotLoading = ref(false)
+const executionLoadError = ref<string | null>(null)
 const reconciliationProbe = ref<QGISIdentity | null>(null)
 const reconciliationNote = ref('')
 const reconciliationChecked = ref(false)
@@ -791,14 +815,53 @@ const executionSummary = computed(() => {
 })
 
 const executionStatus = computed(() => readString(asRecord(currentExecutionResult.value), 'status'))
+const executionIdentity = computed(() => {
+  const record = asRecord(currentExecutionResult.value)
+  const revision = record?.plan_revision
+  return {
+    taskId: readString(record, 'task_id') || '未记录',
+    revision: typeof revision === 'number' && Number.isInteger(revision) && revision > 0 ? `r${revision}` : '未记录'
+  }
+})
+const approvedExecutionCalls = computed(() => {
+  const record = asRecord(currentExecutionResult.value)
+  const plan = asRecord(record?.plan)
+  if (!record || !plan || plan.review_status !== 'approved' || plan.task_id !== record.task_id ||
+      plan.revision !== record.plan_revision || !Array.isArray(plan.tool_calls)) return []
+  return plan.tool_calls.flatMap(value => {
+    const call = asRecord(value)
+    if (!call) return []
+    return [{ stepId: call.step_id ?? '未记录', toolName: readString(call, 'tool_name') || '未知', arguments: call.arguments }]
+  })
+})
+const executionAttempts = computed(() => {
+  const attempts = asRecord(currentExecutionResult.value)?.attempts
+  if (!Array.isArray(attempts)) return []
+  return attempts.flatMap(value => {
+    const attempt = asRecord(value)
+    if (!attempt) return []
+    const observation = asRecord(attempt.observation)
+    const data = asRecord(observation?.data)
+    return [{
+      stepId: attempt.step_id ?? '未记录',
+      toolName: readString(attempt, 'tool_name') || '未知',
+      status: readString(attempt, 'status') || '未知',
+      outcome: attempt.status === 'blocked' ? '未发送（审核或执行条件阻止）' : readString(observation, 'outcome') || '未提供',
+      arguments: asRecord(attempt.tool_arguments),
+      name: readString(data, 'name'),
+      source: readString(data, 'source')
+    }]
+  })
+})
+const executionAttemptsAvailable = computed(() => Array.isArray(asRecord(currentExecutionResult.value)?.attempts))
 const toolCompletionSummary = computed(() => {
   const attempts = asRecord(currentExecutionResult.value)?.attempts
   if (!Array.isArray(attempts)) return '等待记录'
-  if (!attempts.length) return '尚无工具调用'
+  if (!attempts.length) return '尚无尝试或审核记录'
   const observations = attempts.map(asRecord).map(attempt => asRecord(attempt?.observation))
   const completed = observations.filter(item => item?.status === 'success').length
   const unknown = observations.filter(item => item?.outcome === 'unknown').length
-  return `${completed}/${observations.length} 次工具调用返回成功${unknown ? `；${unknown} 次结果未知` : ''}`
+  return `${completed}/${observations.length} 项尝试或审核记录返回成功${unknown ? `；${unknown} 项结果未知` : ''}`
 })
 const fileEvidenceSummary = computed(() => {
   const artifacts = asRecord(currentExecutionResult.value)?.artifacts
@@ -855,7 +918,7 @@ const spatialEvidenceSummary = computed(() => {
 })
 const userConfirmationSummary = computed(() => {
   const confirmed = asRecord(currentExecutionResult.value)?.confirmed
-  return confirmed === true ? '已确认成功' : confirmed === false ? '已确认失败' : '尚未确认'
+  return confirmed === true ? '已确认成功' : confirmed === false ? '已确认失败' : confirmed === null ? '尚未确认' : '确认状态未知'
 })
 
 const screenshotUrl = computed(() => {
@@ -926,9 +989,12 @@ function handleOpenSettings() {
 
 let sessionEpoch = 0
 let snapshotVersion = 0
+let executionRequestVersion = 0
 
 async function handleSwitchSession(threadId: string) {
   const epoch = ++sessionEpoch
+  ++snapshotVersion
+  ++executionRequestVersion
   stopStreaming()
   resetStreamingState()
   reviewModalVisible.value = false
@@ -944,27 +1010,39 @@ async function handleSwitchSession(threadId: string) {
   reconciliationChecked.value = false
   chatStore.setCurrentDraft(null)
   chatStore.setExecutionResult(null)
+  executionLoadError.value = null
   chatStore.setExecuting(false)
   chatStore.setScreenshotPath(null)
   chatStore.setThreadId(threadId)
   chatStore.clearMessages()
 
-  await loadSessionHistory(threadId, epoch)
-  if (epoch === sessionEpoch) await restoreCurrentTaskPlan(threadId, epoch)
+  const history = await loadSessionHistory(threadId, epoch)
+  if (epoch === sessionEpoch) await restoreCurrentTaskPlan(threadId, epoch, history)
 }
 
-async function loadSessionHistory(threadId: string, epoch: number) {
+async function loadSessionHistory(threadId: string, epoch: number): Promise<SessionHistory | null> {
   try {
     const history = await getSessionHistory(threadId)
-    if (currentThreadId.value === threadId && epoch === sessionEpoch) renderHistory(history)
+    if (currentThreadId.value !== threadId || epoch !== sessionEpoch) return null
+    if (history.thread_id !== threadId) throw new Error('会话历史身份不匹配')
+    renderHistory(history)
+    return history
   } catch (error) {
-    console.error('加载历史失败:', error)
-    ElMessage.error('加载历史失败')
+    if (currentThreadId.value === threadId && epoch === sessionEpoch) {
+      console.error('加载历史失败:', error)
+      executionLoadError.value = '无法读取会话历史，业务执行结果未知。'
+      ElMessage.error('加载历史失败')
+    }
+    return null
   }
 }
 
 function renderHistory(data: SessionHistory) {
   chatStore.clearMessages()
+  if (data.chat_messages?.some(message => message.role === 'assistant') ||
+      (!data.chat_messages?.length && (data.log_summary || data.final_summary))) {
+    chatStore.addSystemMessage('以下为历史对话及摘要，仅供参考；任务实际结果以业务执行记录为准。')
+  }
   for (const message of data.chat_messages || []) {
     appendHistoryMessage(message)
   }
@@ -999,14 +1077,15 @@ function showCurrentPause() {
   if (currentPause.value?.kind === 'result_review') resultModalVisible.value = true
 }
 
-async function restoreCurrentTaskPlan(threadId: string, epoch: number) {
+async function restoreCurrentTaskPlan(threadId: string, epoch: number, history?: SessionHistory | null) {
   const version = ++snapshotVersion
+  ++executionRequestVersion
   snapshotLoading.value = true
   try {
     const snapshot = await getCurrentState(threadId)
     if (currentThreadId.value !== threadId || epoch !== sessionEpoch || version !== snapshotVersion) return
     const plan = snapshot.state.task_plan
-    if (isTaskPlan(plan)) chatStore.setCurrentDraft(plan)
+    chatStore.setCurrentDraft(isTaskPlan(plan) ? plan : null)
     const pause = snapshot.pause || null
     currentPause.value = pause
     currentContinuation.value = snapshot.continuation || null
@@ -1027,9 +1106,30 @@ async function restoreCurrentTaskPlan(threadId: string, epoch: number) {
       resultFeedback.value = ''
       showCurrentPause()
     }
-    if (isTaskPlan(plan)) await loadExecutionDetails(plan.task_id, threadId)
+    if (isTaskPlan(plan)) {
+      await loadExecutionDetails(plan.task_id, threadId, version)
+    } else if (!snapshot.running && !pause && !snapshot.continuation) {
+      const sessionHistory = history === undefined ? await getSessionHistory(threadId) : history
+      if (currentThreadId.value !== threadId || epoch !== sessionEpoch || version !== snapshotVersion) return
+      if (!sessionHistory) return
+      if (sessionHistory.thread_id !== threadId || !Array.isArray(sessionHistory.executions)) {
+        throw new Error('会话业务记录列表无效')
+      }
+      const latest = sessionHistory.executions.at(-1)
+      if (latest) {
+        if (typeof latest.task_id !== 'string' || !latest.task_id) throw new Error('业务记录缺少任务身份')
+        await loadExecutionDetails(latest.task_id, threadId, version, true)
+      } else {
+        chatStore.setExecutionResult(null)
+        executionLoadError.value = null
+      }
+    }
   } catch (error) {
-    console.debug('当前会话没有待恢复的执行状态:', error)
+    if (currentThreadId.value === threadId && epoch === sessionEpoch && version === snapshotVersion) {
+      console.debug('无法恢复会话业务记录:', error)
+      chatStore.setExecutionResult(null)
+      executionLoadError.value = '无法读取业务执行记录，结果未知。'
+    }
   } finally {
     if (version === snapshotVersion) snapshotLoading.value = false
   }
@@ -1040,15 +1140,28 @@ function refreshCurrentState() {
   if (threadId) void restoreCurrentTaskPlan(threadId, sessionEpoch)
 }
 
-async function loadExecutionDetails(taskId: string, threadId = currentThreadId.value) {
+async function loadExecutionDetails(taskId: string, threadId = currentThreadId.value, version = snapshotVersion, historical = false) {
+  if (!threadId) return
   const epoch = sessionEpoch
+  const requestVersion = ++executionRequestVersion
+  const isCurrent = () => threadId === currentThreadId.value && epoch === sessionEpoch && version === snapshotVersion &&
+    requestVersion === executionRequestVersion && (historical ? currentDraft.value === null : currentDraft.value?.task_id === taskId)
   try {
     const response = await getExecution(taskId)
-    if (threadId === currentThreadId.value && epoch === sessionEpoch && currentDraft.value?.task_id === taskId) {
-      chatStore.setExecutionResult(response.execution)
+    if (!isCurrent()) return
+    if (response.execution?.task_id !== taskId || response.execution.session_id !== threadId) {
+      throw new Error('业务执行记录身份不匹配')
     }
+    chatStore.setExecutionResult(response.execution)
+    executionLoadError.value = null
   } catch (error) {
-    console.debug(`任务 ${taskId} 暂无可查询执行记录:`, error)
+    if (isCurrent()) {
+      console.debug(`无法读取任务 ${taskId} 的业务记录:`, error)
+      chatStore.setExecutionResult(null)
+      executionLoadError.value = !historical && currentPause.value?.kind === 'plan_review' &&
+        readString(asRecord(error), 'detail') === '任务记录不存在。'
+        ? null : '无法读取业务执行记录，结果未知。'
+    }
   }
 }
 
@@ -1152,6 +1265,10 @@ async function handleSendMessage() {
     const threadId = currentThreadId.value
     if (!threadId) throw new Error('无法创建会话')
 
+    ++snapshotVersion
+    ++executionRequestVersion
+    snapshotLoading.value = false
+    executionLoadError.value = null
     chatStore.setCurrentDraft(null)
     chatStore.setExecutionResult(null)
     chatStore.addUserMessage(message)

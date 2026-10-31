@@ -1,32 +1,22 @@
 #!/usr/bin/env python3
-"""
-Reflector Node - 任务总结节点
-负责执行结果总结和状态清理
-"""
+"""Project task completion facts and release transient workflow state.
 
-from typing import Dict, Any
+The summary is a read-only projection, never an execution or confirmation decision.
+"""
+import json
 import logging
-from dotenv import load_dotenv
+from typing import Any, Dict
 
-from langchain_core.messages import AIMessage, SystemMessage, HumanMessage
-from jinja2 import Template
-from agent.llm import create_llm
+from langchain.messages import RemoveMessage
+from langgraph.graph.message import REMOVE_ALL_MESSAGES
 
 from agent.state import AgentState
-from langgraph.graph.message import REMOVE_ALL_MESSAGES
-from langchain.messages import RemoveMessage  
-load_dotenv()
+from qgis_mcp_server.qgis_mcp_plugin.artifact_paths import WRITE_TOOLS
 
-# 配置日志
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-def _get_llm(state: AgentState):
-    return create_llm(state.get("llm_config"))
-
-
-def _serialize_task_plan(task_plan: Any) -> Any:
-    """Serialize the authoritative TaskPlan for user-visible history."""
+def _serialize_graph_record(task_plan: Any) -> Any:
+    """Serialize a graph-owned TaskPlan or ExecutionTrace for its fact projection."""
     if task_plan is None:
         return None
     if hasattr(task_plan, "model_dump"):
@@ -35,164 +25,68 @@ def _serialize_task_plan(task_plan: Any) -> Any:
         return task_plan.dict()
     return task_plan
 
-def _get_last_executor_message(messages) -> str:
-    """
-    提取 Executor 的最后一条自然语言总结消息
-    规则（基于真实日志）：
-    1. 从后往前遍历
-    2. 只处理 AIMessage
-    3. content 为 str，且不是 JSON 结构
-    4. 直接返回第一条命中的
-    """
-    if not messages:
-        return "无任务总结"
+def _execution_summary(state: AgentState) -> str:
+    plan = _serialize_graph_record(state.get("task_plan")) or {}
+    trace = _serialize_graph_record(state.get("execution_trace")) or {}
+    confirmed = state.get("is_completed")
+    confirmation = ('未知' if 'is_completed' not in state else
+                    '未确认' if confirmed is None else ('成功' if confirmed else '失败'))
+    lines = [f"任务：{plan.get('task_id') or state.get('task_id') or '未知'} · 修订：{plan.get('revision', '未知')}",
+             f"用户确认：{confirmation}（与工具完成和空间验证分别记录）"]
+    if not trace or trace.get('task_id') != plan.get('task_id'):
+        return '\n'.join(lines + ['执行记录：缺失或任务不匹配；不能推断执行成功。', '工具完成：未知'])
 
-    for msg in reversed(messages):
+    attempts = trace.get('attempts') or []
+    completed = sum((a.get('observation') or {}).get('status') == 'success' and
+                    ((a.get('observation') or {}).get('outcome') == 'completed' or
+                     ((a.get('tool_call') or {}).get('tool_name') not in WRITE_TOOLS and
+                      (a.get('observation') or {}).get('outcome') is None)) for a in attempts)
+    unknown = any((a.get('observation') or {}).get('outcome') == 'unknown' or
+                  (a.get('status') != 'blocked' and
+                   (a.get('tool_call') or {}).get('tool_name') in WRITE_TOOLS and
+                   (a.get('observation') or {}).get('outcome') is None) for a in attempts)
+    artifacts = [artifact for attempt in attempts for artifact in attempt.get('artifacts', [])]
+    passed = sum((a.get('spatial_validation') or {}).get('status') == 'passed' for a in artifacts)
+    failed = sum((a.get('spatial_validation') or {}).get('status') == 'failed' for a in artifacts)
+    missing = len(artifacts) - passed - failed
+    if unknown:
+        status = '结果未知，需核查；不自动重放'
+    elif not attempts or not completed or trace.get('status') != 'success' or failed:
+        status = '未完成或失败'
+    else:
+        status = '执行完成（不替代空间验证或用户确认）'
+    lines += [f'执行状态：{status}', f'工具完成：{completed}/{len(attempts)} 个尝试/审核记录中工具返回成功',
+              f'空间验证：{passed} 通过，{failed} 失败，{missing} 未提供',
+              f"可交付产物：{sum(a.get('deliverable') is True for a in artifacts)}/{len(artifacts)}（按业务记录）"]
+    for index, attempt in enumerate(attempts, 1):
+        call = attempt.get('tool_call') or {}
+        observation = attempt.get('observation') or {}
+        outcome_label = ('未发送' if attempt.get('status') == 'blocked' else
+                         observation.get('outcome') or
+                         ('只读响应' if call.get('tool_name') not in WRITE_TOOLS and observation.get('status') == 'success' else '未知'))
+        lines.append(f"尝试/审核记录 {index}：{call.get('tool_name', '未知')} · "
+                     f"{attempt.get('status', '未知')} / {outcome_label} · "
+                     f"参数：{json.dumps(call.get('arguments') or {}, ensure_ascii=False, sort_keys=True)}")
+    for artifact in artifacts:
+        lines.append(f"产物：{artifact.get('kind', '未知')} · {artifact.get('path') or artifact.get('layer_id') or '未提供引用'} · "
+                     f"空间验证：{(artifact.get('spatial_validation') or {}).get('status', '未提供')} · "
+                     f"可交付：{'是' if artifact.get('deliverable') is True else '否' if artifact.get('deliverable') is False else '未知'}")
+    return '\n'.join(lines)
 
-        # 只关心 AIMessage
-        if not isinstance(msg, AIMessage):
-            continue
-
-        content = msg.content
-
-        # 1️⃣ 最理想情况：content 是字符串（你的最终总结就是这种）
-        if isinstance(content, str):
-            text = content.strip()
-            if text:
-                return text
-
-        # 2️⃣ 次优情况：content 是 list（多模态 / 工具返回）
-        elif isinstance(content, list):
-            parts = []
-            for part in content:
-                if isinstance(part, dict) and part.get("type") == "text":
-                    parts.append(part.get("text", ""))
-                elif isinstance(part, str):
-                    parts.append(part)
-
-            text = "\n".join(parts).strip()
-
-            # 排除明显是 JSON 的工具结果
-            if text and not text.startswith("{"):
-                return text
-
-    return "无任务总结"
 
 async def reflector_node(state: AgentState) -> Dict[str, Any]:
-    """
-    总结任务并清理临时状态。
-    
-    工作流程:
-    1. 根据用户确认结果和执行日志生成任务总结
-    2. 保留总结、确认结果和历史
-    3. 清理下一轮不应复用的临时状态
-    
-    Args:
-        state: 当前Agent状态
-        
-    Returns:
-        更新后的状态字段
-    """
-    logger.info("=" * 60)
-    logger.info("Reflector Node: 开始总结任务")
-    logger.info("=" * 60)
-    
-    llm = _get_llm(state)
-    input_query = state["input_query"]
+    """Summarize current execution facts without calling a language model."""
+    input_query = state.get("input_query")
     prior_log_summary = state.get("log_summary")
     task_plan = state.get("task_plan")
-    messages = state.get("messages", [])
-    
-    # 1. 分析执行结果
-    total_steps = len(task_plan.steps) if task_plan else 0
     is_completed = state.get("is_completed")
-    is_success = is_completed is True
-    result_label = '未确认' if is_completed is None else ('成功' if is_success else '失败')
-
-    # 2. 生成任务总结
-    logger.info("生成任务总结...")
-    
-    # 构建执行日志摘要
-    log_summary_parts = []
-
-    for msg in messages:
-        content = getattr(msg, "content", "") or ""
-        if content:
-            log_summary_parts.append(f"- {content}")
-    
-    log_summary_text = "\n".join(log_summary_parts) if log_summary_parts else "无可用日志"
-    
-    detail_info = ""
-    
-    # 调用LLM生成总结
-    system_prompt_template = Template(
-        """你是一个专业的GIS任务分析专家。请分析以下任务执行情况，生成简洁的总结报告。
-
-总结应包含:
-1. 任务完成情况（成功/失败）
-2. 关键步骤回顾
-3. 使用的图层和变量（如果有）
-4. 遇到的问题（如果有）
-5. 经验教训（如果有）
-
-请用简洁的中文回答，不超过300字。{% if detail_info %}{{ detail_info }}{% endif %}
-"""
-    )
-    system_prompt = system_prompt_template.render(detail_info=detail_info)
-
-    user_message_template = Template(
-        """
-任务需求: {{ input_query }}
-
-执行计划: {{ plan_task }}
-
-执行日志:
-{{ log_summary_text }}
-
-总步骤数: {{ total_steps }}
-用户确认结果: {{ result_label }}
-{% if not is_success %}用户认为的失败原因: {{ user_feedback }}{% endif %}
-"""
-    )
-    user_message = user_message_template.render(
-        input_query=input_query,
-        plan_task=task_plan.task_summary if task_plan else "无计划",
-        log_summary_text=log_summary_text,
-        total_steps=total_steps,
-        is_success=is_success,
-        result_label=result_label,
-        user_feedback=state.get("user_feedback", "无反馈"),
-    )
-    
-    try:
-        reflector_messages = [
-            SystemMessage(content=system_prompt),
-            HumanMessage(content=user_message)
-        ]
-        
-        response = await llm.ainvoke(reflector_messages)
-        final_summary = response.content.strip()
-        
-        logger.info(f"生成总结: {final_summary[:100]}...")
-        
-    except Exception as e:
-        logger.error(f"生成总结失败: {e}")
-        final_summary = f"用户确认结果: {result_label} (总步骤: {total_steps})"
-    
-    # 3. Preserve the user's separate result-confirmation decision.
-    logger.info("Execution success=%s; result confirmation=%s", is_success, is_completed)
-
-    # 4. State cleanup
-    # 保留最终摘要、截图和历史；清理下一轮不应复用的计划与执行状态。
-    logger.info("执行状态清理...")
-
+    final_summary = _execution_summary(state)
     combined_log_summary = (
         f"{prior_log_summary}\n\n{final_summary}" if prior_log_summary else final_summary
     )
     history_entry = {
         "input_query": input_query,
-        "task_plan": _serialize_task_plan(task_plan),
-        "executor_last_message": _get_last_executor_message(messages),
+        "task_plan": _serialize_graph_record(task_plan),
         "final_summary": final_summary,
     }
     cleaned_state = {

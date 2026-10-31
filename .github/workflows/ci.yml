@@ -41,6 +41,8 @@ jobs:
           cache-dependency-path: ui/frontend/package-lock.json
       - run: npm ci --no-audit --no-fund
       - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:browser
   frontend-types:
     name: Frontend types
     runs-on: ubuntu-latest

@@ -185,6 +185,12 @@ export interface SessionHistory {
   thread_id: string
   input_query: string
   chat_messages: Message[]
+  executions: Array<{
+    task_id: string
+    plan_revision: number
+    status: string
+    confirmed: boolean | null
+  }>
   final_summary?: string
   screenshot_path?: string
   logs: any[]
