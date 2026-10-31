@@ -14,6 +14,34 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / 'scripts/export_t07_langsmith.py'
+# langsmith 0.6.4 env/_runtime_env.py:get_release_shas reads these host fields.
+# They are intentionally outside the exporter's production runtime allowlist.
+SDK_RELEASE_ENV_VARS = (
+    'VERCEL_GIT_COMMIT_SHA', 'NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA', 'COMMIT_REF',
+    'RENDER_GIT_COMMIT', 'CI_COMMIT_SHA', 'CIRCLE_SHA1', 'CF_PAGES_COMMIT_SHA',
+    'REACT_APP_GIT_SHA', 'SOURCE_VERSION', 'GITHUB_SHA', 'TRAVIS_COMMIT',
+    'GIT_COMMIT', 'BUILD_VCS_NUMBER', 'bamboo_planRepository_revision',
+    'Build.SourceVersion', 'BITBUCKET_COMMIT', 'DRONE_COMMIT_SHA',
+    'SEMAPHORE_GIT_SHA', 'BUILDKITE_COMMIT',
+)
+
+
+@pytest.fixture
+def isolated_sdk_runtime(monkeypatch):
+    """Keep SDK serialization fixtures independent of CI/deployment identity."""
+    from langsmith.env._runtime_env import get_release_shas, get_runtime_environment
+
+    with monkeypatch.context() as release_env:
+        for name in SDK_RELEASE_ENV_VARS:
+            release_env.delenv(name, raising=False)
+        get_release_shas.cache_clear()
+        get_runtime_environment.cache_clear()
+        try:
+            yield release_env
+        finally:
+            # Do not leave a cached sanitized/fake runtime after restoring hosts.
+            get_release_shas.cache_clear()
+            get_runtime_environment.cache_clear()
 
 
 def cli(*args):
@@ -271,7 +299,8 @@ def test_runtime_source_change_cannot_reuse_reviewed_export(tmp_path):
 
 
 @pytest.mark.parametrize('failure_at', [None, 'example_write', 'feedback_readback'])
-def test_locked_sdk_evaluate_serializes_only_safe_facts_and_business_ids(tmp_path, monkeypatch, failure_at):
+def test_locked_sdk_evaluate_serializes_only_safe_facts_and_business_ids(
+        tmp_path, monkeypatch, failure_at, isolated_sdk_runtime):
     """Exercise actual SDK Dataset/Experiment/Run/Feedback serialization at HTTP."""
     import asyncio
     from urllib.parse import urlsplit
@@ -446,3 +475,17 @@ def test_locked_sdk_evaluate_serializes_only_safe_facts_and_business_ids(tmp_pat
     finally:
         asyncio.run(telemetry.close_langsmith())
         langsmith.utils.get_env_var.cache_clear()
+
+
+@pytest.mark.parametrize('release_env', SDK_RELEASE_ENV_VARS)
+def test_sdk_runtime_still_rejects_host_release_metadata(release_env, isolated_sdk_runtime):
+    """Isolation of test hosts never widens the production privacy contract."""
+    from langsmith.env._runtime_env import get_release_shas, get_runtime_environment
+
+    isolated_sdk_runtime.setenv(release_env, 'fake-unreviewed-release-sha')
+    get_release_shas.cache_clear()
+    get_runtime_environment.cache_clear()
+    # Use the actual locked SDK's environment collection, not a fake dictionary.
+    assert get_runtime_environment()[release_env] == 'fake-unreviewed-release-sha'
+    with pytest.raises(RuntimeError, match='STOP: unreviewed SDK runtime metadata'):
+        exporter().sdk_runtime()
