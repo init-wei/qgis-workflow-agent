@@ -363,9 +363,19 @@ async def graph_events(graph, initial_state, config, session_id, values):
     """Trace each graph invocation independently and correlate across pauses."""
     metadata = {"session_id": session_id, "task_id": values.get("task_id"),
                 "case_id": values.get("case_id"), "revision": values.get("planning_revision")}
-    with _trace_context(configure_langsmith(), metadata):
-        async for event in graph.astream_events(initial_state, config=config, version="v2"):
-            yield event
+    from agent.eval_usage import UsageJournal
+
+    journal = UsageJournal(session_id, values)
+    try:
+        with _trace_context(configure_langsmith(), metadata):
+            async for event in graph.astream_events(initial_state, config=config, version="v2"):
+                journal.observe(event)
+                yield event
+    except BaseException:
+        journal.finish(failed=True)
+        raise
+    else:
+        journal.finish()
 
 
 @contextmanager

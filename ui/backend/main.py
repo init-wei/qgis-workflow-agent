@@ -629,6 +629,8 @@ def build_plan_review_update(
         "task_plan": task_plan.model_copy(update={"review_status": "rejected"}),
         "advise": revision_advice,
         "planning_error": None,
+        "planning_failure_kind": None,
+        "planning_attempt_diagnostics": [],
         "planning_revision": task_plan.revision + 1,
         "retry_count": 0,
     }
@@ -737,6 +739,8 @@ def build_chat_input_state(
         "task_plan": None,
         "plan_validation": None,
         "planning_error": None,
+        "planning_failure_kind": None,
+        "planning_attempt_diagnostics": [],
         "planning_revision": 1,
         "parameter_requirements": None,
         "last_plan_decision": None,

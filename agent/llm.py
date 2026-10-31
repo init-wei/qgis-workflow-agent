@@ -104,4 +104,7 @@ def create_llm(override: Optional[Dict[str, Any]] = None) -> ChatOpenAI:
     if config.get("api_base"):
         kwargs["base_url"] = config.get("api_base")
 
+    if os.getenv("QGIS_AGENT_EVAL_NONSTREAMING", "").strip().lower() == "true":
+        kwargs["disable_streaming"] = True
+
     return ChatOpenAI(**kwargs)

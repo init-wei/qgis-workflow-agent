@@ -1,0 +1,1575 @@
+{
+  "schema_version": 1,
+  "purpose": "T07 fixed independent holdout inputs and requests; dev and exceptions are separate",
+  "datasets": {
+    "west_points": {
+      "filename": "t07_west_points.gpkg",
+      "layer": "west_points",
+      "crs": "EPSG:4326",
+      "geometry_type": "Point",
+      "fields": [
+        {
+          "name": "pid",
+          "type": "Integer",
+          "nullable": false
+        },
+        {
+          "name": "sector",
+          "type": "String",
+          "nullable": false
+        },
+        {
+          "name": "reading",
+          "type": "Real",
+          "nullable": true
+        }
+      ],
+      "features": [
+        {
+          "geometry": {
+            "type": "Point",
+            "coordinates": [
+              111.03,
+              30.02
+            ]
+          },
+          "properties": {
+            "pid": 101,
+            "sector": "W1",
+            "reading": 0
+          }
+        },
+        {
+          "geometry": {
+            "type": "Point",
+            "coordinates": [
+              110.88,
+              29.94
+            ]
+          },
+          "properties": {
+            "pid": 102,
+            "sector": "W1",
+            "reading": -2.5
+          }
+        },
+        {
+          "geometry": {
+            "type": "Point",
+            "coordinates": [
+              111.22,
+              30.14
+            ]
+          },
+          "properties": {
+            "pid": 103,
+            "sector": "W2",
+            "reading": 3.75
+          }
+        },
+        {
+          "geometry": {
+            "type": "Point",
+            "coordinates": [
+              110.72,
+              30.11
+            ]
+          },
+          "properties": {
+            "pid": 104,
+            "sector": "W2",
+            "reading": null
+          }
+        },
+        {
+          "geometry": {
+            "type": "Point",
+            "coordinates": [
+              111.45,
+              29.82
+            ]
+          },
+          "properties": {
+            "pid": 105,
+            "sector": "W3",
+            "reading": 9
+          }
+        }
+      ]
+    },
+    "east_points": {
+      "filename": "t07_east_points.gpkg",
+      "layer": "east_points",
+      "crs": "EPSG:4326",
+      "geometry_type": "Point",
+      "fields": [
+        {
+          "name": "pid",
+          "type": "Integer",
+          "nullable": false
+        },
+        {
+          "name": "sector",
+          "type": "String",
+          "nullable": false
+        },
+        {
+          "name": "reading",
+          "type": "Real",
+          "nullable": true
+        }
+      ],
+      "features": [
+        {
+          "geometry": {
+            "type": "Point",
+            "coordinates": [
+              123.03,
+              31.02
+            ]
+          },
+          "properties": {
+            "pid": 201,
+            "sector": "E1",
+            "reading": 0
+          }
+        },
+        {
+          "geometry": {
+            "type": "Point",
+            "coordinates": [
+              122.87,
+              30.94
+            ]
+          },
+          "properties": {
+            "pid": 202,
+            "sector": "E1",
+            "reading": -6
+          }
+        },
+        {
+          "geometry": {
+            "type": "Point",
+            "coordinates": [
+              123.23,
+              31.14
+            ]
+          },
+          "properties": {
+            "pid": 203,
+            "sector": "E2",
+            "reading": 2.25
+          }
+        },
+        {
+          "geometry": {
+            "type": "Point",
+            "coordinates": [
+              122.72,
+              31.11
+            ]
+          },
+          "properties": {
+            "pid": 204,
+            "sector": "E2",
+            "reading": null
+          }
+        },
+        {
+          "geometry": {
+            "type": "Point",
+            "coordinates": [
+              123.45,
+              30.82
+            ]
+          },
+          "properties": {
+            "pid": 205,
+            "sector": "E3",
+            "reading": 8
+          }
+        },
+        {
+          "geometry": {
+            "type": "Point",
+            "coordinates": [
+              122.54,
+              31.25
+            ]
+          },
+          "properties": {
+            "pid": 206,
+            "sector": "E3",
+            "reading": 4.5
+          }
+        },
+        {
+          "geometry": {
+            "type": "Point",
+            "coordinates": [
+              123.6,
+              30.7
+            ]
+          },
+          "properties": {
+            "pid": 207,
+            "sector": "E4",
+            "reading": -1.25
+          }
+        }
+      ]
+    },
+    "parcels": {
+      "filename": "t07_parcels.gpkg",
+      "layer": "parcels",
+      "crs": "EPSG:32649",
+      "geometry_type": "Polygon",
+      "fields": [
+        {
+          "name": "parcel_id",
+          "type": "Integer",
+          "nullable": false
+        },
+        {
+          "name": "district",
+          "type": "String",
+          "nullable": false
+        },
+        {
+          "name": "score",
+          "type": "Real",
+          "nullable": true
+        }
+      ],
+      "features": [
+        {
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  500000,
+                  3300000
+                ],
+                [
+                  500010,
+                  3300000
+                ],
+                [
+                  500000,
+                  3300010
+                ],
+                [
+                  500000,
+                  3300000
+                ]
+              ]
+            ]
+          },
+          "properties": {
+            "parcel_id": 1,
+            "district": "A",
+            "score": -4.5
+          }
+        },
+        {
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  500010,
+                  3300000
+                ],
+                [
+                  500010,
+                  3300010
+                ],
+                [
+                  500000,
+                  3300010
+                ],
+                [
+                  500010,
+                  3300000
+                ]
+              ]
+            ]
+          },
+          "properties": {
+            "parcel_id": 2,
+            "district": "A",
+            "score": 0
+          }
+        },
+        {
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  500020,
+                  3300000
+                ],
+                [
+                  500028,
+                  3300000
+                ],
+                [
+                  500020,
+                  3300006
+                ],
+                [
+                  500020,
+                  3300000
+                ]
+              ]
+            ]
+          },
+          "properties": {
+            "parcel_id": 3,
+            "district": "B",
+            "score": 12.25
+          }
+        },
+        {
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  500028,
+                  3300000
+                ],
+                [
+                  500028,
+                  3300006
+                ],
+                [
+                  500020,
+                  3300006
+                ],
+                [
+                  500028,
+                  3300000
+                ]
+              ]
+            ]
+          },
+          "properties": {
+            "parcel_id": 4,
+            "district": "B",
+            "score": null
+          }
+        },
+        {
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  500040,
+                  3300000
+                ],
+                [
+                  500046,
+                  3300000
+                ],
+                [
+                  500040,
+                  3300008
+                ],
+                [
+                  500040,
+                  3300000
+                ]
+              ]
+            ]
+          },
+          "properties": {
+            "parcel_id": 5,
+            "district": "C",
+            "score": 7
+          }
+        }
+      ]
+    },
+    "left_mask": {
+      "filename": "t07_left_mask.gpkg",
+      "layer": "left_mask",
+      "crs": "EPSG:32649",
+      "geometry_type": "Polygon",
+      "fields": [
+        {
+          "name": "mask_id",
+          "type": "Integer",
+          "nullable": false
+        }
+      ],
+      "features": [
+        {
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  500000,
+                  3300000
+                ],
+                [
+                  500005,
+                  3300000
+                ],
+                [
+                  500005,
+                  3300010
+                ],
+                [
+                  500000,
+                  3300010
+                ],
+                [
+                  500000,
+                  3300000
+                ]
+              ]
+            ]
+          },
+          "properties": {
+            "mask_id": 1
+          }
+        }
+      ]
+    },
+    "far_mask": {
+      "filename": "t07_far_mask.gpkg",
+      "layer": "far_mask",
+      "crs": "EPSG:32649",
+      "geometry_type": "Polygon",
+      "fields": [
+        {
+          "name": "mask_id",
+          "type": "Integer",
+          "nullable": false
+        }
+      ],
+      "features": [
+        {
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  501000,
+                  3301000
+                ],
+                [
+                  501010,
+                  3301000
+                ],
+                [
+                  501010,
+                  3301010
+                ],
+                [
+                  501000,
+                  3301010
+                ],
+                [
+                  501000,
+                  3301000
+                ]
+              ]
+            ]
+          },
+          "properties": {
+            "mask_id": 2
+          }
+        }
+      ]
+    }
+  },
+  "scenarios": [
+    {
+      "id": "load-1",
+      "family": "load",
+      "inputs": [
+        "west_points"
+      ],
+      "requests": [
+        {
+          "id": "load-1-a",
+          "text": "请加载文件 {west_points} 的点图层，显示名称设为“西区样点”，只查看原图层，不生成新文件。"
+        },
+        {
+          "id": "load-1-b",
+          "text": "将已上传的 {west_points} 添加到地图，图层命名为“西区样点”；不做转换，也不要另存输出。"
+        }
+      ],
+      "expected": {
+        "algorithms": [],
+        "loads": [
+          {
+            "source": "input",
+            "name": "西区样点"
+          }
+        ],
+        "target_crs": null,
+        "distance_m": null,
+        "segments": null,
+        "dissolve": null,
+        "group_fields": null,
+        "field": null,
+        "calculation_method": null,
+        "output_format": null,
+        "output_filenames": []
+      },
+      "expected_candidate_families": [
+        "load"
+      ]
+    },
+    {
+      "id": "load-2",
+      "family": "load",
+      "inputs": [
+        "parcels"
+      ],
+      "requests": [
+        {
+          "id": "load-2-a",
+          "text": "请载入文件 {parcels} 的地块面图层并命名为“试验地块”，仅查看原始数据，不输出新文件。"
+        },
+        {
+          "id": "load-2-b",
+          "text": "把上传的 {parcels} 显示在地图中，图层名用“试验地块”；保留原数据，不需要生成副本。"
+        }
+      ],
+      "expected": {
+        "algorithms": [],
+        "loads": [
+          {
+            "source": "input",
+            "name": "试验地块"
+          }
+        ],
+        "target_crs": null,
+        "distance_m": null,
+        "segments": null,
+        "dissolve": null,
+        "group_fields": null,
+        "field": null,
+        "calculation_method": null,
+        "output_format": null,
+        "output_filenames": []
+      },
+      "expected_candidate_families": [
+        "load"
+      ]
+    },
+    {
+      "id": "reproject-1",
+      "family": "reproject",
+      "inputs": [
+        "west_points"
+      ],
+      "requests": [
+        {
+          "id": "reproject-1-a",
+          "text": "把 {west_points} 重投影到 EPSG:32649，保留属性，另存为 west_projected.gpkg；只加载最终结果，图层名“西区投影”。"
+        },
+        {
+          "id": "reproject-1-b",
+          "text": "请将上传的 {west_points} 转成 EPSG:32649 坐标系，输出 GeoPackage 文件 west_projected.gpkg、保留字段和属性，只在地图显示结果“西区投影”。"
+        }
+      ],
+      "expected": {
+        "algorithms": [
+          "native:reprojectlayer"
+        ],
+        "loads": [
+          {
+            "source": "final",
+            "name": "西区投影"
+          }
+        ],
+        "target_crs": "EPSG:32649",
+        "distance_m": null,
+        "segments": null,
+        "dissolve": null,
+        "group_fields": null,
+        "field": null,
+        "calculation_method": null,
+        "output_format": "GPKG",
+        "output_filenames": [
+          "west_projected.gpkg"
+        ]
+      },
+      "expected_candidate_families": [
+        "reproject",
+        "load"
+      ]
+    },
+    {
+      "id": "reproject-2",
+      "family": "reproject",
+      "inputs": [
+        "east_points"
+      ],
+      "requests": [
+        {
+          "id": "reproject-2-a",
+          "text": "将 {east_points} 转换为 EPSG:32651 并保留属性，另存 east_projected.gpkg，只加载结果为“东区投影”。"
+        },
+        {
+          "id": "reproject-2-b",
+          "text": "请对上传的 {east_points} 做 EPSG:32651 重投影，写出 GeoPackage east_projected.gpkg，再仅展示最终图层“东区投影”，字段属性不变。"
+        }
+      ],
+      "expected": {
+        "algorithms": [
+          "native:reprojectlayer"
+        ],
+        "loads": [
+          {
+            "source": "final",
+            "name": "东区投影"
+          }
+        ],
+        "target_crs": "EPSG:32651",
+        "distance_m": null,
+        "segments": null,
+        "dissolve": null,
+        "group_fields": null,
+        "field": null,
+        "calculation_method": null,
+        "output_format": "GPKG",
+        "output_filenames": [
+          "east_projected.gpkg"
+        ]
+      },
+      "expected_candidate_families": [
+        "reproject",
+        "load"
+      ]
+    },
+    {
+      "id": "buffer-1",
+      "family": "buffer",
+      "inputs": [
+        "west_points"
+      ],
+      "requests": [
+        {
+          "id": "buffer-1-a",
+          "text": "请先将 {west_points} 重投影至 EPSG:32649 并保存 west_projected.gpkg，再以 60 米、每象限 8 段、不融合制作缓冲区，保留属性并保存 west_buffer.gpkg；只加载最终缓冲图层“西区缓冲”。"
+        },
+        {
+          "id": "buffer-1-b",
+          "text": "对文件 {west_points} 先转换到 EPSG:32649，输出 west_projected.gpkg；然后逐点生成 60 米缓冲，每象限 8 段、禁止融合，属性保留，输出 GeoPackage west_buffer.gpkg。地图仅显示结果“西区缓冲”。"
+        }
+      ],
+      "expected": {
+        "algorithms": [
+          "native:reprojectlayer",
+          "native:buffer"
+        ],
+        "loads": [
+          {
+            "source": "final",
+            "name": "西区缓冲"
+          }
+        ],
+        "target_crs": "EPSG:32649",
+        "distance_m": 60,
+        "segments": 8,
+        "dissolve": false,
+        "group_fields": null,
+        "field": null,
+        "calculation_method": null,
+        "output_format": "GPKG",
+        "output_filenames": [
+          "west_projected.gpkg",
+          "west_buffer.gpkg"
+        ]
+      },
+      "expected_candidate_families": [
+        "reproject",
+        "buffer",
+        "load"
+      ]
+    },
+    {
+      "id": "buffer-2",
+      "family": "buffer",
+      "inputs": [
+        "east_points"
+      ],
+      "requests": [
+        {
+          "id": "buffer-2-a",
+          "text": "先将 {east_points} 投影至 EPSG:32651 并保存 east_projected.gpkg，再按 175 米、每象限 8 段生成不融合的缓冲区，保留属性并输出 east_buffer.gpkg；仅加载“东区缓冲”。"
+        },
+        {
+          "id": "buffer-2-b",
+          "text": "把 {east_points} 重投影到 EPSG:32651 并写入 east_projected.gpkg，然后逐点创建半径 175 米、每象限 8 段的缓冲，不融合、保留属性，另存 GeoPackage east_buffer.gpkg，只显示最终“东区缓冲”。"
+        }
+      ],
+      "expected": {
+        "algorithms": [
+          "native:reprojectlayer",
+          "native:buffer"
+        ],
+        "loads": [
+          {
+            "source": "final",
+            "name": "东区缓冲"
+          }
+        ],
+        "target_crs": "EPSG:32651",
+        "distance_m": 175,
+        "segments": 8,
+        "dissolve": false,
+        "group_fields": null,
+        "field": null,
+        "calculation_method": null,
+        "output_format": "GPKG",
+        "output_filenames": [
+          "east_projected.gpkg",
+          "east_buffer.gpkg"
+        ]
+      },
+      "expected_candidate_families": [
+        "reproject",
+        "buffer",
+        "load"
+      ]
+    },
+    {
+      "id": "clip-1",
+      "family": "clip",
+      "inputs": [
+        "parcels",
+        "left_mask"
+      ],
+      "requests": [
+        {
+          "id": "clip-1-a",
+          "text": "用 {left_mask} 裁剪 {parcels}，保留地块属性，结果保存为 GeoPackage left_clip.gpkg，不加载图层。"
+        },
+        {
+          "id": "clip-1-b",
+          "text": "以 {left_mask} 为裁剪范围，截取文件 {parcels} 内的面，保持原有字段和属性，输出 left_clip.gpkg；无需添加到地图。"
+        }
+      ],
+      "expected": {
+        "algorithms": [
+          "native:clip"
+        ],
+        "loads": [],
+        "target_crs": null,
+        "distance_m": null,
+        "segments": null,
+        "dissolve": null,
+        "group_fields": null,
+        "field": null,
+        "calculation_method": null,
+        "output_format": "GPKG",
+        "output_filenames": [
+          "left_clip.gpkg"
+        ]
+      },
+      "expected_candidate_families": [
+        "clip"
+      ]
+    },
+    {
+      "id": "clip-2",
+      "family": "clip",
+      "inputs": [
+        "parcels",
+        "far_mask"
+      ],
+      "requests": [
+        {
+          "id": "clip-2-a",
+          "text": "使用 {far_mask} 裁剪 {parcels}，保留字段属性并保存 GeoPackage far_clip.gpkg；即使结果为空也要保留合法空图层，无需加载。"
+        },
+        {
+          "id": "clip-2-b",
+          "text": "以 {far_mask} 为范围对 {parcels} 取交集，结果写为 far_clip.gpkg 并保留原字段；允许无相交要素，不添加到地图。"
+        }
+      ],
+      "expected": {
+        "algorithms": [
+          "native:clip"
+        ],
+        "loads": [],
+        "target_crs": null,
+        "distance_m": null,
+        "segments": null,
+        "dissolve": null,
+        "group_fields": null,
+        "field": null,
+        "calculation_method": null,
+        "output_format": "GPKG",
+        "output_filenames": [
+          "far_clip.gpkg"
+        ]
+      },
+      "expected_candidate_families": [
+        "clip"
+      ]
+    },
+    {
+      "id": "dissolve-1",
+      "family": "dissolve",
+      "inputs": [
+        "parcels"
+      ],
+      "requests": [
+        {
+          "id": "dissolve-1-a",
+          "text": "把 {parcels} 按 district 字段融合，同组作为一个要素，保存 GeoPackage district_dissolve.gpkg，无需加载。"
+        },
+        {
+          "id": "dissolve-1-b",
+          "text": "请以 district 分组融合 {parcels} 的地块，同一组输出一条要素，结果写入 district_dissolve.gpkg，不用显示图层。"
+        }
+      ],
+      "expected": {
+        "algorithms": [
+          "native:dissolve"
+        ],
+        "loads": [],
+        "target_crs": null,
+        "distance_m": null,
+        "segments": null,
+        "dissolve": true,
+        "group_fields": [
+          "district"
+        ],
+        "field": null,
+        "calculation_method": null,
+        "output_format": "GPKG",
+        "output_filenames": [
+          "district_dissolve.gpkg"
+        ]
+      },
+      "expected_candidate_families": [
+        "dissolve"
+      ]
+    },
+    {
+      "id": "dissolve-2",
+      "family": "dissolve",
+      "inputs": [
+        "parcels"
+      ],
+      "requests": [
+        {
+          "id": "dissolve-2-a",
+          "text": "将 {parcels} 全部融合为一个要素（不按字段分组，不拆分不相连部分），输出 GeoPackage all_dissolve.gpkg，不加载。"
+        },
+        {
+          "id": "dissolve-2-b",
+          "text": "对 {parcels} 整体融合，不指定分组字段且保持不相连部分在同一要素中，保存 all_dissolve.gpkg，无需在地图显示。"
+        }
+      ],
+      "expected": {
+        "algorithms": [
+          "native:dissolve"
+        ],
+        "loads": [],
+        "target_crs": null,
+        "distance_m": null,
+        "segments": null,
+        "dissolve": true,
+        "group_fields": [],
+        "field": null,
+        "calculation_method": null,
+        "output_format": "GPKG",
+        "output_filenames": [
+          "all_dissolve.gpkg"
+        ]
+      },
+      "expected_candidate_families": [
+        "dissolve"
+      ]
+    },
+    {
+      "id": "statistics-1",
+      "family": "statistics",
+      "inputs": [
+        "parcels"
+      ],
+      "requests": [
+        {
+          "id": "statistics-1-a",
+          "text": "统计 {parcels} 的 score：报告总要素数、非空数、空值数、和、最小值及最大值，统计表保存为 GeoPackage score_stats.gpkg，不加载图层。"
+        },
+        {
+          "id": "statistics-1-b",
+          "text": "对文件 {parcels} 的 score 数值字段做统计，给出全部条数、有效值与 NULL 数量及 sum/min/max，将表输出为 score_stats.gpkg；不添加地图。"
+        }
+      ],
+      "expected": {
+        "algorithms": [
+          "native:basicstatisticsforfields"
+        ],
+        "loads": [],
+        "target_crs": null,
+        "distance_m": null,
+        "segments": null,
+        "dissolve": null,
+        "group_fields": null,
+        "field": "score",
+        "calculation_method": null,
+        "output_format": "GPKG",
+        "output_filenames": [
+          "score_stats.gpkg"
+        ]
+      },
+      "expected_candidate_families": [
+        "statistics"
+      ]
+    },
+    {
+      "id": "statistics-2",
+      "family": "statistics",
+      "inputs": [
+        "parcels"
+      ],
+      "requests": [
+        {
+          "id": "statistics-2-a",
+          "text": "以 {parcels} 的投影坐标系平面方式计算每个面面积（平方米），先保存 area_values.gpkg，再统计面积总和、最小值和最大值，表保存 area_stats.gpkg；不加载图层。"
+        },
+        {
+          "id": "statistics-2-b",
+          "text": "请为 {parcels} 增加按图层 CRS 平面计算的面积，单位平方米，输出 area_values.gpkg；再对新增 area 字段求 sum、min、max，统计表写入 area_stats.gpkg，无需显示。"
+        }
+      ],
+      "expected": {
+        "algorithms": [
+          "qgis:exportaddgeometrycolumns",
+          "native:basicstatisticsforfields"
+        ],
+        "loads": [],
+        "target_crs": null,
+        "distance_m": null,
+        "segments": null,
+        "dissolve": null,
+        "group_fields": null,
+        "field": "area",
+        "calculation_method": 0,
+        "output_format": "GPKG",
+        "output_filenames": [
+          "area_values.gpkg",
+          "area_stats.gpkg"
+        ]
+      },
+      "expected_candidate_families": [
+        "statistics"
+      ]
+    }
+  ],
+  "dev_references": [
+    {
+      "id": "dev-load",
+      "family": "load",
+      "fixture_path": "tests/fixtures/gis/phase11_points.geojson",
+      "builder": null,
+      "inputs": [
+        "phase11_points"
+      ],
+      "request": {
+        "id": "dev-load",
+        "text": "加载 {phase11_points}，命名为“开发样点”，不生成新文件。"
+      },
+      "expected_candidate_families": [
+        "load"
+      ]
+    },
+    {
+      "id": "dev-reproject",
+      "family": "reproject",
+      "fixture_path": "tests/fixtures/gis/phase11_points.geojson",
+      "builder": null,
+      "inputs": [
+        "phase11_points"
+      ],
+      "request": {
+        "id": "dev-reproject",
+        "text": "将 {phase11_points} 重投影至 EPSG:32650，保留属性并另存 dev_projection.gpkg，只加载最终结果。"
+      },
+      "expected_candidate_families": [
+        "reproject"
+      ]
+    },
+    {
+      "id": "dev-buffer",
+      "family": "buffer",
+      "fixture_path": "tests/fixtures/gis/phase11_points.geojson",
+      "builder": null,
+      "inputs": [
+        "phase11_points"
+      ],
+      "request": {
+        "id": "dev-buffer",
+        "text": "把 {phase11_points} 转成 EPSG:32650 后做 100 米、每象限 8 段、不融合缓冲，保留属性，另存 dev_buffer.gpkg，仅加载最终结果。"
+      },
+      "expected_candidate_families": [
+        "buffer"
+      ]
+    },
+    {
+      "id": "dev-clip",
+      "family": "clip",
+      "fixture_path": "tests/fixtures/gis/t05_workflows.json",
+      "builder": "scripts/build_t05_fixtures.py",
+      "inputs": [
+        "source",
+        "clip_mask"
+      ],
+      "request": {
+        "id": "dev-clip",
+        "text": "用 {clip_mask} 裁剪 {source}，保留属性并输出 dev_clip.gpkg，不加载。"
+      },
+      "expected_candidate_families": [
+        "clip"
+      ]
+    },
+    {
+      "id": "dev-dissolve",
+      "family": "dissolve",
+      "fixture_path": "tests/fixtures/gis/t05_workflows.json",
+      "builder": "scripts/build_t05_fixtures.py",
+      "inputs": [
+        "source"
+      ],
+      "request": {
+        "id": "dev-dissolve",
+        "text": "将 {source} 按 grp 融合，输出 dev_dissolve.gpkg，不加载。"
+      },
+      "expected_candidate_families": [
+        "dissolve"
+      ]
+    },
+    {
+      "id": "dev-statistics",
+      "family": "statistics",
+      "fixture_path": "tests/fixtures/gis/t05_workflows.json",
+      "builder": "scripts/build_t05_fixtures.py",
+      "inputs": [
+        "source"
+      ],
+      "request": {
+        "id": "dev-statistics",
+        "text": "统计 {source} 的 value 字段总数、有效数、空值数与 sum/min/max，输出 dev_stats.gpkg，不加载。"
+      },
+      "expected_candidate_families": [
+        "statistics"
+      ]
+    }
+  ],
+  "exceptions": [
+    {
+      "id": "missing-original",
+      "category": "missing_file",
+      "input": "离线 HTTP seam 选择 file-1、file-2 两个已登记输入，取得加载两者的计划并批准；令 file-2 的临时源文件在 resume 前缺失。",
+      "actions": [
+        "POST /api/chat/stream 生成两输入计划；POST /api/review 批准当前 revision。",
+        "删除仅属于临时 fixture 的 file-2，然后 POST /api/resume/whole-inputs。",
+        "查询任务状态及假 MCP 连接/调用计数。"
+      ],
+      "expected": "业务执行为 failed，错误明确；第二个原始输入缺失在任何 MCP 连接及第一次 GIS 调用前阻断，调用数为 0。",
+      "execution": {
+        "kind": "http_or_adapter_seam",
+        "command": "DATABASE_URL='' PYTHON_DOTENV_DISABLED=1 uv run --locked pytest -o addopts= -q -m 'not external and not database' 'tests/test_backend_workflow.py::test_later_original_input_failure_prevents_even_first_mcp_connection'",
+        "source": "tests/test_backend_workflow.py",
+        "scope": "离线 pytest 的 HTTP/工具测试替身与临时数据；不连接真实模型、QGIS、数据库或后台。"
+      },
+      "metrics": [],
+      "status": "not_run"
+    },
+    {
+      "id": "unreliable-source-crs",
+      "category": "unknown_crs",
+      "input": "在独立临时目录创建无 CRS 的单图层 missing-crs.gpkg，组成重投影至 EPSG:32650 后缓冲的计划。",
+      "actions": [
+        "用系统 GDAL 测试 fixture 创建无 CRS GeoPackage。",
+        "对完整计划调用空间 preflight，检查输出目录。"
+      ],
+      "expected": "明确报告 CRS 无法可靠确定并失败；projected.gpkg 和 buffer.gpkg 都不存在。",
+      "execution": {
+        "kind": "system_gdal_seam",
+        "command": "DATABASE_URL='' PYTHON_DOTENV_DISABLED=1 uv run --locked pytest -o addopts= -q -m external 'tests/test_spatial_validation_gdal.py::test_unset_geopackage_crs_and_unselected_multilayer_fail_before_writes'",
+        "source": "tests/test_spatial_validation_gdal.py",
+        "scope": "发行版系统 GDAL 和临时文件；合成输出或独立检查，不连接桌面 QGIS、不代表真实业务运行。"
+      },
+      "metrics": [],
+      "status": "not_run"
+    },
+    {
+      "id": "ambiguous-distance-unit",
+      "category": "ambiguous_units",
+      "input": "以 phase11_points.geojson 构造重投影 EPSG:32650 后缓冲 100 的计划，将 buffer 调用 distance_unit 设为 null。",
+      "actions": [
+        "调用空间 preflight 并检查缓冲计划距离和单位。",
+        "检查临时输出目录是否产生文件。"
+      ],
+      "expected": "单位不明确时报 unit/metre 错误；计划不得进入 GIS 写入，目录保持为空。",
+      "execution": {
+        "kind": "system_gdal_seam",
+        "command": "DATABASE_URL='' PYTHON_DOTENV_DISABLED=1 uv run --locked pytest -o addopts= -q -m external 'tests/test_spatial_validation_gdal.py::test_buffer_distance_unit_must_be_explicitly_reviewed_before_writes'",
+        "source": "tests/test_spatial_validation_gdal.py",
+        "scope": "发行版系统 GDAL 和临时文件；合成输出或独立检查，不连接桌面 QGIS、不代表真实业务运行。"
+      },
+      "metrics": [],
+      "status": "not_run"
+    },
+    {
+      "id": "invalid-buffer-parameter",
+      "category": "invalid_parameters",
+      "input": "HTTP seam 计划先加载所选文件，再执行 native:buffer；DISTANCE 为字符串 not-numeric、单位为米。",
+      "actions": [
+        "POST /api/chat/stream 生成两步计划；预检保留 native:buffer 的错误参数。",
+        "检查响应事件、预检输入和假 GIS 调用。"
+      ],
+      "expected": "整份计划在审核及任何写入前拒绝；无 human_review_required，不加载图层、不生成文件。",
+      "execution": {
+        "kind": "http_or_adapter_seam",
+        "command": "DATABASE_URL='' PYTHON_DOTENV_DISABLED=1 uv run --locked pytest -o addopts= -q -m 'not external and not database' 'tests/test_backend_workflow.py::test_invalid_processing_after_load_is_rejected_before_review_and_before_any_write'",
+        "source": "tests/test_backend_workflow.py",
+        "scope": "离线 pytest 的 HTTP/工具测试替身与临时数据；不连接真实模型、QGIS、数据库或后台。"
+      },
+      "metrics": [],
+      "status": "not_run"
+    },
+    {
+      "id": "unsupported-processing",
+      "category": "unsupported_algorithm",
+      "input": "使用假 QGIS socket 的 wrapper 输入 algorithm=native:centroid、INPUT=roads、OUTPUT=result.gpkg；该算法不在首期白名单。",
+      "actions": [
+        "直接调用受控 execute_processing adapter 并记录假 socket 发送次数。"
+      ],
+      "expected": "以 not supported 错误拒绝；socket 发送次数为 0，不发生外部写入。",
+      "execution": {
+        "kind": "http_or_adapter_seam",
+        "command": "DATABASE_URL='' PYTHON_DOTENV_DISABLED=1 uv run --locked pytest -o addopts= -q -m 'not external and not database' 'tests/test_qgis_mcp_protocol.py::test_processing_tool_rejects_unknown_algorithm_before_socket_write'",
+        "source": "tests/test_qgis_mcp_protocol.py",
+        "scope": "离线 pytest 的 HTTP/工具测试替身与临时数据；不连接真实模型、QGIS、数据库或后台。"
+      },
+      "metrics": [],
+      "status": "not_run"
+    },
+    {
+      "id": "unknown-outcome",
+      "category": "qgis_interrupt",
+      "input": "HTTP seam 已批准加载 file-1；假 GIS 收到 add_layer 后抛 TimeoutError，不能判断副作用是否发生。",
+      "actions": [
+        "POST /api/resume/unknown-checked，令假 GIS 在调用发送后超时。",
+        "查询 /api/executions/{task_id} 与 /api/state/unknown-checked，再尝试同会话新任务及恢复。"
+      ],
+      "expected": "执行状态 needs_attention，记录原意图与未知结果；不自动重放旧调用，新任务受阻，需核查。",
+      "execution": {
+        "kind": "http_or_adapter_seam",
+        "command": "DATABASE_URL='' PYTHON_DOTENV_DISABLED=1 uv run --locked pytest -o addopts= -q -m 'not external and not database' 'tests/test_backend_workflow.py::test_unknown_outcome_requires_operator_evidence_and_never_replays'",
+        "source": "tests/test_backend_workflow.py",
+        "scope": "离线 pytest 的 HTTP/工具测试替身与临时数据；不连接真实模型、QGIS、数据库或后台。"
+      },
+      "metrics": [],
+      "status": "not_run"
+    },
+    {
+      "id": "unapproved-execution",
+      "category": "unapproved",
+      "input": "HTTP seam 中加载 file-1 的任务停在当前 plan_review，用户尚未作决定。",
+      "actions": [
+        "POST /api/chat/stream 取得任务计划。",
+        "不提交 /api/review，直接 POST /api/resume/must-decide。",
+        "检查响应和假 GIS 调用次数。"
+      ],
+      "expected": "resume 返回 409，GIS 调用次数为 0；未批准执行为 false。",
+      "execution": {
+        "kind": "http_or_adapter_seam",
+        "command": "DATABASE_URL='' PYTHON_DOTENV_DISABLED=1 uv run --locked pytest -o addopts= -q -m 'not external and not database' 'tests/test_backend_workflow.py::test_resume_requires_plan_and_result_decisions'",
+        "source": "tests/test_backend_workflow.py",
+        "scope": "离线 pytest 的 HTTP/工具测试替身与临时数据；不连接真实模型、QGIS、数据库或后台。"
+      },
+      "metrics": [
+        "unapproved_execution"
+      ],
+      "status": "not_run"
+    },
+    {
+      "id": "rejected-plan",
+      "category": "rejected",
+      "input": "HTTP seam 加载 file-1 初始显示名称 Original display；审核拒绝并提出 Change the display name。",
+      "actions": [
+        "POST /api/chat/stream 获得计划。",
+        "POST /api/review 提交当前 revision 的拒绝和意见，再 POST /api/resume/thread-1。",
+        "在新计划待审时核对 task_id、revision 和 GIS 调用数。"
+      ],
+      "expected": "同一 task 产生 revision+1 的待审计划且名称为 Revised display；拒绝的旧计划无 GIS 写入，新计划须另行批准。",
+      "execution": {
+        "kind": "http_or_adapter_seam",
+        "command": "DATABASE_URL='' PYTHON_DOTENV_DISABLED=1 uv run --locked pytest -o addopts= -q -m 'not external and not database' 'tests/test_backend_workflow.py::test_rejected_plan_resumes_to_new_revision_with_same_sse_contract'",
+        "source": "tests/test_backend_workflow.py",
+        "scope": "离线 pytest 的 HTTP/工具测试替身与临时数据；不连接真实模型、QGIS、数据库或后台。"
+      },
+      "metrics": [
+        "unapproved_execution"
+      ],
+      "status": "not_run"
+    },
+    {
+      "id": "stale-review",
+      "category": "stale_review",
+      "input": "HTTP seam 加载任务在 result_review，使用当前 task_id，分别提交错误 revision 和 review_id=stale。",
+      "actions": [
+        "POST /api/confirm-result 携带错误 revision；再携带 stale review_id。",
+        "检查 409、业务结果和确认调用次数。"
+      ],
+      "expected": "两个过期身份均返回 409；不写确认决定，也不重复 GIS 调用。",
+      "execution": {
+        "kind": "http_or_adapter_seam",
+        "command": "DATABASE_URL='' PYTHON_DOTENV_DISABLED=1 uv run --locked pytest -o addopts= -q -m 'not external and not database' 'tests/test_backend_workflow.py::test_result_review_is_checkpoint_bound_and_duplicate_is_idempotent'",
+        "source": "tests/test_backend_workflow.py",
+        "scope": "离线 pytest 的 HTTP/工具测试替身与临时数据；不连接真实模型、QGIS、数据库或后台。"
+      },
+      "metrics": [
+        "unapproved_execution"
+      ],
+      "status": "not_run"
+    },
+    {
+      "id": "duplicate-resume",
+      "category": "duplicate_resume",
+      "input": "HTTP seam 的首个已批准加载阻塞在假 GIS 调用中，重复针对同一 thread 调用 resume。",
+      "actions": [
+        "并发发送两次 POST /api/resume/first，首个保持 GIS seam 阻塞。",
+        "读取第二次响应和实际假 GIS 发送计数，再释放首个调用。"
+      ],
+      "expected": "重复 resume 返回 409 busy，原调用完成一次，实际 GIS 调用总数为 1，不重复执行。",
+      "execution": {
+        "kind": "http_or_adapter_seam",
+        "command": "DATABASE_URL='' PYTHON_DOTENV_DISABLED=1 uv run --locked pytest -o addopts= -q -m 'not external and not database' 'tests/test_backend_workflow.py::test_concurrent_resume_rejects_same_or_different_task_without_queueing'",
+        "source": "tests/test_backend_workflow.py",
+        "scope": "离线 pytest 的 HTTP/工具测试替身与临时数据；不连接真实模型、QGIS、数据库或后台。"
+      },
+      "metrics": [
+        "unapproved_execution"
+      ],
+      "status": "not_run"
+    },
+    {
+      "id": "wrong-crs",
+      "category": "geographic_buffer",
+      "input": "phase11_points.geojson 在 EPSG:4326；计划先投影到同一 EPSG:4326，再以 100 米缓冲。",
+      "actions": [
+        "构造先重投影至 EPSG:4326、再以米缓冲 100 的计划。",
+        "运行空间 preflight 并检查临时输出目录。"
+      ],
+      "expected": "拒绝不适用于米制距离的输入；不产生任何缓冲文件。",
+      "execution": {
+        "kind": "system_gdal_seam",
+        "command": "DATABASE_URL='' PYTHON_DOTENV_DISABLED=1 uv run --locked pytest -o addopts= -q -m external 'tests/test_spatial_validation_gdal.py::test_preflight_rejects_future_geographic_buffer_without_writing'",
+        "source": "tests/test_spatial_validation_gdal.py",
+        "scope": "发行版系统 GDAL 和临时文件；合成输出或独立检查，不连接桌面 QGIS、不代表真实业务运行。"
+      },
+      "metrics": [],
+      "status": "not_run"
+    },
+    {
+      "id": "wrong-buffer-radius",
+      "category": "wrong_radius",
+      "input": "T03 三点开发样例已投影至 EPSG:32650；固定半径应为 100 米，伪造半径 95 米的结果。",
+      "actions": [
+        "按 T03 Snyder 坐标生成三点的 95 米 32 边形文件。",
+        "通过系统 GDAL 空间验证接口比较已批准的 100 米参数及实际几何。"
+      ],
+      "expected": "错误半径返回空间验证 failed；读取文件或工具声称成功均不能充当正确结果。",
+      "execution": {
+        "kind": "system_gdal_seam",
+        "command": "DATABASE_URL='' PYTHON_DOTENV_DISABLED=1 uv run --locked pytest -o addopts= -q -m external 'tests/test_spatial_validation_gdal.py::test_three_point_buffers_match_independent_radius_and_area_and_reject_wrong_radius'",
+        "source": "tests/test_spatial_validation_gdal.py",
+        "scope": "发行版系统 GDAL 和临时文件；合成输出或独立检查，不连接桌面 QGIS、不代表真实业务运行。"
+      },
+      "metrics": [
+        "false_success"
+      ],
+      "status": "not_run"
+    },
+    {
+      "id": "wrong-geometry",
+      "category": "wrong_geometry",
+      "input": "T07 clip-1 人工构造结果，parcel_id=1 的裁剪几何整体东移 100 米，面积仍为 37.5 平方米，重算业务记录的文件哈希。",
+      "actions": [
+        "在新临时 workspace 中创建声称成功的业务记录和错位 GPKG。",
+        "调用 build_t07_fixtures.py verify-result 读文件并比较固定顶点。"
+      ],
+      "expected": "状态 failed，错误指向 polygon coverage；不能只根据相等面积与工具 success 宣告通过。",
+      "execution": {
+        "kind": "system_gdal_seam",
+        "command": "DATABASE_URL='' PYTHON_DOTENV_DISABLED=1 uv run --locked pytest -o addopts= -q -m external 'tests/test_t07_fixtures.py::test_verifier_rejects_fake_success_and_spatial_counterexamples'",
+        "source": "tests/test_t07_fixtures.py",
+        "scope": "发行版系统 GDAL 和临时文件；合成输出或独立检查，不连接桌面 QGIS、不代表真实业务运行。"
+      },
+      "metrics": [
+        "false_success"
+      ],
+      "status": "not_run"
+    },
+    {
+      "id": "rotated-buffer",
+      "category": "rotated_buffer",
+      "input": "T07 buffer-1 人工构造 60 米规则 32 边形，绕中心旋转半个边角，面积、周长、半径均不变，重算记录中的哈希。",
+      "actions": [
+        "在临时 workspace 写入经旋转的 GPKG 和声称成功的业务记录。",
+        "调用 verify-result 检查与固定 32 个顶点是否一致。"
+      ],
+      "expected": "状态 failed，错误指向顶点方向/坐标；不得凭半径、面积、周长及 success 判通过。",
+      "execution": {
+        "kind": "system_gdal_seam",
+        "command": "DATABASE_URL='' PYTHON_DOTENV_DISABLED=1 uv run --locked pytest -o addopts= -q -m external 'tests/test_t07_fixtures.py::test_verifier_rejects_fake_success_and_spatial_counterexamples'",
+        "source": "tests/test_t07_fixtures.py",
+        "scope": "发行版系统 GDAL 和临时文件；合成输出或独立检查，不连接桌面 QGIS、不代表真实业务运行。"
+      },
+      "metrics": [
+        "false_success"
+      ],
+      "status": "not_run"
+    },
+    {
+      "id": "missing-output",
+      "category": "missing_output",
+      "input": "T07 clip-1 的业务 attempt 声称 success、记录 left_clip.gpkg 路径和哈希，但文件在临时 workspace 缺失。",
+      "actions": [
+        "构造业务记录并删除测试目录中对应的结果文件。",
+        "调用 verify-result。"
+      ],
+      "expected": "状态 failed；缺失文件不因工具 success 通过，不产出可交付结果。",
+      "execution": {
+        "kind": "system_gdal_seam",
+        "command": "DATABASE_URL='' PYTHON_DOTENV_DISABLED=1 uv run --locked pytest -o addopts= -q -m external 'tests/test_t07_fixtures.py::test_verifier_rejects_fake_success_and_spatial_counterexamples'",
+        "source": "tests/test_t07_fixtures.py",
+        "scope": "发行版系统 GDAL 和临时文件；合成输出或独立检查，不连接桌面 QGIS、不代表真实业务运行。"
+      },
+      "metrics": [
+        "false_success"
+      ],
+      "status": "not_run"
+    },
+    {
+      "id": "sqlite-sidecar",
+      "category": "artifact_sidecar",
+      "input": "T07 clip-1 的临时 left_clip.gpkg 存在，旁边创建同名空 -wal 文件，业务 attempt 声称 success。",
+      "actions": [
+        "创建临时 GPKG 和 -wal 文件。",
+        "调用 verify-result 后核验该旁路仍存在。"
+      ],
+      "expected": "状态 failed 并指出 sidecar，不删除旁路、不读取为成功产物。",
+      "execution": {
+        "kind": "system_gdal_seam",
+        "command": "DATABASE_URL='' PYTHON_DOTENV_DISABLED=1 uv run --locked pytest -o addopts= -q -m external 'tests/test_t07_fixtures.py::test_verifier_rejects_fake_success_and_spatial_counterexamples'",
+        "source": "tests/test_t07_fixtures.py",
+        "scope": "发行版系统 GDAL 和临时文件；合成输出或独立检查，不连接桌面 QGIS、不代表真实业务运行。"
+      },
+      "metrics": [
+        "false_success"
+      ],
+      "status": "not_run"
+    },
+    {
+      "id": "null-statistics",
+      "category": "null_stats",
+      "input": "T07 statistics-1 score=[-4.5,0,12.25,NULL,7]；伪造表 count=5、filled=5、empty=0，并更新结果文件哈希。",
+      "actions": [
+        "写出错误统计 GPKG 及声称 success 的业务记录。",
+        "调用 verify-result 比较有效数、NULL 数与数值预期。"
+      ],
+      "expected": "状态 failed；固定预期是总数 5、有效 4、NULL 1、sum 14.75、min -4.5、max 12.25。",
+      "execution": {
+        "kind": "system_gdal_seam",
+        "command": "DATABASE_URL='' PYTHON_DOTENV_DISABLED=1 uv run --locked pytest -o addopts= -q -m external 'tests/test_t07_fixtures.py::test_verifier_rejects_fake_success_and_spatial_counterexamples'",
+        "source": "tests/test_t07_fixtures.py",
+        "scope": "发行版系统 GDAL 和临时文件；合成输出或独立检查，不连接桌面 QGIS、不代表真实业务运行。"
+      },
+      "metrics": [
+        "false_success"
+      ],
+      "status": "not_run"
+    },
+    {
+      "id": "wrong-sum",
+      "category": "wrong_sum",
+      "input": "T07 statistics-1 输入固定不变，统计表 sum 被改成 0 并更新记录哈希，业务记录仍声称 success。",
+      "actions": [
+        "写出错误统计表与业务记录。",
+        "调用 verify-result。"
+      ],
+      "expected": "状态 failed，不将错误和或工具 success 当作正确统计。",
+      "execution": {
+        "kind": "system_gdal_seam",
+        "command": "DATABASE_URL='' PYTHON_DOTENV_DISABLED=1 uv run --locked pytest -o addopts= -q -m external 'tests/test_t07_fixtures.py::test_verifier_rejects_fake_success_and_spatial_counterexamples'",
+        "source": "tests/test_t07_fixtures.py",
+        "scope": "发行版系统 GDAL 和临时文件；合成输出或独立检查，不连接桌面 QGIS、不代表真实业务运行。"
+      },
+      "metrics": [
+        "false_success"
+      ],
+      "status": "not_run"
+    },
+    {
+      "id": "valid-empty-clip",
+      "category": "valid_empty",
+      "input": "T07 parcels 与 far_mask 完全不相交，输出为保留原字段和 EPSG:32649 的零行 GeoPackage。",
+      "actions": [
+        "使用显式合成数据与零行文件构造 clip-2 业务记录。",
+        "调用 verify-result 检查字段、CRS、要素数。"
+      ],
+      "expected": "状态 passed 且 empty=true；零行合法空与失败分开报告。",
+      "execution": {
+        "kind": "system_gdal_seam",
+        "command": "DATABASE_URL='' PYTHON_DOTENV_DISABLED=1 uv run --locked pytest -o addopts= -q -m external 'tests/test_t07_fixtures.py::test_verifier_reads_each_fake_file_and_checks_full_frozen_result[clip-2]'",
+        "source": "tests/test_t07_fixtures.py",
+        "scope": "发行版系统 GDAL 和临时文件；合成输出或独立检查，不连接桌面 QGIS、不代表真实业务运行。"
+      },
+      "metrics": [],
+      "status": "not_run"
+    }
+  ],
+  "browser": [
+    {
+      "id": "browser-plan-restart",
+      "category": "plan_restart",
+      "input": "使用 phase11_points.geojson 请求先加载三点再另存新工程副本，停在 plan_review。",
+      "actions": [
+        "记录 task_id、revision 和当前 GIS 图层数；刷新页面并重选原会话。",
+        "在专用后台终端停止后台，执行 ./scripts/dev.sh backend；保持测试 PostgreSQL、MCP 和 QGIS 运行。",
+        "重选原会话并查询 /api/state/{thread_id}；未作决定前尝试 resume。"
+      ],
+      "expected": "刷新及重启后仍停在同一 task_id/revision 的计划审核；未决定的 resume 返回 409，图层数及原始文件哈希不变。",
+      "execution": {
+        "kind": "real_browser",
+        "command": "./scripts/dev.sh backend；浏览器访问 http://127.0.0.1:9000/，按 actions 操作",
+        "source": "docs/testing.md",
+        "scope": "需要专用测试数据库、独立 QGIS profile、MCP、后台和真实浏览器；记录事件及业务记录，不把页面替身当真实验收。"
+      },
+      "metrics": [],
+      "status": "not_run"
+    },
+    {
+      "id": "browser-risk-restart",
+      "category": "risk_restart",
+      "input": "使用同一加载并保存工程副本请求；批准计划后，加载完成且 save_project 停在 risk_review。",
+      "actions": [
+        "记录 risk review_id、task_id、revision、已执行 add_layer 次数及原始文件哈希；刷新页面。",
+        "只重启专用后台并重选原会话，读取当前审核和业务记录。",
+        "核对风险批准前工程副本不存在，再批准当前 review_id 并继续。"
+      ],
+      "expected": "重启后风险审核身份不变；保存前加载仍仅一次，风险批准前无工程输出；后续批准不重复已完成步骤。",
+      "execution": {
+        "kind": "real_browser",
+        "command": "./scripts/dev.sh backend；浏览器访问 http://127.0.0.1:9000/，按 actions 操作",
+        "source": "docs/testing.md",
+        "scope": "需要专用测试数据库、独立 QGIS profile、MCP、后台和真实浏览器；记录事件及业务记录，不把页面替身当真实验收。"
+      },
+      "metrics": [],
+      "status": "not_run"
+    },
+    {
+      "id": "browser-result-restart",
+      "category": "result_restart",
+      "input": "使用 phase11_points.geojson 的已批准加载，等待 result_review，业务 confirmed=null。",
+      "actions": [
+        "记录 task_id、revision、result review_id、add_layer 次数和结果来源；刷新页面。",
+        "在不停止 QGIS/MCP/数据库的条件下停止并重启专用后台，重选原会话。",
+        "确认前查询执行记录，再提交当前结果决定并恢复。"
+      ],
+      "expected": "重启后同一结果审核和 review_id 可见，confirmed 仍为 null；确认后记录用户决定，原 add_layer 不重放。",
+      "execution": {
+        "kind": "real_browser",
+        "command": "./scripts/dev.sh backend；浏览器访问 http://127.0.0.1:9000/，按 actions 操作",
+        "source": "docs/testing.md",
+        "scope": "需要专用测试数据库、独立 QGIS profile、MCP、后台和真实浏览器；记录事件及业务记录，不把页面替身当真实验收。"
+      },
+      "metrics": [],
+      "status": "not_run"
+    },
+    {
+      "id": "browser-session-switch",
+      "category": "switch_session",
+      "input": "会话 A 的 phase11_points 加载停在 plan_review；会话 B 为空会话。",
+      "actions": [
+        "记录 A 的 task_id/revision；切换到 B。",
+        "核对 A 的审核弹窗和决定不属于 B；再切回 A 并刷新状态。"
+      ],
+      "expected": "B 不展示或提交 A 的审核；切回 A 显示原 task_id/revision 的待审计划，不发生 GIS 调用。",
+      "execution": {
+        "kind": "real_browser",
+        "command": "./scripts/dev.sh backend；浏览器访问 http://127.0.0.1:9000/，按 actions 操作",
+        "source": "docs/testing.md",
+        "scope": "需要专用测试数据库、独立 QGIS profile、MCP、后台和真实浏览器；记录事件及业务记录，不把页面替身当真实验收。"
+      },
+      "metrics": [],
+      "status": "not_run"
+    },
+    {
+      "id": "browser-cancel-old-stream",
+      "category": "cancel_old_stream",
+      "input": "会话 A 正在持续输出的请求；会话 B 准备发起一个新请求。需要能观察到停止读取后 A 仍有延迟事件。",
+      "actions": [
+        "A 事件流尚未结束时点击“停止读取”，立即切换 B 并开始新流。",
+        "让 A 后台继续完成；检查 B 新流显示、错误状态及事件内容，并返回 A 刷新状态。"
+      ],
+      "expected": "新流正常接收 B 的事件，A 的延迟事件不进入 B；停止读取不等于取消 A 后台任务。无法制造延迟事件时记未完成而非通过。",
+      "execution": {
+        "kind": "real_browser",
+        "command": "./scripts/dev.sh backend；浏览器访问 http://127.0.0.1:9000/，按 actions 操作",
+        "source": "ui/frontend/src/composables/useSSE.ts",
+        "scope": "需要专用测试数据库、独立 QGIS profile、MCP、后台和真实浏览器；记录事件及业务记录，不把页面替身当真实验收。"
+      },
+      "metrics": [],
+      "status": "not_run"
+    },
+    {
+      "id": "browser-text-rendering",
+      "category": "text_rendering",
+      "input": "在聊天输入框发送字面文本 `<b>地图</b>\n第二行 & \"引号\"`，换行表示真实换行。",
+      "actions": [
+        "提交该原样文本；检查用户消息气泡的文本和 DOM。",
+        "刷新页面并重新选择会话，再检查展示内容。"
+      ],
+      "expected": "尖括号标签和引号作为字面文本显示，换行保留，不生成 b 元素或执行 HTML；刷新后文字一致。",
+      "execution": {
+        "kind": "real_browser",
+        "command": "./scripts/dev.sh backend；浏览器访问 http://127.0.0.1:9000/，按 actions 操作",
+        "source": "ui/frontend/src/views/ChatView.vue",
+        "scope": "需要专用测试数据库、独立 QGIS profile、MCP、后台和真实浏览器；记录事件及业务记录，不把页面替身当真实验收。"
+      },
+      "metrics": [],
+      "status": "not_run"
+    },
+    {
+      "id": "browser-existing-deep-link",
+      "category": "deep_link",
+      "input": "已构建的生产单地址服务，使用项目真实 Vue 路由 /settings 和 /trace-demo。",
+      "actions": [
+        "在浏览器地址栏直接打开 http://127.0.0.1:9000/settings 并刷新。",
+        "再直接打开 http://127.0.0.1:9000/trace-demo 并刷新，观察路由和静态资源。"
+      ],
+      "expected": "两个真实路由都加载对应页面，刷新不返回 404，必需静态资源可用；不使用不存在的虚构路由。",
+      "execution": {
+        "kind": "real_browser",
+        "command": "./scripts/dev.sh backend；浏览器访问 http://127.0.0.1:9000/，按 actions 操作",
+        "source": "ui/frontend/src/router/index.ts",
+        "scope": "需要专用测试数据库、独立 QGIS profile、MCP、后台和真实浏览器；记录事件及业务记录，不把页面替身当真实验收。"
+      },
+      "metrics": [],
+      "status": "not_run"
+    }
+  ]
+}

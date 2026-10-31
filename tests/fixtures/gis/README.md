@@ -46,3 +46,7 @@ cmp tests/fixtures/gis/reprojection-buffer-oracle.json /tmp/qwa-reprojection-buf
 四个矩形的裁剪交集面积分别为 6、8、4、2 平方米，按 `zone` 融合后的 E/W 并集面积为 10/6 平方米；分组属性取该组任一原成员的完整属性。来源 `amount` 为 7、NULL、3、9，总数 4、有效数 3、NULL 1、和 19、最小 3、最大 9；E 总数 2、有效 1、和 7，W 总数 2、有效 2、和 12、最小 3、最大 9。预期来自矩形区间和算术，不以同一 Processing 重跑作为唯一判断。
 
 新模板提示、人工审阅与实际复用分别验收，不能将历史来源或这里的正确输入清单当成新模板任务已成功的证据。
+
+## T07 固定留出集
+
+[定义](t07_benchmark.json)与[oracle](t07_benchmark_oracle.json)拥有留出数据、二十四个中文请求、开发引用及专项输入/预期；物化、独立校验范围与正式实验步骤见[评测复验](../../../docs/onboarding/benchmark.md)。开发样例与留出集分别使用，专项存在不等于已运行。

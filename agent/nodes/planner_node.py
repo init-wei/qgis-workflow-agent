@@ -11,13 +11,16 @@ import math
 import os
 from pathlib import Path
 import re
+import subprocess
 from dotenv import load_dotenv
 from jinja2 import Template
+from httpx import HTTPError
+from openai import APIError
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from agent.llm import create_llm
 
-from agent.planning.plan_parser import parse_task_plan_json
+from agent.planning.plan_parser import PlanParseError, parse_task_plan_json
 from agent.planning.plan_schema import TaskPlan
 from agent.planning.plan_validator import PlanValidator
 from agent.planning.processing_preflight import processing_capabilities, validate_processing_calls
@@ -25,13 +28,63 @@ from agent.spatial_validation import preflight_spatial_plan
 from agent.tools.skill_registry import load_skill_registry, render_template
 from qgis_mcp_server.qgis_mcp_plugin.artifact_paths import task_output_directory
 from qgis_mcp_server.qgis_mcp_plugin.processing_policy import SUPPORTED_PROCESSING_ALGORITHMS
-from agent.state import AgentState
+from agent.state import AgentState, PlanningAttemptDiagnostic, PlanningFailureKind
 
 load_dotenv()
 
 # 配置日志
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+
+class _RequestRejected(ValueError):
+    """An explicit pure request check rejected parameters before generation."""
+
+
+# These existing issue codes describe only the candidate's structure/arguments.
+# Output safety also reads the filesystem and deliberately stays unclassified.
+_PURE_PLAN_ISSUES = frozenset({
+    "missing_input_path", "missing_output", "duplicate_step_id", "unsupported_tool",
+    "coarse_api_reference", "requires_review_missing", "duplicate_input_id", "duplicate_output_id",
+    "duplicate_input_reference", "duplicate_output_reference", "unknown_input_reference",
+    "unordered_input_reference", "unknown_output_reference", "duplicate_output_producer",
+    "unused_input", "unproduced_output", "hidden_tool_calls", "unordered_tool_calls",
+    "unknown_tool_call_step", "tool_call_not_allowed", "inconsistent_call_risk",
+    "project_save_requires_review", "buffer_distance_unit_required", "call_input_reference_mismatch",
+    "load_input_reference_required", "load_input_path_mismatch", "unsupported_tool_call",
+    "invalid_tool_arguments", "missing_tool_call", "duplicate_tool_call", "output_reference_mismatch",
+    "duplicate_output_path", "duplicate_output_directory",
+})
+
+
+def _planning_diagnostics(
+    state: AgentState, kind: PlanningFailureKind | None, model_response_received: bool,
+) -> dict:
+    """Keep this revision's first attempt when recording its one automatic retry."""
+    attempt = state.get("retry_count", 0) + 1
+    previous = list(state.get("planning_attempt_diagnostics") or [])[:1] if attempt > 1 else []
+    diagnostic = PlanningAttemptDiagnostic(
+        attempt=attempt, failure_kind=kind, model_response_received=model_response_received,
+    )
+    return {"planning_failure_kind": kind, "planning_attempt_diagnostics": [*previous, diagnostic]}
+
+
+def _planning_failure_kind(exc: Exception, phase: str) -> PlanningFailureKind:
+    if phase == "request" and isinstance(exc, _RequestRejected):
+        return "request_rejected"
+    if phase == "plan" and isinstance(exc, PlanParseError):
+        return "invalid_plan"
+    if phase == "configuration" and isinstance(exc, ValueError):
+        return "environment_error"
+    if phase in {"configuration", "model", "capabilities", "preflight"}:
+        cause = exc
+        while cause is not None:
+            if isinstance(cause, (APIError, HTTPError, OSError, TimeoutError, ConnectionError,
+                                  subprocess.TimeoutExpired, ImportError)):
+                return "environment_error"
+            cause = cause.__cause__
+    return "unknown"
+
 
 _NUMBER = r'[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[-+]?\d+)?'
 _UNIT = r'(?:kilomet(?:er|re)s?|km|met(?:er|re)s?|m|公里|千米|公尺|米|degrees?|度|°)'
@@ -273,12 +326,12 @@ def _parameter_requirements(request: str, advice: str | None, context, task_id: 
                                              for match in processing_only)
                     or (choices.get('processing_only_count') is not None and choices['processing_only_count'] != counts[0])
                     or re.search(r'(?:同时|另外|还)(?:增加|保留|执行)\s*(?:add_layer|capture_map_canvas|ping)\b', processing_text, re.I)):
-                raise ValueError('Processing-only 调用约束有冲突或修改不明确，请重述完整调用要求。')
+                raise _RequestRejected('Processing-only 调用约束有冲突或修改不明确，请重述完整调用要求。')
             choices['processing_only_count'] = counts[0]
         elif (re.search(r'只(?:保留|执行|计划).{0,12}Processing', processing_text, re.I)
               or (index == 1 and choices.get('processing_only_count') is not None and re.search(
                   r'(?:取消|不再|改为|改成|允许|增加).{0,20}(?:Processing|add_layer|capture_map_canvas)', processing_text, re.I))):
-            raise ValueError('请明确 Processing-only 调用要求及数量；无法可靠解释的修改不能沿用旧约束。')
+            raise _RequestRejected('请明确 Processing-only 调用要求及数量；无法可靠解释的修改不能沿用旧约束。')
         target_matches = list(_TARGET_CRS.finditer(instruction_text))
         operations = [re.sub(r'\s+', '', match.group(1)).upper()
                       for match in target_matches if match.group(1)]
@@ -291,14 +344,14 @@ def _parameter_requirements(request: str, advice: str | None, context, task_id: 
                        for match in target_matches]
         if targets:
             if index == 1 and len(choices.get('targets', [])) > 1 and len(targets) != len(choices['targets']):
-                raise ValueError('请按顺序明确每个重投影步骤的新目标 CRS。')
+                raise _RequestRejected('请按顺序明确每个重投影步骤的新目标 CRS。')
             choices['targets'] = (list(dict.fromkeys(targets)) if not operations and len(set(targets)) == 1
                                   else targets)
         elif index == 1 and re.search(r'目标|坐标系|\b(?:target|CRS|EPSG)\b', instruction_text, re.I):
-            raise ValueError('请明确修改后的目标 CRS，例如目标 CRS 改为 EPSG:32651。')
+            raise _RequestRejected('请明确修改后的目标 CRS，例如目标 CRS 改为 EPSG:32651。')
         revisions = list(_FIELD_REVISION.finditer(text))
         if index == 1 and not revisions and re.search(r'(?:字段|\bfields?\b).*(?:改|换|change|set|switch)', text, re.I):
-            raise ValueError('请明确修改后的融合、分组或统计字段原名。')
+            raise _RequestRejected('请明确修改后的融合、分组或统计字段原名。')
         # A recognized edit consumes its full finite expression. An edit cue
         # left beside a necessary parameter is not evidence of "no change".
         remainder = _TARGET_CRS.sub(' ', _FIELD_REVISION.sub(' ', text))
@@ -306,7 +359,7 @@ def _parameter_requirements(request: str, advice: str | None, context, task_id: 
         if index == 1 and re.search(r'改|换|调整|\b(?:change|switch|replace|set)\b', remainder, re.I) and re.search(
             r'融合|统计|字段|\b(?:dissolve|statistics|stats|fields?|EPSG)\b', remainder, re.I,
         ):
-            raise ValueError('无法可靠对应必要参数的修改，请明确目标 CRS 或按步骤重述融合、统计字段。')
+            raise _RequestRejected('无法可靠对应必要参数的修改，请明确目标 CRS 或按步骤重述融合、统计字段。')
         active_buffer = bool(index == 1 and choices.get('buffer_distances'))
         statistics, dissolves, buffer_modes, buffer_segments = [], [], [], []
         for raw_clause, separate_step in _parameter_clauses(text):
@@ -333,27 +386,27 @@ def _parameter_requirements(request: str, advice: str | None, context, task_id: 
                 if (not active_buffer or len(distances) > 1 or len(set(values)) != 1
                         or any(re.match(r'\s*(?:或|or\b|to\b|[-–~,，])\s*\d+', operation_clause[match.end():], re.I)
                                for match in segment_matches)):
-                    raise ValueError('请按执行顺序明确每个缓冲步骤的每象限段数 SEGMENTS。')
+                    raise _RequestRejected('请按执行顺序明确每个缓冲步骤的每象限段数 SEGMENTS。')
                 if not buffer_segments:
                     buffer_segments.append(values[0])
                 elif buffer_segments[-1] is None:
                     buffer_segments[-1] = values[0]
                 elif buffer_segments[-1] != values[0]:
-                    raise ValueError('缓冲每象限段数 SEGMENTS 有冲突，请明确一个整数。')
+                    raise _RequestRejected('缓冲每象限段数 SEGMENTS 有冲突，请明确一个整数。')
             elif segment_cue:
-                raise ValueError('请用明确整数给出缓冲每象限段数，例如每象限12段或 SEGMENTS=12。')
+                raise _RequestRejected('请用明确整数给出缓冲每象限段数，例如每象限12段或 SEGMENTS=12。')
             negative = bool(_NEGATIVE_OPERATION.search(_operation_text(raw_clause)))
             buffer_option = active_buffer and not groups and bool(re.search(r'融合|\bdissolv', operation_clause, re.I))
             if negative and not (buffer_option and not re.search(
                 r'(?:不|不要|别|勿|禁止|无需|\b(?:no|not|never|without|don[’\']t)\b)[^,，;；。.!?！？]{0,40}'
                 r'(?:重投影|统计|缓冲|\b(?:reproject|statistics|stats|buffer)\b)', operation_clause, re.I,
             )):
-                raise ValueError('必要参数包含否定要求，请明确要执行的目标 CRS、融合或统计步骤。')
+                raise _RequestRejected('必要参数包含否定要求，请明确要执行的目标 CRS、融合或统计步骤。')
             ambiguous = (re.search(r'EPSG\s*:\s*\d+\s*(?:或|\bor\b)', operation_clause, re.I)
                          or (re.search(r'融合|统计|\b(?:dissolve|statistics|stats)\b', operation_clause, re.I)
                              and re.search(r'或(?:者)?|\bor\b', operation_clause, re.I)))
             if ambiguous:
-                raise ValueError('必要参数包含多个候选，请明确目标 CRS、融合模式或统计字段后重新提交。')
+                raise _RequestRejected('必要参数包含多个候选，请明确目标 CRS、融合模式或统计字段后重新提交。')
             if buffer_option:
                 mode = not negative
                 if not buffer_modes:
@@ -361,7 +414,7 @@ def _parameter_requirements(request: str, advice: str | None, context, task_id: 
                 elif buffer_modes[-1] is None:
                     buffer_modes[-1] = mode
                 elif buffer_modes[-1] != mode:
-                    raise ValueError('缓冲融合选项冲突，请明确每个缓冲步骤是否融合。')
+                    raise _RequestRejected('缓冲融合选项冲突，请明确每个缓冲步骤是否融合。')
             elif re.search(r'融合|\bdissolve\b', operation_clause, re.I):
                 dissolves.append([] if _ALL_DISSOLVE.search(operation_clause)
                                  else _field_names(groups[0].group('fields')) if len(groups) == 1 else None)
@@ -370,7 +423,7 @@ def _parameter_requirements(request: str, advice: str | None, context, task_id: 
                 choices['feature_count'] = True
                 source = 'statistics' if statistics else 'input'
                 if choices.get('feature_count_source', source) != source:
-                    raise ValueError('总数涉及多个输入阶段，请明确分别统计哪个来源。')
+                    raise _RequestRejected('总数涉及多个输入阶段，请明确分别统计哪个来源。')
                 choices['feature_count_source'] = source
             stat_matches = [match for expression in _STAT_VALUE for match in expression.finditer(clause)]
             if not count_only and (stat_matches or re.search(r'统计|\bstatistics\b|\bstats\b|\b(?:sum|mean|average|minimum|maximum)\s+of', operation_clause, re.I)):
@@ -400,13 +453,13 @@ def _parameter_requirements(request: str, advice: str | None, context, task_id: 
                 statistics[-1]['values'] = []
         if dissolves:
             if index == 1 and len(choices.get('dissolves', [])) > 1 and len(dissolves) != len(choices['dissolves']):
-                raise ValueError('请按顺序重述每个融合步骤，不能静默丢弃未提及的步骤。')
+                raise _RequestRejected('请按顺序重述每个融合步骤，不能静默丢弃未提及的步骤。')
             choices['dissolves'] = dissolves
         if statistics:
             if index == 1 and len(choices.get('statistics', [])) > 1 and len(statistics) != len(choices['statistics']):
-                raise ValueError('请按顺序重述每个统计步骤，不能静默丢弃未提及的步骤。')
+                raise _RequestRejected('请按顺序重述每个统计步骤，不能静默丢弃未提及的步骤。')
             if index == 1 and any(item['values'] is None and item['groups'] is None for item in statistics):
-                raise ValueError('请明确修改后的统计字段或分组字段，不能静默沿用旧参数。')
+                raise _RequestRejected('请明确修改后的统计字段或分组字段，不能静默沿用旧参数。')
             if index == 1 and len(statistics) == 1 and len(choices.get('statistics', [])) == 1:
                 earlier = choices['statistics'][0]
                 current = statistics[0]
@@ -424,11 +477,11 @@ def _parameter_requirements(request: str, advice: str | None, context, task_id: 
             role, names = match.group('role').lower(), _field_names(match.group('fields'))
             if role.startswith(('融合', 'dissolve')):
                 if len(choices.get('dissolves', [])) != 1:
-                    raise ValueError('请按顺序重述每个融合步骤及字段，不能把修改意见任意分配给多个步骤。')
+                    raise _RequestRejected('请按顺序重述每个融合步骤及字段，不能把修改意见任意分配给多个步骤。')
                 choices['dissolves'] = [names]
             else:
                 if len(choices.get('statistics', [])) != 1:
-                    raise ValueError('请按顺序重述每个统计步骤及字段，不能把修改意见任意分配给多个步骤。')
+                    raise _RequestRejected('请按顺序重述每个统计步骤及字段，不能把修改意见任意分配给多个步骤。')
                 item = dict(choices['statistics'][0])
                 item['groups' if role.startswith(('分组', 'group')) else 'values'] = names
                 if item['groups'] is not None:
@@ -699,14 +752,18 @@ async def planner_node(state: AgentState, *, processing_inspector=None, spatial_
         else getattr(previous_plan, "revision", 0)
     )
     revision = state.get("planning_revision") or (prior_revision + 1 if previous_plan else 1)
-    llm = _get_llm(state)
-
-    capabilities = await processing_capabilities(processing_inspector)
     requirements = None
+    model_response_received = False
+    phase = "configuration"
     try:
+        llm = _get_llm(state)
+        phase = "capabilities"
+        capabilities = await processing_capabilities(processing_inspector)
+        phase = "request"
         requirements = _parameter_requirements(
             input_query, advise, state.get("parameter_requirements"), task_id, revision,
         )
+        phase = "context"
         skills_enabled = os.getenv("QGIS_AGENT_SKILLS_ENABLED", "true").strip().lower() not in {
             "false", "0", "no", "off",
         }
@@ -730,7 +787,10 @@ async def planner_node(state: AgentState, *, processing_inspector=None, spatial_
             )),
             HumanMessage(content=user_message),
         ]
+        phase = "model"
         response = await llm.ainvoke(messages)
+        model_response_received = True
+        phase = "plan"
         task_plan = parse_task_plan_json(response.content)
         # The binders replace paths with server-owned values. Check first so a
         # missing placeholder cannot be hidden by that replacement.
@@ -764,8 +824,9 @@ async def planner_node(state: AgentState, *, processing_inspector=None, spatial_
         task_plan = task_plan.model_copy(update={"metadata": metadata})
         validation_report = PlanValidator().validate(task_plan)
         if not validation_report.is_valid:
-            errors = [issue for issue in validation_report.issues if issue.severity == "error"][:5]
-            details = "; ".join(f"{issue.code}: {issue.message[:200]}" for issue in errors)
+            errors = [issue for issue in validation_report.issues if issue.severity == "error"]
+            details = "; ".join(f"{issue.code}: {issue.message[:200]}" for issue in errors[:5])
+            kind = "invalid_plan" if errors and all(issue.code in _PURE_PLAN_ISSUES for issue in errors) else "unknown"
             return {
                 "task_plan": None,
                 "plan_validation": validation_report,
@@ -773,6 +834,7 @@ async def planner_node(state: AgentState, *, processing_inspector=None, spatial_
                 "planning_revision": revision,
                 "parameter_requirements": requirements,
                 "retry_count": retry_count + 1,
+                **_planning_diagnostics(state, kind, model_response_received),
             }
 
 
@@ -783,6 +845,7 @@ async def planner_node(state: AgentState, *, processing_inspector=None, spatial_
             requirements['choices']['buffer_distances'] = distances
         _reviewed_parameters(task_plan, requirements)
         metadata["parameter_requirements"] = requirements
+        phase = "preflight"
         await validate_processing_calls(task_plan, inspector=processing_inspector)
         spatial_report = await preflight_spatial_plan(task_plan, inspector=spatial_inspector)
         metadata["spatial_preflight"] = {
@@ -799,6 +862,7 @@ async def planner_node(state: AgentState, *, processing_inspector=None, spatial_
             "parameter_requirements": requirements,
             "retry_count": retry_count + 1,
             "advise": None,
+            **_planning_diagnostics(state, None, model_response_received),
         }
     except Exception as exc:
         logger.exception("TaskPlan generation failed")
@@ -809,6 +873,7 @@ async def planner_node(state: AgentState, *, processing_inspector=None, spatial_
             "planning_revision": revision,
             "parameter_requirements": requirements,
             "retry_count": retry_count + 1,
+            **_planning_diagnostics(state, _planning_failure_kind(exc, phase), model_response_received),
         }
 
 

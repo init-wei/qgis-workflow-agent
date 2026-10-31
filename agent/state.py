@@ -4,7 +4,7 @@ LangGraph State定义
 包含所有节点共享的状态字段
 """
 
-from typing import TypedDict, List, Dict, Any, Optional, Annotated
+from typing import TypedDict, List, Dict, Any, Optional, Annotated, Literal
 import operator
 from langgraph.graph.message import add_messages
 from pydantic import BaseModel, Field
@@ -12,6 +12,17 @@ import uuid
 
 from agent.planning.plan_schema import PlanValidationReport, TaskPlan
 from agent.tools.tool_contracts import ExecutionTrace, HumanFeedback
+
+
+PlanningFailureKind = Literal["request_rejected", "invalid_plan", "environment_error", "unknown"]
+
+
+class PlanningAttemptDiagnostic(TypedDict):
+    """Bounded facts for one automatic planning attempt, not an LLM usage count."""
+
+    attempt: int
+    failure_kind: Optional[PlanningFailureKind]
+    model_response_received: bool
 
 
 class RelevantDoc(BaseModel):
@@ -52,6 +63,8 @@ class AgentState(TypedDict):
     task_plan: Optional[TaskPlan]        # 唯一权威计划及当前审核版本
     plan_validation: Optional[PlanValidationReport]  # TaskPlan验证报告
     planning_error: Optional[str]
+    planning_failure_kind: Optional[PlanningFailureKind]
+    planning_attempt_diagnostics: List[PlanningAttemptDiagnostic]  # At most two, scoped to this task/revision.
     planning_revision: int            # 修订目标；生成失败时仍保留身份
     parameter_requirements: Optional[Dict[str, Any]]  # 本任务明确参数约束，只能否决计划，不能授权执行
     last_plan_decision: Optional[Dict[str, Any]]
@@ -126,6 +139,8 @@ def create_initial_state(
         task_plan=None,
         plan_validation=None,
         planning_error=None,
+        planning_failure_kind=None,
+        planning_attempt_diagnostics=[],
         planning_revision=1,
         parameter_requirements=None,
         last_plan_decision=None,
